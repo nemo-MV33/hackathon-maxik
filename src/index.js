@@ -29,7 +29,11 @@ const bot = createBot({
   preferences,
   community,
 });
-const server = createHttpServer({ service, apiAccessKey: config.apiAccessKey });
+const server = createHttpServer({
+  service,
+  apiAccessKey: config.apiAccessKey,
+  webappDir: fileURLToPath(new URL('../webapp/dist', import.meta.url)),
+});
 const reminders = new ReminderService({ bot, service, preferences });
 
 server.listen(config.port, () => {

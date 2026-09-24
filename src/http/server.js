@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { parseDateKey, toDateKey } from '../lib/date.js';
+import { serveStatic } from './static.js';
 
 const sendJson = (response, status, body) => {
   const data = JSON.stringify(body);
@@ -35,7 +36,7 @@ const serializeSchedule = (schedule) => ({
   },
 });
 
-const route = async (request, response, service, apiAccessKey) => {
+const route = async (request, response, { service, apiAccessKey, webappDir }) => {
   if (request.method === 'OPTIONS') return sendJson(response, 204, null);
   if (request.method !== 'GET') return sendJson(response, 405, { error: 'method_not_allowed' });
 
@@ -44,6 +45,11 @@ const route = async (request, response, service, apiAccessKey) => {
 
   if (url.pathname === '/health') {
     return sendJson(response, 200, { status: 'ok' });
+  }
+
+  if (parts[0] !== 'api') {
+    if (webappDir && await serveStatic(webappDir, url.pathname, response)) return undefined;
+    return sendJson(response, 404, { error: 'not_found' });
   }
 
   if (apiAccessKey && request.headers.authorization !== `Bearer ${apiAccessKey}`) {
@@ -90,9 +96,9 @@ const route = async (request, response, service, apiAccessKey) => {
   return sendJson(response, 404, { error: 'not_found' });
 };
 
-export const createHttpServer = ({ service, apiAccessKey }) =>
+export const createHttpServer = (options) =>
   createServer((request, response) => {
-    route(request, response, service, apiAccessKey).catch((error) => {
+    route(request, response, options).catch((error) => {
       console.error('HTTP request failed:', error);
       sendJson(response, 502, {
         error: 'schedule_unavailable',
