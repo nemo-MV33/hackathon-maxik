@@ -1,15 +1,14 @@
-import { Panel, Typography } from '@maxhub/max-ui';
-import { currentUser, webApp } from './bridge/max';
+import { useState } from 'react';
+import { useProfile } from './lib/profile';
+import { Onboarding } from './screens/Onboarding';
+import { Schedule } from './screens/Schedule';
 
 export const App = () => {
-  const user = currentUser();
-  return (
-    <Panel centeredX centeredY>
-      <Typography.Headline>norfly</Typography.Headline>
-      <Typography.Body>
-        {user ? `Привет, ${user.first_name ?? user.username ?? user.id}!` : 'Открой приложение из MAX'}
-      </Typography.Body>
-      <Typography.Label>Платформа: {webApp()?.platform ?? 'браузер'}</Typography.Label>
-    </Panel>
-  );
+  const [profile, saveProfile] = useProfile();
+  const [changing, setChanging] = useState(false);
+
+  if (!profile || changing) {
+    return <Onboarding onDone={(value) => { saveProfile(value); setChanging(false); }} />;
+  }
+  return <Schedule profile={profile} onChangeGroup={() => setChanging(true)} />;
 };

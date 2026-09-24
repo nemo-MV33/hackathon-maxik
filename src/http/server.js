@@ -1,6 +1,10 @@
 import { createServer } from 'node:http';
 import { parseDateKey, toDateKey } from '../lib/date.js';
 import { serveStatic } from './static.js';
+import { InitDataError, validateInitData } from './auth.js';
+import { HttpError, getMe, updateMe } from './routes/me.js';
+
+const MAX_BODY_BYTES = 64 * 1024;
 
 const sendJson = (response, status, body) => {
   const data = JSON.stringify(body);
@@ -9,9 +13,38 @@ const sendJson = (response, status, body) => {
     'Content-Length': Buffer.byteLength(data),
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
   });
   response.end(data);
+};
+
+const readJson = async (request) => {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of request) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) throw new HttpError(413, 'body_too_large');
+    chunks.push(chunk);
+  }
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8') || 'null');
+  } catch {
+    throw new HttpError(400, 'invalid_json', 'Тело запроса должно быть JSON');
+  }
+};
+
+const authenticate = (request, { botToken, initDataMaxAgeSec, devUserId }) => {
+  const header = request.headers.authorization ?? '';
+  if (header.startsWith('tma ')) {
+    try {
+      return validateInitData(header.slice(4), botToken, { maxAgeSec: initDataMaxAgeSec }).user;
+    } catch (error) {
+      if (error instanceof InitDataError) return null;
+      throw error;
+    }
+  }
+  if (devUserId) return { id: devUserId, first_name: 'Dev' };
+  return null;
 };
 
 const positiveInteger = (value, fallback) => {
@@ -36,9 +69,9 @@ const serializeSchedule = (schedule) => ({
   },
 });
 
-const route = async (request, response, { service, apiAccessKey, webappDir }) => {
+const route = async (request, response, options) => {
+  const { service, preferences, apiAccessKey, webappDir } = options;
   if (request.method === 'OPTIONS') return sendJson(response, 204, null);
-  if (request.method !== 'GET') return sendJson(response, 405, { error: 'method_not_allowed' });
 
   const url = new URL(request.url, 'http://localhost');
   const parts = url.pathname.split('/').filter(Boolean);
@@ -47,12 +80,26 @@ const route = async (request, response, { service, apiAccessKey, webappDir }) =>
     return sendJson(response, 200, { status: 'ok' });
   }
 
+  if (url.pathname === '/api/me') {
+    const user = authenticate(request, options);
+    if (!user) return sendJson(response, 401, { error: 'unauthorized' });
+    if (request.method === 'GET') return sendJson(response, 200, await getMe({ user, preferences }));
+    if (request.method === 'PUT') {
+      const body = await readJson(request);
+      return sendJson(response, 200, await updateMe({ user, preferences, service, body }));
+    }
+    return sendJson(response, 405, { error: 'method_not_allowed' });
+  }
+
+  if (request.method !== 'GET') return sendJson(response, 405, { error: 'method_not_allowed' });
+
   if (parts[0] !== 'api') {
     if (webappDir && await serveStatic(webappDir, url.pathname, response)) return undefined;
     return sendJson(response, 404, { error: 'not_found' });
   }
 
-  if (apiAccessKey && request.headers.authorization !== `Bearer ${apiAccessKey}`) {
+  const hasApiKey = apiAccessKey && request.headers.authorization === `Bearer ${apiAccessKey}`;
+  if (apiAccessKey && !hasApiKey && !authenticate(request, options)) {
     return sendJson(response, 401, { error: 'unauthorized' });
   }
 
@@ -99,6 +146,9 @@ const route = async (request, response, { service, apiAccessKey, webappDir }) =>
 export const createHttpServer = (options) =>
   createServer((request, response) => {
     route(request, response, options).catch((error) => {
+      if (error instanceof HttpError) {
+        return sendJson(response, error.status, { error: error.error, message: error.message });
+      }
       console.error('HTTP request failed:', error);
       sendJson(response, 502, {
         error: 'schedule_unavailable',

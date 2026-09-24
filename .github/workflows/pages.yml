@@ -3,7 +3,9 @@ name: Deploy mini app to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: ['webapp/**', '.github/workflows/pages.yml']
+    paths: ['webapp/**', 'scripts/**', 'src/irnitu/**', 'src/services/**', '.github/workflows/pages.yml']
+  schedule:
+    - cron: '17 */3 * * *'
   workflow_dispatch:
 
 permissions:
@@ -13,26 +15,34 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: webapp
+    env:
+      TZ: Asia/Irkutsk
+      IRNITU_API_TOKEN: ${{ secrets.IRNITU_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: webapp/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            webapp/package-lock.json
       - run: npm ci
+      - run: npm ci
+        working-directory: webapp
       - run: npm run build
+        working-directory: webapp
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
-      - run: cp dist/index.html dist/404.html
+      - run: cp webapp/dist/index.html webapp/dist/404.html
+      - name: Export IRNITU schedule
+        if: ${{ env.IRNITU_API_TOKEN != '' }}
+        run: npm run export:schedule -- webapp/dist/data
       - uses: actions/upload-pages-artifact@v3
         with:
           path: webapp/dist

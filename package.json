@@ -8,7 +8,8 @@
     "start": "node --tls-max-v1.2 src/index.js",
     "test": "node --test",
     "dev:web": "npm --prefix webapp run dev",
-    "build:web": "npm --prefix webapp run build"
+    "build:web": "npm --prefix webapp run build",
+    "export:schedule": "node scripts/export-schedule.js"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.2.2",

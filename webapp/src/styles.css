@@ -1,0 +1,20 @@
+body { margin: 0; }
+#root > * { min-height: 100vh; background: var(--background-primary); }
+.screen { display: flex; flex-direction: column; gap: 12px; padding: 16px; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
+.stack { display: flex; flex-direction: column; gap: 8px; }
+.muted { opacity: 0.6; }
+.status { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 0; text-align: center; }
+.header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.tabs { display: flex; gap: 8px; }
+.tabs > * { flex: 1; }
+.week-nav { display: flex; justify-content: space-between; align-items: center; }
+.day-title { display: block; margin-top: 4px; }
+.day-title::first-letter { text-transform: uppercase; }
+.header > div { display: flex; flex-direction: column; }
+.lesson { display: flex; gap: 12px; padding: 12px; border-radius: 12px; background: var(--background-card); }
+.lesson--active { outline: 2px solid var(--accent-themed, #2b7fff); }
+.lesson__time { display: flex; flex-direction: column; min-width: 44px; }
+.lesson__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lesson__subject { font-weight: 600; overflow-wrap: anywhere; }
+.lesson__badge { color: var(--accent-themed, #2b7fff); font-weight: 600; }
+.footnote { text-align: center; margin-top: 8px; }

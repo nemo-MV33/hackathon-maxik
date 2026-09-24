@@ -31,7 +31,11 @@ const bot = createBot({
 });
 const server = createHttpServer({
   service,
+  preferences,
   apiAccessKey: config.apiAccessKey,
+  botToken: config.botToken,
+  initDataMaxAgeSec: config.initDataMaxAgeSec,
+  devUserId: config.devUserId,
   webappDir: fileURLToPath(new URL('../webapp/dist', import.meta.url)),
 });
 const reminders = new ReminderService({ bot, service, preferences });
