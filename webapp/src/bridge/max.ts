@@ -55,9 +55,7 @@ export const shareText = async (text: string, link: string): Promise<ShareResult
     try {
       app.shareMaxContent({ text, link });
       return 'max';
-    } catch {
-      // Упадём на системный способ ниже
-    }
+    } catch {}
   }
   if (navigator.share) {
     try {

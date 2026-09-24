@@ -16,7 +16,6 @@ export const useAsync = <T>(load: () => Promise<T>, deps: unknown[]) => {
       .then((data) => active && setState({ status: 'ready', data }))
       .catch((error: Error) => active && setState({ status: 'error', message: error.message }));
     return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, attempt]);
 
   const retry = useCallback(() => setAttempt((value) => value + 1), []);

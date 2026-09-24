@@ -5,8 +5,10 @@ import '@maxhub/max-ui/dist/styles.css';
 import './styles.css';
 import { App } from './App';
 import { webApp } from './bridge/max';
+import { watchForUpdates } from './lib/updates';
 
 webApp()?.ready?.();
+watchForUpdates();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

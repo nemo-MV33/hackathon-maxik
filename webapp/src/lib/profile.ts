@@ -20,9 +20,7 @@ export const useProfile = () => {
     try {
       if (value) localStorage.setItem(KEY, JSON.stringify(value));
       else localStorage.removeItem(KEY);
-    } catch {
-      // Хранилище может быть недоступно, профиль останется только на время сессии
-    }
+    } catch {}
     setProfile(value);
   }, []);
   return [profile, save] as const;

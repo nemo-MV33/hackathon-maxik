@@ -38,7 +38,6 @@ export const LessonScreen = ({ lesson, profile, onBack }: { lesson: Lesson; prof
     let active = true;
     fitsInLink(draft).then((fits) => active && setTooLong(!fits));
     return () => { active = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
   const save = () => {

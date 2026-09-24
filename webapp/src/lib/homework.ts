@@ -14,7 +14,6 @@ export type Homework = {
 
 const KEY = 'norfly.homework';
 const EVENT = 'norfly:homework';
-// Ссылка MAX принимает до 512 символов в startapp, оставляем запас на префикс
 const MAX_PAYLOAD = 500;
 
 export const homeworkId = (groupId: number, lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>) =>
@@ -31,9 +30,7 @@ const readAll = (): Record<string, Homework> => {
 const writeAll = (items: Record<string, Homework>) => {
   try {
     localStorage.setItem(KEY, JSON.stringify(items));
-  } catch {
-    // Хранилище переполнено или недоступно — изменения останутся до перезапуска
-  }
+  } catch {}
   window.dispatchEvent(new Event(EVENT));
 };
 
@@ -62,9 +59,6 @@ export const useHomework = () => {
   }, []);
   return items;
 };
-
-// ---- Передача ДЗ через ссылку на мини-приложение ----
-// Формат: hw1<z|j><base64url>, внутри JSON [groupId, date, lessonNumber, subgroup, text]
 
 const toBase64Url = (bytes: Uint8Array) =>
   btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

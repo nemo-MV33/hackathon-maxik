@@ -1,6 +1,5 @@
 import type { Plugin } from 'vite';
 
-// Демо-данные только для `npm run dev` без токена ИРНИТУ. В сборку не попадают.
 const pad = (value: number) => String(value).padStart(2, '0');
 const dateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 const monday = (offsetWeeks = 0) => {
