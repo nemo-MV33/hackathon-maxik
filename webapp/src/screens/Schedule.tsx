@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Button, Typography } from '@maxhub/max-ui';
 import { loadMeta, loadWeek, type Lesson } from '../data/schedule';
-import { addDays, formatDay, formatShortDay, fromDateKey, minutesUntil, startOfWeek, toDateKey } from '../lib/date';
+import {
+  addDays, formatDay, formatShortDay, formatUpdatedAt, fromDateKey, irkutskNow, minutesUntil, startOfWeek, toDateKey,
+} from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useAsync } from '../lib/useAsync';
 import { LessonCard } from '../components/LessonCard';
+import { homeworkId, useHomework } from '../lib/homework';
 import { Empty, ErrorState, Loading } from '../components/Status';
 
 type Mode = 'today' | 'tomorrow' | 'week';
@@ -20,7 +23,10 @@ const liveLabel = (lesson: Lesson, now: Date) => {
   return undefined;
 };
 
-const DayLessons = ({ lessons, dateKey, now }: { lessons: Lesson[]; dateKey: string; now: Date }) => {
+type DayProps = { lessons: Lesson[]; dateKey: string; now: Date; groupId: number; onOpen: (lesson: Lesson) => void };
+
+const DayLessons = ({ lessons, dateKey, now, groupId, onOpen }: DayProps) => {
+  const homework = useHomework();
   const day = lessons.filter((lesson) => lesson.date === dateKey);
   if (day.length === 0) return <Empty>Пар нет — можно отдохнуть</Empty>;
   const isToday = dateKey === toDateKey(now);
@@ -32,15 +38,19 @@ const DayLessons = ({ lessons, dateKey, now }: { lessons: Lesson[]; dateKey: str
           key={`${lesson.lessonNumber}-${lesson.subject}-${lesson.subgroup}`}
           lesson={lesson}
           highlight={lesson === next ? liveLabel(lesson, now) : undefined}
+          homework={homework[homeworkId(groupId, lesson)]?.text}
+          onClick={() => onOpen(lesson)}
         />
       ))}
     </div>
   );
 };
 
-export const Schedule = ({ profile, onChangeGroup }: { profile: LocalProfile; onChangeGroup: () => void }) => {
+type ScheduleProps = { profile: LocalProfile; onChangeGroup: () => void; onOpenLesson: (lesson: Lesson) => void };
+
+export const Schedule = ({ profile, onChangeGroup, onOpenLesson }: ScheduleProps) => {
   const [mode, setMode] = useState<Mode>('today');
-  const now = useMemo(() => new Date(), []);
+  const now = useMemo(() => irkutskNow(), []);
   const [weekOffset, setWeekOffset] = useState(0);
 
   const targetDate = mode === 'tomorrow' ? addDays(now, 1) : now;
@@ -100,7 +110,7 @@ export const Schedule = ({ profile, onChangeGroup }: { profile: LocalProfile; on
       {week.status === 'loading' && <Loading />}
       {week.status === 'error' && <ErrorState message={week.message} onRetry={retry} />}
       {week.status === 'ready' && mode !== 'week' && (
-        <DayLessons lessons={lessons} dateKey={toDateKey(targetDate)} now={now} />
+        <DayLessons lessons={lessons} dateKey={toDateKey(targetDate)} now={now} groupId={profile.group.id} onOpen={onOpenLesson} />
       )}
       {week.status === 'ready' && mode === 'week' && (
         lessons.length === 0
@@ -110,16 +120,14 @@ export const Schedule = ({ profile, onChangeGroup }: { profile: LocalProfile; on
             .map((day) => (
               <section key={toDateKey(day)} className="stack">
                 <Typography.Title className="day-title">{formatDay(day)}</Typography.Title>
-                <DayLessons lessons={lessons} dateKey={toDateKey(day)} now={now} />
+                <DayLessons lessons={lessons} dateKey={toDateKey(day)} now={now} groupId={profile.group.id} onOpen={onOpenLesson} />
               </section>
             ))
       )}
 
       {meta.status === 'ready' && (
         <Typography.Label className="muted footnote">
-          Источник: расписание ИРНИТУ · обновлено {new Date(meta.data.updatedAt).toLocaleString('ru-RU', {
-            day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
-          })}
+          Источник: расписание ИРНИТУ · обновлено {formatUpdatedAt(meta.data.updatedAt)}
         </Typography.Label>
       )}
     </div>

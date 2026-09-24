@@ -11,10 +11,19 @@ body { margin: 0; }
 .day-title { display: block; margin-top: 4px; }
 .day-title::first-letter { text-transform: uppercase; }
 .header > div { display: flex; flex-direction: column; }
-.lesson { display: flex; gap: 12px; padding: 12px; border-radius: 12px; background: var(--background-card); }
+.lesson { font: inherit; color: inherit; text-align: left; border: 0; width: 100%; cursor: pointer; display: flex; gap: 12px; padding: 12px; border-radius: 12px; background: var(--background-card); }
 .lesson--active { outline: 2px solid var(--accent-themed, #2b7fff); }
 .lesson__time { display: flex; flex-direction: column; min-width: 44px; }
 .lesson__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .lesson__subject { font-weight: 600; overflow-wrap: anywhere; }
 .lesson__badge { color: var(--accent-themed, #2b7fff); font-weight: 600; }
 .footnote { text-align: center; margin-top: 8px; }
+.lesson__homework { color: var(--accent-themed, #2b7fff); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.first-letter::first-letter { text-transform: uppercase; }
+.first-letter { display: block; }
+.back { align-self: flex-start; }
+.row { display: flex; gap: 8px; }
+.homework { padding: 12px; border-radius: 12px; background: var(--background-card); }
+.homework__text { white-space: pre-wrap; overflow-wrap: anywhere; display: block; }
+.error-text { color: var(--text-negative, #e5484d); }
+.notice { text-align: center; display: block; }

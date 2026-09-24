@@ -1,8 +1,10 @@
 import { Typography } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
 
-export const LessonCard = ({ lesson, highlight }: { lesson: Lesson; highlight?: string }) => (
-  <div className={`lesson${highlight ? ' lesson--active' : ''}`}>
+type Props = { lesson: Lesson; highlight?: string; homework?: string; onClick?: () => void };
+
+export const LessonCard = ({ lesson, highlight, homework, onClick }: Props) => (
+  <button type="button" className={`lesson${highlight ? ' lesson--active' : ''}`} onClick={onClick}>
     <div className="lesson__time">
       <Typography.Label>{lesson.time.slice(0, 5)}</Typography.Label>
       <Typography.Label className="muted">{lesson.time.slice(6)}</Typography.Label>
@@ -22,6 +24,7 @@ export const LessonCard = ({ lesson, highlight }: { lesson: Lesson; highlight?: 
           {[lesson.auditories.join(', '), lesson.teachers.join(', ')].filter(Boolean).join(' · ')}
         </Typography.Label>
       )}
+      {homework && <Typography.Label className="lesson__homework">📚 {homework}</Typography.Label>}
     </div>
-  </div>
+  </button>
 );
