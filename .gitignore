@@ -4,5 +4,5 @@ node_modules/
 !.env.example
 dist/
 coverage/
-data/
+/data/
 .DS_Store
