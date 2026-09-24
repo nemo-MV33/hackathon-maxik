@@ -25,7 +25,7 @@ const readAsset = async (root, pathname) => {
 
 export const serveStatic = async (root, pathname, response) => {
   const asset = (pathname !== '/' && await readAsset(root, pathname))
-    || await readAsset(root, '/index.html');
+    || (!extname(pathname) && await readAsset(root, '/index.html'));
   if (!asset) return false;
 
   const isHashedAsset = asset.filePath.includes(`${sep}assets${sep}`);

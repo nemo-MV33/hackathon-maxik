@@ -20,7 +20,8 @@ type WebApp = {
     impactOccurred: (style: 'soft' | 'light' | 'medium' | 'heavy' | 'rigid') => void;
     notificationOccurred: (type: 'error' | 'success' | 'warning') => void;
   };
-  shareMaxContent?: (params: { text?: string; link?: string }) => void;
+  shareMaxContent?: (params: { text?: string; link?: string }) => Promise<unknown> | void;
+  shareContent?: (params: { text?: string; link?: string }) => Promise<unknown>;
 };
 
 declare global {
@@ -47,28 +48,59 @@ export const haptic = {
   tap: () => window.WebApp?.HapticFeedback?.impactOccurred('light'),
 };
 
-export type ShareResult = 'max' | 'native' | 'clipboard' | 'failed';
+export type ShareResult =
+  | { status: 'shared'; via: 'max' | 'native' }
+  | { status: 'copied' }
+  | { status: 'cancelled' }
+  | { status: 'manual'; reason: string };
 
-export const shareText = async (text: string, link: string): Promise<ShareResult> => {
+const errorCode = (error: unknown) => {
+  const code = (error as { error?: { code?: string } })?.error?.code;
+  return code ?? (error as Error)?.name ?? 'unknown';
+};
+
+export const shareText = (text: string, link: string): Promise<ShareResult> => {
   const app = window.WebApp;
-  if (app?.shareMaxContent && app.platform && app.platform !== 'web') {
-    try {
-      app.shareMaxContent({ text, link });
-      return 'max';
-    } catch {}
-  }
-  if (navigator.share) {
-    try {
-      await navigator.share({ text: `${text}\n${link}` });
-      return 'native';
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') return 'failed';
+  const full = `${text}\n${link}`;
+  const reasons: string[] = [];
+
+  const fallback = async (): Promise<ShareResult> => {
+    if (app?.shareContent) {
+      try {
+        await app.shareContent({ text, link });
+        return { status: 'shared', via: 'native' };
+      } catch (error) {
+        reasons.push(`share:${errorCode(error)}`);
+      }
     }
-  }
+    if (navigator.share) {
+      try {
+        await navigator.share({ text: full });
+        return { status: 'shared', via: 'native' };
+      } catch (error) {
+        if ((error as Error).name === 'AbortError') return { status: 'cancelled' };
+        reasons.push(`navigator:${errorCode(error)}`);
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(full);
+      return { status: 'copied' };
+    } catch (error) {
+      reasons.push(`clipboard:${errorCode(error)}`);
+    }
+    return { status: 'manual', reason: reasons.join(', ') };
+  };
+
+  if (!app?.shareMaxContent) return fallback();
   try {
-    await navigator.clipboard.writeText(`${text}\n${link}`);
-    return 'clipboard';
-  } catch {
-    return 'failed';
+    return Promise.resolve(app.shareMaxContent({ text, link }))
+      .then((): ShareResult => ({ status: 'shared', via: 'max' }))
+      .catch((error) => {
+        reasons.push(`max:${errorCode(error)}`);
+        return fallback();
+      });
+  } catch (error) {
+    reasons.push(`max:${errorCode(error)}`);
+    return fallback();
   }
 };

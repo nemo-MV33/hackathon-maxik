@@ -7,11 +7,11 @@ import { formatDay, fromDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
 
-const SHARE_MESSAGES: Record<ShareResult, string> = {
-  max: 'Выбери чат группы, чтобы отправить ДЗ',
-  native: 'ДЗ отправлено',
-  clipboard: 'Текст со ссылкой скопирован — вставь его в чат группы',
-  failed: 'Не получилось поделиться. Попробуй ещё раз',
+const shareNotice = (result: ShareResult) => {
+  if (result.status === 'shared') return 'Готово! Одногруппники смогут сохранить ДЗ по ссылке';
+  if (result.status === 'copied') return 'Текст со ссылкой скопирован — вставь его в чат группы';
+  if (result.status === 'cancelled') return null;
+  return 'Скопируй текст ниже и отправь в чат группы';
 };
 
 export const LessonScreen = ({ lesson, profile, onBack }: { lesson: Lesson; profile: LocalProfile; onBack: () => void }) => {
@@ -23,6 +23,8 @@ export const LessonScreen = ({ lesson, profile, onBack }: { lesson: Lesson; prof
   const [editing, setEditing] = useState(!saved);
   const [tooLong, setTooLong] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [manual, setManual] = useState<{ text: string; reason: string } | null>(null);
 
   const draft: Homework = {
     groupId: profile.group.id,
@@ -40,6 +42,13 @@ export const LessonScreen = ({ lesson, profile, onBack }: { lesson: Lesson; prof
     return () => { active = false; };
   }, [text]);
 
+  useEffect(() => {
+    let active = true;
+    setShareLink(null);
+    if (saved) encodeHomework(saved).then((payload) => active && setShareLink(miniAppLink(payload)));
+    return () => { active = false; };
+  }, [saved?.text, saved?.date, saved?.lessonNumber]);
+
   const save = () => {
     if (!draft.text) return;
     saveHomework({ ...draft, sharedBy: saved?.sharedBy });
@@ -48,13 +57,15 @@ export const LessonScreen = ({ lesson, profile, onBack }: { lesson: Lesson; prof
     haptic.success();
   };
 
-  const share = async () => {
-    const item = saved ?? draft;
-    const link = miniAppLink(await encodeHomework(item));
-    const message = `📚 ДЗ · ${profile.group.title}\n${lesson.subject} — ${formatDay(fromDateKey(lesson.date))}, ${lesson.time.slice(0, 5)}\n\n${item.text}\n\nСохранить в norfly:`;
-    const result = await shareText(message, link);
-    setNotice(SHARE_MESSAGES[result]);
-    if (result !== 'failed') saveHomework({ ...item, sharedBy: 'me' });
+  const share = () => {
+    if (!saved || !shareLink) return;
+    const message = `📚 ДЗ · ${profile.group.title}\n${lesson.subject} — ${formatDay(fromDateKey(lesson.date))}, ${lesson.time.slice(0, 5)}\n\n${saved.text}\n\nСохранить в norfly:`;
+    setManual(null);
+    shareText(message, shareLink).then((result) => {
+      setNotice(shareNotice(result));
+      if (result.status === 'manual') setManual({ text: `${message}\n${shareLink}`, reason: result.reason });
+      if (result.status === 'shared' || result.status === 'copied') saveHomework({ ...saved, sharedBy: 'me' });
+    });
   };
 
   return (
@@ -101,7 +112,7 @@ export const LessonScreen = ({ lesson, profile, onBack }: { lesson: Lesson; prof
               <Typography.Label className="muted">Получено от одногруппника</Typography.Label>
             )}
           </div>
-          <Button stretched disabled={tooLong} onClick={share}>Поделиться с группой</Button>
+          <Button stretched disabled={tooLong || !shareLink} onClick={share}>Поделиться с группой</Button>
           <div className="row">
             <Button stretched variant="secondary" onClick={() => setEditing(true)}>Изменить</Button>
             <Button
@@ -115,6 +126,18 @@ export const LessonScreen = ({ lesson, profile, onBack }: { lesson: Lesson; prof
         </div>
       )}
       {notice && <Typography.Label className="notice" role="status">{notice}</Typography.Label>}
+      {manual && (
+        <div className="stack">
+          <textarea
+            className="manual-share"
+            readOnly
+            value={manual.text}
+            rows={7}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+          <Typography.Label className="muted">Код ошибки: {manual.reason || 'нет'}</Typography.Label>
+        </div>
+      )}
     </div>
   );
 };

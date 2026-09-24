@@ -1,0 +1,15 @@
+.git
+.github
+.claude
+.env
+.env.*
+!.env.example
+node_modules
+webapp/node_modules
+webapp/dist
+webapp/*.tsbuildinfo
+data
+coverage
+dist
+*.md
+.DS_Store

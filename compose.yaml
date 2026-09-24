@@ -1,0 +1,20 @@
+services:
+  norfly:
+    build: .
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    volumes:
+      - norfly-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  norfly-data:
