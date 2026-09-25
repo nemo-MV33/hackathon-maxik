@@ -3,6 +3,7 @@ import { parseDateKey, toDateKey } from '../lib/date.js';
 import { serveStatic } from './static.js';
 import { InitDataError, validateInitData } from './auth.js';
 import { HttpError, getMe, updateMe } from './routes/me.js';
+import { getHomework, putHomework } from './routes/homework.js';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -70,7 +71,7 @@ const serializeSchedule = (schedule) => ({
 });
 
 const route = async (request, response, options) => {
-  const { service, preferences, apiAccessKey, webappDir } = options;
+  const { service, preferences, community, apiAccessKey, webappDir } = options;
   if (request.method === 'OPTIONS') return sendJson(response, 204, null);
 
   const url = new URL(request.url, 'http://localhost');
@@ -87,6 +88,19 @@ const route = async (request, response, options) => {
     if (request.method === 'PUT') {
       const body = await readJson(request);
       return sendJson(response, 200, await updateMe({ user, preferences, service, body }));
+    }
+    return sendJson(response, 405, { error: 'method_not_allowed' });
+  }
+
+  if (url.pathname === '/api/homework') {
+    const user = authenticate(request, options);
+    if (!user) return sendJson(response, 401, { error: 'unauthorized' });
+    if (request.method === 'GET') {
+      return sendJson(response, 200, await getHomework({ user, preferences, community, url }));
+    }
+    if (request.method === 'PUT') {
+      const body = await readJson(request);
+      return sendJson(response, 200, await putHomework({ user, preferences, community, service, body }));
     }
     return sendJson(response, 405, { error: 'method_not_allowed' });
   }

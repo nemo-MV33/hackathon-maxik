@@ -32,6 +32,7 @@ const bot = createBot({
 const server = createHttpServer({
   service,
   preferences,
+  community,
   apiAccessKey: config.apiAccessKey,
   botToken: config.botToken,
   initDataMaxAgeSec: config.initDataMaxAgeSec,
@@ -39,6 +40,7 @@ const server = createHttpServer({
   webappDir: fileURLToPath(new URL('../webapp/dist', import.meta.url)),
 });
 const reminders = new ReminderService({ bot, service, preferences });
+let stopping = false;
 
 server.listen(config.port, () => {
   console.log(`HTTP API is listening on port ${config.port}`);
@@ -46,6 +48,7 @@ server.listen(config.port, () => {
 reminders.start();
 
 const stop = async (signal) => {
+  stopping = true;
   console.log(`Received ${signal}, shutting down`);
   bot.stop();
   reminders.stop();
@@ -55,4 +58,14 @@ const stop = async (signal) => {
 process.once('SIGINT', () => stop('SIGINT'));
 process.once('SIGTERM', () => stop('SIGTERM'));
 
-await bot.start();
+let retryDelay = 2_000;
+while (!stopping) {
+  try {
+    await bot.start();
+    break;
+  } catch (error) {
+    console.error(`MAX connection failed, retrying in ${retryDelay / 1_000}s:`, error.message);
+    await new Promise((resolve) => setTimeout(resolve, retryDelay));
+    retryDelay = Math.min(retryDelay * 2, 30_000);
+  }
+}

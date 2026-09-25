@@ -1,0 +1,60 @@
+schemaVersion: '1.0'
+solution: norfly
+baseUrl: http://localhost:3000
+authentication:
+  type: header
+  name: Authorization
+  description: Подписанные MAX initData в формате "tma <initData>". Для локальной проверки можно задать DEV_USER_ID.
+checks:
+  - name: health
+    role: anonymous
+    request:
+      method: GET
+      path: /health
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [status]
+  - name: current-profile
+    role: student
+    request:
+      method: GET
+      path: /api/me
+      headers:
+        Authorization: "tma <MAX_INIT_DATA>"
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [user, profile]
+  - name: homework-list
+    role: student
+    request:
+      method: GET
+      path: /api/homework
+      query:
+        groupId: 478237
+        from: '2026-09-01'
+        to: '2026-10-31'
+      headers:
+        Authorization: "tma <MAX_INIT_DATA>"
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [group, role, canEditShared, period, items]
+  - name: personal-homework
+    role: student
+    request:
+      method: PUT
+      path: /api/homework
+      headers:
+        Authorization: "tma <MAX_INIT_DATA>"
+      body:
+        date: '2026-09-25'
+        lessonNumber: 3
+        subgroup: 1
+        text: 'Проверочная личная запись'
+        scope: personal
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [item]

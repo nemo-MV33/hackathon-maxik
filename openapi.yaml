@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: norfly API
+  version: 0.2.0
+  description: Профиль, расписание и домашние задания студента ИРНИТУ.
+servers:
+  - url: http://localhost:3000
+    description: Запуск через Docker
+security:
+  - maxInitData: []
+paths:
+  /health:
+    get:
+      security: []
+      summary: Проверка состояния сервиса
+      responses:
+        '200':
+          description: Сервис работает
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, const: ok }
+  /api/me:
+    get:
+      summary: Профиль текущего пользователя
+      responses:
+        '200':
+          description: Профиль MAX и учебные настройки
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MeResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      summary: Изменение группы, подгруппы и напоминаний
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                groupId: { type: integer, minimum: 1 }
+                subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
+                remindersEnabled: { type: boolean }
+      responses:
+        '200':
+          description: Профиль сохранён
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ProfileResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/homework:
+    get:
+      summary: Общие и личные ДЗ текущего студента
+      parameters:
+        - in: query
+          name: groupId
+          required: true
+          schema: { type: integer, minimum: 1 }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: ДЗ выбранной группы с личными версиями
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [group, role, canEditShared, period, items]
+                properties:
+                  group: { $ref: '#/components/schemas/Group' }
+                  role: { type: string, enum: [headman, editor, member, student] }
+                  canEditShared: { type: boolean }
+                  period:
+                    type: object
+                    required: [from, to]
+                    properties:
+                      from: { type: string, format: date }
+                      to: { type: string, format: date }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Homework' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: Учебная группа не выбрана
+    put:
+      summary: Запись, обновление или сброс ДЗ
+      description: Общее ДЗ могут менять староста и редакторы. Личное ДЗ доступно только его владельцу.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, lessonNumber, subgroup, text, scope]
+              properties:
+                date: { type: string, format: date }
+                lessonNumber: { type: integer, minimum: 1 }
+                subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
+                text: { type: [string, 'null'], maxLength: 2000, description: null удаляет версию }
+                scope: { type: string, enum: [shared, personal] }
+      responses:
+        '200':
+          description: ДЗ сохранено или удалено
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403':
+          description: Нет прав на изменение общего ДЗ
+        '404':
+          description: Пара не найдена в расписании ИРНИТУ
+components:
+  securitySchemes:
+    maxInitData:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "tma <initData MAX>"
+  responses:
+    Unauthorized:
+      description: Подпись initData MAX не прошла проверку
+    BadRequest:
+      description: Некорректные параметры запроса
+  schemas:
+    Group:
+      type: object
+      required: [id, title]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+    Profile:
+      type: object
+      required: [group, institute, course, subgroup, remindersEnabled]
+      properties:
+        group: { anyOf: [{ $ref: '#/components/schemas/Group' }, { type: 'null' }] }
+        institute: { type: [string, 'null'] }
+        course: { type: [integer, 'null'] }
+        subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
+        remindersEnabled: { type: boolean }
+    ProfileResponse:
+      type: object
+      required: [profile]
+      properties:
+        profile: { $ref: '#/components/schemas/Profile' }
+    MeResponse:
+      type: object
+      required: [user, profile]
+      properties:
+        user:
+          type: object
+          required: [id]
+          properties:
+            id: { type: integer }
+            firstName: { type: [string, 'null'] }
+            lastName: { type: [string, 'null'] }
+            username: { type: [string, 'null'] }
+        profile: { $ref: '#/components/schemas/Profile' }
+    Homework:
+      type: object
+      required: [groupId, date, lessonNumber, subgroup, subject, lessonTime, sharedText, personalText, text, source, updatedAt, version]
+      properties:
+        groupId: { type: integer }
+        date: { type: string, format: date }
+        lessonNumber: { type: integer }
+        subgroup: { type: [integer, 'null'] }
+        subject: { type: string }
+        lessonTime: { type: string }
+        sharedText: { type: [string, 'null'] }
+        personalText: { type: [string, 'null'] }
+        text: { type: string }
+        source: { type: string, enum: [shared, personal] }
+        updatedAt: { type: string, format: date-time }
+        authorName: { type: [string, 'null'] }
+        version: { type: integer, minimum: 1 }

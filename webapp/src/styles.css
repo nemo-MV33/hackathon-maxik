@@ -24,6 +24,7 @@ body { margin: 0; }
 .back { align-self: flex-start; }
 .row { display: flex; gap: 8px; }
 .homework { padding: 12px; border-radius: 12px; background: var(--background-card); }
+.homework--personal { box-shadow: inset 3px 0 0 var(--accent-themed, #2b7fff); }
 .homework__text { white-space: pre-wrap; overflow-wrap: anywhere; display: block; }
 .error-text { color: var(--text-negative, #e5484d); }
 .notice { text-align: center; display: block; }

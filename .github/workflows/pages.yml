@@ -39,6 +39,7 @@ jobs:
         working-directory: webapp
         env:
           BASE_PATH: /${{ github.event.repository.name }}/
+          VITE_API_URL: ${{ vars.API_URL }}
       - run: cp webapp/dist/index.html webapp/dist/404.html
       - name: Export IRNITU schedule
         if: ${{ env.IRNITU_API_TOKEN != '' }}

@@ -8,6 +8,7 @@ import type { LocalProfile } from '../lib/profile';
 import { useAsync } from '../lib/useAsync';
 import { LessonCard } from '../components/LessonCard';
 import { homeworkId, useHomework } from '../lib/homework';
+import { homeworkKey, useRemoteHomework, type HomeworkItem } from '../data/homework';
 import { Empty, ErrorState, Loading } from '../components/Status';
 
 type Mode = 'today' | 'tomorrow' | 'week';
@@ -23,10 +24,17 @@ const liveLabel = (lesson: Lesson, now: Date) => {
   return undefined;
 };
 
-type DayProps = { lessons: Lesson[]; dateKey: string; now: Date; groupId: number; onOpen: (lesson: Lesson) => void };
+type DayProps = {
+  lessons: Lesson[];
+  dateKey: string;
+  now: Date;
+  groupId: number;
+  remoteHomework: Map<string, HomeworkItem> | null | undefined;
+  onOpen: (lesson: Lesson) => void;
+};
 
-const DayLessons = ({ lessons, dateKey, now, groupId, onOpen }: DayProps) => {
-  const homework = useHomework();
+const DayLessons = ({ lessons, dateKey, now, groupId, remoteHomework, onOpen }: DayProps) => {
+  const localHomework = useHomework();
   const day = lessons.filter((lesson) => lesson.date === dateKey);
   if (day.length === 0) return <Empty>Пар нет — можно отдохнуть</Empty>;
   const isToday = dateKey === toDateKey(now);
@@ -38,7 +46,9 @@ const DayLessons = ({ lessons, dateKey, now, groupId, onOpen }: DayProps) => {
           key={`${lesson.lessonNumber}-${lesson.subject}-${lesson.subgroup}`}
           lesson={lesson}
           highlight={lesson === next ? liveLabel(lesson, now) : undefined}
-          homework={homework[homeworkId(groupId, lesson)]?.text}
+          homework={remoteHomework === undefined
+            ? localHomework[homeworkId(groupId, lesson)]?.text
+            : remoteHomework?.get(homeworkKey(lesson))?.text}
           onClick={() => onOpen(lesson)}
         />
       ))}
@@ -46,9 +56,14 @@ const DayLessons = ({ lessons, dateKey, now, groupId, onOpen }: DayProps) => {
   );
 };
 
-type ScheduleProps = { profile: LocalProfile; onChangeGroup: () => void; onOpenLesson: (lesson: Lesson) => void };
+type ScheduleProps = {
+  profile: LocalProfile;
+  profileRevision: number;
+  onChangeGroup: () => void;
+  onOpenLesson: (lesson: Lesson) => void;
+};
 
-export const Schedule = ({ profile, onChangeGroup, onOpenLesson }: ScheduleProps) => {
+export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson }: ScheduleProps) => {
   const [mode, setMode] = useState<Mode>('today');
   const now = useMemo(() => irkutskNow(), []);
   const [weekOffset, setWeekOffset] = useState(0);
@@ -58,6 +73,13 @@ export const Schedule = ({ profile, onChangeGroup, onOpenLesson }: ScheduleProps
 
   const [meta] = useAsync(loadMeta, []);
   const [week, retry] = useAsync(() => loadWeek(profile.group.id, weekStart), [profile.group.id, weekStart]);
+  const weekEnd = toDateKey(addDays(fromDateKey(weekStart), 6));
+  const [homework] = useRemoteHomework(profile.group.id, weekStart, weekEnd, profileRevision);
+  const remoteHomework = homework.status === 'disabled'
+    ? undefined
+    : homework.status === 'ready'
+      ? new Map(homework.data.items.map((item) => [`${item.date}:${item.lessonNumber}:${item.subgroup ?? 0}`, item]))
+      : null;
 
   const availableWeeks = meta.status === 'ready' ? meta.data.weeks : [];
   const lessons = week.status === 'ready' ? forSubgroup(week.data.lessons, profile.subgroup) : [];
@@ -110,7 +132,7 @@ export const Schedule = ({ profile, onChangeGroup, onOpenLesson }: ScheduleProps
       {week.status === 'loading' && <Loading />}
       {week.status === 'error' && <ErrorState message={week.message} onRetry={retry} />}
       {week.status === 'ready' && mode !== 'week' && (
-        <DayLessons lessons={lessons} dateKey={toDateKey(targetDate)} now={now} groupId={profile.group.id} onOpen={onOpenLesson} />
+        <DayLessons lessons={lessons} dateKey={toDateKey(targetDate)} now={now} groupId={profile.group.id} remoteHomework={remoteHomework} onOpen={onOpenLesson} />
       )}
       {week.status === 'ready' && mode === 'week' && (
         lessons.length === 0
@@ -120,7 +142,7 @@ export const Schedule = ({ profile, onChangeGroup, onOpenLesson }: ScheduleProps
             .map((day) => (
               <section key={toDateKey(day)} className="stack">
                 <Typography.Title className="day-title">{formatDay(day)}</Typography.Title>
-                <DayLessons lessons={lessons} dateKey={toDateKey(day)} now={now} groupId={profile.group.id} onOpen={onOpenLesson} />
+                <DayLessons lessons={lessons} dateKey={toDateKey(day)} now={now} groupId={profile.group.id} remoteHomework={remoteHomework} onOpen={onOpenLesson} />
               </section>
             ))
       )}

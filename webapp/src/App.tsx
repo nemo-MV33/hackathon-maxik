@@ -9,6 +9,7 @@ import { Schedule } from './screens/Schedule';
 import { LessonScreen } from './screens/LessonScreen';
 import { ImportScreen } from './screens/ImportScreen';
 import { Loading } from './components/Status';
+import { homeworkApiEnabled, syncProfile } from './lib/api';
 
 type Route =
   | { name: 'schedule' }
@@ -22,6 +23,16 @@ const initialRoute = (): Route => (startParam()?.startsWith('hw') ? { name: 'dec
 export const App = () => {
   const [profile, saveProfile] = useProfile();
   const [route, setRoute] = useState<Route>(initialRoute);
+  const [profileRevision, setProfileRevision] = useState(0);
+
+  useEffect(() => {
+    if (!profile || !homeworkApiEnabled) return;
+    let active = true;
+    syncProfile(profile.group.id, profile.subgroup)
+      .then(() => { if (active) setProfileRevision((value) => value + 1); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [profile?.group.id, profile?.subgroup]);
 
   useEffect(() => {
     if (route.name !== 'decoding') return;
@@ -57,12 +68,13 @@ export const App = () => {
   }
 
   if (route.name === 'lesson') {
-    return <LessonScreen lesson={route.lesson} profile={profile} onBack={toSchedule} />;
+    return <LessonScreen lesson={route.lesson} profile={profile} profileRevision={profileRevision} onBack={toSchedule} />;
   }
 
   return (
     <Schedule
       profile={profile}
+      profileRevision={profileRevision}
       onChangeGroup={() => setRoute({ name: 'onboarding' })}
       onOpenLesson={(lesson) => setRoute({ name: 'lesson', lesson })}
     />

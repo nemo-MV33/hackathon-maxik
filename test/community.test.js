@@ -46,3 +46,32 @@ test('keeps notices when delivery must be retried', async (t) => {
   assert.equal(notice.status, 'pending');
   assert.ok(notice.id);
 });
+
+test('updates shared homework and keeps a personal version separate', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'norfly-community-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new CommunityStore(join(directory, 'community.json'));
+  const lesson = {
+    groupId: 478237,
+    lessonDate: '2099-09-24',
+    lessonNumber: 2,
+    lessonTime: '10:00–11:30',
+    subgroup: null,
+    subject: 'Тестирование',
+  };
+
+  await store.upsertHomework({ ...lesson, text: 'Первая версия' });
+  const updated = await store.upsertHomework({ ...lesson, text: 'Общая версия' });
+  await store.setPersonalHomework(42, { ...lesson, text: 'Моя версия' });
+
+  const shared = await store.homeworkForGroup(lesson.groupId, { from: '2099-09-01' });
+  const personal = await store.homeworkForUser(lesson.groupId, 42, { from: '2099-09-01' });
+  assert.equal(shared.length, 1);
+  assert.equal(updated.version, 2);
+  assert.equal(personal[0].sharedText, 'Общая версия');
+  assert.equal(personal[0].personalText, 'Моя версия');
+  assert.equal(personal[0].text, 'Моя версия');
+
+  await store.removePersonalHomework(42, lesson);
+  assert.equal((await store.homeworkForUser(lesson.groupId, 42, { from: '2099-09-01' }))[0].text, 'Общая версия');
+});
