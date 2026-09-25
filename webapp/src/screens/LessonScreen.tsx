@@ -12,6 +12,7 @@ import { formatDay, fromDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
 import { ErrorState, Loading } from '../components/Status';
+import { lessonKindClass } from '../lib/lessonKind';
 
 type Props = {
   lesson: Lesson;
@@ -22,17 +23,18 @@ type Props = {
 
 const LessonHeading = ({ lesson, onBack }: Pick<Props, 'lesson' | 'onBack'>) => (
   <>
-    <Button size="small" variant="ghost" className="back" onClick={onBack}>← К расписанию</Button>
-    <div className="stack">
+    <button type="button" className="chip-button back" onClick={onBack}>‹ Расписание</button>
+    <div className={`card lesson-head ${lessonKindClass(lesson.lessonType)}`}>
+      <div className="tags">
+        <span className="tag">{lesson.lessonType}</span>
+        {lesson.subgroup && <span className="tag tag--neutral">{lesson.subgroup} подгруппа</span>}
+        {lesson.transferred && <span className="tag tag--neutral">перенос</span>}
+      </div>
       <Typography.Headline>{lesson.subject}</Typography.Headline>
-      <Typography.Body className="muted first-letter">
-        {formatDay(fromDateKey(lesson.date))} · {lesson.time}
-      </Typography.Body>
-      <Typography.Label className="muted">
-        {[lesson.lessonType, lesson.subgroup && `${lesson.subgroup} подгруппа`, ...lesson.auditories, ...lesson.teachers]
-          .filter(Boolean).join(' · ')}
-      </Typography.Label>
-      {lesson.comment && <Typography.Label className="muted">{lesson.comment}</Typography.Label>}
+      <div className="info-row"><span>🗓</span><span className="first-letter">{formatDay(fromDateKey(lesson.date))}, {lesson.lessonNumber} пара · {lesson.time}</span></div>
+      {lesson.auditories.length > 0 && <div className="info-row"><span>📍</span><span>{lesson.auditories.join(', ')}</span></div>}
+      {lesson.teachers.length > 0 && <div className="info-row"><span>👤</span><span>{lesson.teachers.join(', ')}</span></div>}
+      {lesson.comment && <div className="info-row"><span>💬</span><span>{lesson.comment}</span></div>}
     </div>
   </>
 );
@@ -106,7 +108,7 @@ const RemoteLessonScreen = ({ lesson, profile, profileRevision, onBack }: Props)
       {homework.status === 'ready' && !editing && (
         <div className="stack">
           <div className="homework stack">
-            <Typography.Label className="muted">Общее для группы</Typography.Label>
+            <Typography.Label className="faint">👥 Общее для группы</Typography.Label>
             <Typography.Body className="homework__text">{item?.sharedText || 'Пока не записано'}</Typography.Body>
             {item?.sharedText && (
               <Typography.Label className="muted">
@@ -116,7 +118,7 @@ const RemoteLessonScreen = ({ lesson, profile, profileRevision, onBack }: Props)
             )}
           </div>
           <div className={`homework stack${item?.personalText ? ' homework--personal' : ''}`}>
-            <Typography.Label className="muted">Личная версия</Typography.Label>
+            <Typography.Label className="faint">🔒 Личная версия</Typography.Label>
             <Typography.Body className="homework__text">
               {item?.personalText || 'Нет — используется общее ДЗ'}
             </Typography.Body>
@@ -148,7 +150,7 @@ const RemoteLessonScreen = ({ lesson, profile, profileRevision, onBack }: Props)
             value={text}
             onChange={(event) => setText(event.target.value)}
           />
-          <Typography.Label className="muted">{text.length}/2000</Typography.Label>
+          <Typography.Label className="faint counter">{text.length}/2000</Typography.Label>
           <Button stretched disabled={!text.trim() || saving} onClick={save}>
             {saving ? 'Сохраняем…' : 'Сохранить'}
           </Button>
@@ -212,7 +214,7 @@ const OfflineLessonScreen = ({ lesson, profile, onBack }: Props) => {
       ) : (
         <div className="stack">
           <div className="homework"><Typography.Body className="homework__text">{saved?.text}</Typography.Body></div>
-          <Button stretched disabled={tooLong || !shareLink} onClick={share}>Поделиться с группой</Button>
+          <Button stretched disabled={tooLong || !shareLink} onClick={share}>Поделиться</Button>
           <div className="row">
             <Button stretched variant="secondary" onClick={() => setEditing(true)}>Изменить</Button>
             <Button stretched variant="secondary" onClick={() => { removeHomework(id); setText(''); setEditing(true); }}>Удалить</Button>

@@ -51,8 +51,11 @@ export const ImportScreen = ({ shared, profile, onDone }: {
 
   return (
     <div className="screen">
-      <Typography.Headline>Одногруппник поделился ДЗ</Typography.Headline>
-      <div className="homework stack">
+      <div className="hero">
+        <span className="hero__logo">📬</span>
+        <Typography.Headline>Одногруппник поделился ДЗ</Typography.Headline>
+      </div>
+      <div className="card">
         <Typography.Body className="lesson__subject">{subject}</Typography.Body>
         <Typography.Label className="muted first-letter">
           {group?.title ?? 'Группа'} · {formatDay(fromDateKey(shared.date))}{lesson ? ` · ${lesson.time.slice(0, 5)}` : ''}

@@ -22,8 +22,12 @@ export const Onboarding = ({ onDone }: { onDone: (profile: LocalProfile) => void
   if (picked) {
     return (
       <div className="screen">
-        <Typography.Headline>{picked.title}</Typography.Headline>
-        <Typography.Body className="muted">Выбери подгруппу — покажем только твои пары</Typography.Body>
+        <div className="hero">
+          <Typography.Headline>{picked.title}</Typography.Headline>
+          <Typography.Body className="muted">{picked.institute}</Typography.Body>
+        </div>
+        <Typography.Title>Твоя подгруппа</Typography.Title>
+        <Typography.Body className="muted">Покажем только твои лабораторные и практики</Typography.Body>
         <div className="stack">
           <Button stretched onClick={() => onDone({ group: picked, subgroup: 1 })}>1 подгруппа</Button>
           <Button stretched onClick={() => onDone({ group: picked, subgroup: 2 })}>2 подгруппа</Button>
@@ -38,11 +42,20 @@ export const Onboarding = ({ onDone }: { onDone: (profile: LocalProfile) => void
 
   return (
     <div className="screen">
-      <Typography.Headline>Твоя группа</Typography.Headline>
-      <Typography.Body className="muted">Введи название, например ИСТб-25-1</Typography.Body>
+      <div className="hero">
+        <span className="hero__logo">🎓</span>
+        <Typography.Headline>norfly</Typography.Headline>
+        <Typography.Body className="muted">Расписание ИРНИТУ и домашка — в одном месте прямо в MAX</Typography.Body>
+      </div>
+      <div className="features">
+        <span><b>📅</b>Пары своей группы и подгруппы на день и неделю</span>
+        <span><b>⏰</b>Какая пара идёт сейчас и сколько до следующей</span>
+        <span><b>📚</b>ДЗ к каждой паре — записать и отправить группе</span>
+      </div>
+      <Typography.Title>Найди свою группу</Typography.Title>
       <Input
         autoFocus
-        placeholder="Поиск группы"
+        placeholder="Например, ИСТб-25-1"
         value={query}
         withClearButton
         onChange={(event) => setQuery(event.target.value)}

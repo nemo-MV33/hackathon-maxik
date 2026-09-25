@@ -1,30 +1,34 @@
-import { Typography } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
+import { lessonKindClass } from '../lib/lessonKind';
 
-type Props = { lesson: Lesson; highlight?: string; homework?: string; onClick?: () => void };
+type Props = {
+  lesson: Lesson;
+  live?: string;
+  past?: boolean;
+  homework?: string;
+  onClick?: () => void;
+};
 
-export const LessonCard = ({ lesson, highlight, homework, onClick }: Props) => (
-  <button type="button" className={`lesson${highlight ? ' lesson--active' : ''}`} onClick={onClick}>
-    <div className="lesson__time">
-      <Typography.Label>{lesson.time.slice(0, 5)}</Typography.Label>
-      <Typography.Label className="muted">{lesson.time.slice(6)}</Typography.Label>
-    </div>
-    <div className="lesson__body">
-      {highlight && <Typography.Label className="lesson__badge">{highlight}</Typography.Label>}
-      <Typography.Body className="lesson__subject">{lesson.subject}</Typography.Body>
-      <Typography.Label className="muted">
-        {[
-          lesson.lessonType,
-          lesson.subgroup && `${lesson.subgroup} подгр.`,
-          lesson.transferred && 'перенос',
-        ].filter(Boolean).join(' · ')}
-      </Typography.Label>
-      {(lesson.auditories.length > 0 || lesson.teachers.length > 0) && (
-        <Typography.Label className="muted">
-          {[lesson.auditories.join(', '), lesson.teachers.join(', ')].filter(Boolean).join(' · ')}
-        </Typography.Label>
-      )}
-      {homework && <Typography.Label className="lesson__homework">📚 {homework}</Typography.Label>}
-    </div>
-  </button>
-);
+export const LessonCard = ({ lesson, live, past, homework, onClick }: Props) => {
+  const place = [lesson.auditories.join(', '), lesson.teachers.join(', ')].filter(Boolean).join(' · ');
+  const classes = ['lesson', lessonKindClass(lesson.lessonType), live && 'lesson--active', past && 'lesson--past'];
+  return (
+    <button type="button" className={classes.filter(Boolean).join(' ')} onClick={onClick}>
+      <div className="lesson__time">
+        <span className="lesson__start">{lesson.time.slice(0, 5)}</span>
+        <span className="lesson__end">{lesson.time.slice(6)}</span>
+      </div>
+      <div className="lesson__body">
+        {live && <span className="lesson__live">{live}</span>}
+        <span className="lesson__subject">{lesson.subject}</span>
+        <div className="tags">
+          <span className="tag">{lesson.lessonType}</span>
+          {lesson.subgroup && <span className="tag tag--neutral">{lesson.subgroup} подгруппа</span>}
+          {lesson.transferred && <span className="tag tag--neutral">перенос</span>}
+        </div>
+        {place && <span className="lesson__meta">{place}</span>}
+        {homework && <span className="lesson__homework">📚 {homework}</span>}
+      </div>
+    </button>
+  );
+};
