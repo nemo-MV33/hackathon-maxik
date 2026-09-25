@@ -6,7 +6,13 @@ on:
     paths: ['webapp/**', 'scripts/**', 'src/irnitu/**', 'src/services/**', '.github/workflows/pages.yml']
   schedule:
     - cron: '17 */3 * * *'
+    - cron: '40 18 * * 6'
   workflow_dispatch:
+    inputs:
+      full:
+        description: 'Выгрузить расписание на весь семестр'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -20,9 +26,11 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       TZ: Asia/Irkutsk
       IRNITU_API_TOKEN: ${{ secrets.INRTU_API_TOKEN }}
+      SCHEDULE_DIR: .schedule-data
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,9 +49,40 @@ jobs:
           BASE_PATH: /${{ github.event.repository.name }}/
           VITE_API_URL: ${{ vars.API_URL }}
       - run: cp webapp/dist/index.html webapp/dist/404.html
+
+      - name: Restore semester schedule
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.SCHEDULE_DIR }}
+          key: schedule-full-${{ github.run_id }}
+          restore-keys: schedule-full-
+
+      - name: Choose export mode
+        id: mode
+        run: |
+          if [ "${{ github.event.schedule }}" = "40 18 * * 6" ] || [ "${{ inputs.full }}" = "true" ] || [ ! -f "$SCHEDULE_DIR/meta.json" ]; then
+            echo "value=full" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=recent" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Export IRNITU schedule
         if: ${{ env.IRNITU_API_TOKEN != '' }}
-        run: npm run export:schedule -- webapp/dist/data
+        run: npm run export:schedule -- "$SCHEDULE_DIR"
+        env:
+          EXPORT_MODE: ${{ steps.mode.outputs.value }}
+
+      - name: Save semester schedule
+        if: ${{ env.IRNITU_API_TOKEN != '' && steps.mode.outputs.value == 'full' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.SCHEDULE_DIR }}
+          key: schedule-full-${{ github.run_id }}
+
+      - run: |
+          if [ -d "$SCHEDULE_DIR" ]; then cp -R "$SCHEDULE_DIR" webapp/dist/data; fi
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: webapp/dist

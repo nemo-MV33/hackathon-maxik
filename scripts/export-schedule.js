@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { config } from '../src/config.js';
 import { IrnituClient } from '../src/irnitu/client.js';
@@ -8,7 +8,8 @@ import { ScheduleService } from '../src/services/schedule-service.js';
 
 const outDir = resolve(process.argv[2] ?? 'webapp/dist/data');
 const cacheDir = `${outDir}-cache`;
-const weeks = Number(process.env.EXPORT_WEEKS ?? 2);
+const mode = process.env.EXPORT_MODE === 'full' ? 'full' : 'recent';
+const recentWeeks = Number(process.env.EXPORT_WEEKS ?? 2);
 const concurrency = Number(process.env.EXPORT_CONCURRENCY ?? 6);
 const groupLimit = Number(process.env.EXPORT_GROUP_LIMIT ?? 0);
 
@@ -31,6 +32,27 @@ const slimLesson = (lesson) => ({
   transferred: lesson.transferred || undefined,
 });
 
+const semesterWeeks = (today = new Date()) => {
+  const year = today.getFullYear();
+  const month = today.getMonth();
+  const [from, to] = month >= 7
+    ? [new Date(year, 8, 1), new Date(year + 1, 0, 31)]
+    : month === 0
+      ? [new Date(year - 1, 8, 1), new Date(year, 0, 31)]
+      : [new Date(year, 1, 1), new Date(year, 6, 15)];
+  const result = [];
+  for (let week = startOfWeek(from); week <= to; week = addDays(week, 7)) result.push(week);
+  return result;
+};
+
+const readMeta = async () => {
+  try {
+    return JSON.parse(await readFile(join(outDir, 'meta.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+};
+
 const runPool = async (tasks, size) => {
   let next = 0;
   const worker = async () => {
@@ -49,9 +71,12 @@ const service = new ScheduleService(new IrnituClient({
 const startedAt = Date.now();
 const allGroups = await service.groups();
 const groups = groupLimit > 0 ? allGroups.slice(0, groupLimit) : allGroups;
-const weekStarts = Array.from({ length: weeks }, (_, index) => addDays(startOfWeek(), index * 7));
+const weekStarts = mode === 'full'
+  ? semesterWeeks()
+  : Array.from({ length: recentWeeks }, (_, index) => addDays(startOfWeek(), index * 7));
+const previous = mode === 'full' ? null : await readMeta();
 
-await rm(outDir, { recursive: true, force: true });
+if (mode === 'full') await rm(outDir, { recursive: true, force: true });
 await writeJson(join(outDir, 'groups.json'), groups.map(({ id, title, institute, course }) => ({
   id, title, institute, course,
 })));
@@ -73,14 +98,16 @@ const tasks = groups.flatMap((group) => weekStarts.map((week) => async () => {
 
 await runPool(tasks, concurrency);
 
+const now = new Date().toISOString();
 await writeJson(join(outDir, 'meta.json'), {
-  updatedAt: new Date().toISOString(),
-  weeks: weekStarts.map(toDateKey),
+  updatedAt: now,
+  fullUpdatedAt: mode === 'full' ? now : previous?.fullUpdatedAt ?? null,
+  weeks: [...new Set([...(previous?.weeks ?? []), ...weekStarts.map(toDateKey)])].sort(),
   groups: groups.length,
   failed,
 });
 await rm(cacheDir, { recursive: true, force: true });
 
 const seconds = Math.round((Date.now() - startedAt) / 1000);
-console.log(`Выгружено ${tasks.length - failed}/${tasks.length} расписаний за ${seconds} с`);
+console.log(`Режим ${mode}: выгружено ${tasks.length - failed}/${tasks.length} расписаний за ${seconds} с`);
 if (failed > tasks.length / 2) process.exitCode = 1;
