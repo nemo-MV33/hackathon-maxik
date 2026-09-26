@@ -74,9 +74,8 @@ const groups = groupLimit > 0 ? allGroups.slice(0, groupLimit) : allGroups;
 const weekStarts = mode === 'full'
   ? semesterWeeks()
   : Array.from({ length: recentWeeks }, (_, index) => addDays(startOfWeek(), index * 7));
-const previous = mode === 'full' ? null : await readMeta();
+const previous = await readMeta();
 
-if (mode === 'full') await rm(outDir, { recursive: true, force: true });
 await writeJson(join(outDir, 'groups.json'), groups.map(({ id, title, institute, course }) => ({
   id, title, institute, course,
 })));
@@ -102,7 +101,9 @@ const now = new Date().toISOString();
 await writeJson(join(outDir, 'meta.json'), {
   updatedAt: now,
   fullUpdatedAt: mode === 'full' ? now : previous?.fullUpdatedAt ?? null,
-  weeks: [...new Set([...(previous?.weeks ?? []), ...weekStarts.map(toDateKey)])].sort(),
+  weeks: mode === 'full'
+    ? weekStarts.map(toDateKey)
+    : [...new Set([...(previous?.weeks ?? []), ...weekStarts.map(toDateKey)])].sort(),
   groups: groups.length,
   failed,
 });

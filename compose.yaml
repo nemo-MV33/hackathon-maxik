@@ -9,6 +9,7 @@ services:
       - "${HOST_PORT:-3000}:3000"
     volumes:
       - norfly-data:/app/data
+      - norfly-schedule:/app/webapp/dist/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 30s
@@ -18,3 +19,4 @@ services:
 
 volumes:
   norfly-data:
+  norfly-schedule:

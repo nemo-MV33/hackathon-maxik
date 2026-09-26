@@ -3,13 +3,12 @@ import { startParam } from './bridge/max';
 import type { Lesson } from './data/schedule';
 import { decodeHomework, type SharedHomework } from './lib/homework';
 import { useProfile } from './lib/profile';
-import { loadGroups } from './data/schedule';
 import { Onboarding } from './screens/Onboarding';
 import { Schedule } from './screens/Schedule';
 import { LessonScreen } from './screens/LessonScreen';
 import { ImportScreen } from './screens/ImportScreen';
 import { Loading } from './components/Status';
-import { homeworkApiEnabled, syncProfile } from './lib/api';
+import { syncProfile } from './lib/api';
 
 type Route =
   | { name: 'schedule' }
@@ -26,7 +25,7 @@ export const App = () => {
   const [profileRevision, setProfileRevision] = useState(0);
 
   useEffect(() => {
-    if (!profile || !homeworkApiEnabled) return;
+    if (!profile) return;
     let active = true;
     syncProfile(profile.group.id, profile.subgroup)
       .then(() => { if (active) setProfileRevision((value) => value + 1); })
@@ -51,12 +50,8 @@ export const App = () => {
       <ImportScreen
         shared={route.shared}
         profile={profile}
-        onDone={async () => {
-          const shared = route.shared;
-          if (!profile && shared) {
-            const group = (await loadGroups().catch(() => [])).find((item) => item.id === shared.groupId);
-            if (group) saveProfile({ group, subgroup: shared.subgroup === 1 || shared.subgroup === 2 ? shared.subgroup : null });
-          }
+        onDone={(group) => {
+          if (group && route.shared) saveProfile({ group, subgroup: route.shared.subgroup });
           toSchedule();
         }}
       />

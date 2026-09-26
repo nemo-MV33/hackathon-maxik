@@ -8,7 +8,6 @@ import type { LocalProfile } from '../lib/profile';
 import { useAsync } from '../lib/useAsync';
 import { LessonCard } from '../components/LessonCard';
 import { Empty, ErrorState, Loading } from '../components/Status';
-import { homeworkId, useHomework } from '../lib/homework';
 import { homeworkKey, useRemoteHomework, type HomeworkItem } from '../data/homework';
 
 type Mode = 'day' | 'week';
@@ -45,13 +44,11 @@ type DayProps = {
   lessons: Lesson[];
   dateKey: string;
   now: Date;
-  groupId: number;
-  remoteHomework: Map<string, HomeworkItem> | null | undefined;
+  remoteHomework: Map<string, HomeworkItem> | null;
   onOpen: (lesson: Lesson) => void;
 };
 
-const DayLessons = ({ lessons, dateKey, now, groupId, remoteHomework, onOpen }: DayProps) => {
-  const localHomework = useHomework();
+const DayLessons = ({ lessons, dateKey, now, remoteHomework, onOpen }: DayProps) => {
   const day = lessons.filter((lesson) => lesson.date === dateKey);
   if (day.length === 0) return <Empty>Пар нет — можно отдохнуть</Empty>;
   const isToday = dateKey === toDateKey(now);
@@ -68,9 +65,7 @@ const DayLessons = ({ lessons, dateKey, now, groupId, remoteHomework, onOpen }: 
               lesson={lesson}
               live={lesson === next ? liveLabel(lesson, now) : undefined}
               past={isToday && minutesUntil(lesson.date, endTime(lesson), now) <= 0}
-              homework={remoteHomework === undefined
-                ? localHomework[homeworkId(groupId, lesson)]?.text
-                : remoteHomework?.get(homeworkKey(lesson))?.text}
+              homework={remoteHomework?.get(homeworkKey(lesson))?.text}
               onClick={() => onOpen(lesson)}
             />
           </Fragment>
@@ -100,11 +95,9 @@ export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson
   const [week, retry] = useAsync(() => loadWeek(profile.group.id, weekStart), [profile.group.id, weekStart]);
 
   const [homework] = useRemoteHomework(profile.group.id, days[0], days[6], profileRevision);
-  const remoteHomework = homework.status === 'disabled'
-    ? undefined
-    : homework.status === 'ready'
-      ? new Map(homework.data.items.map((item) => [homeworkKey(item), item]))
-      : null;
+  const remoteHomework = homework.status === 'ready'
+    ? new Map(homework.data.items.map((item) => [homeworkKey(item), item]))
+    : null;
 
   const availableWeeks = meta.status === 'ready' ? meta.data.weeks : [];
   const lessons = week.status === 'ready' ? forSubgroup(week.data.lessons, profile.subgroup) : [];
@@ -179,7 +172,7 @@ export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson
             {selected === todayKey ? 'Сегодня, ' : selected === toDateKey(addDays(now, 1)) ? 'Завтра, ' : ''}
             {formatDay(fromDateKey(selected))}
           </span>
-          <DayLessons lessons={lessons} dateKey={selected} now={now} groupId={profile.group.id} remoteHomework={remoteHomework} onOpen={onOpenLesson} />
+          <DayLessons lessons={lessons} dateKey={selected} now={now} remoteHomework={remoteHomework} onOpen={onOpenLesson} />
         </div>
       )}
 
@@ -191,7 +184,7 @@ export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson
             .map((key) => (
               <section key={key} className="stack">
                 <span className="section-title">{formatDay(fromDateKey(key))}</span>
-                <DayLessons lessons={lessons} dateKey={key} now={now} groupId={profile.group.id} remoteHomework={remoteHomework} onOpen={onOpenLesson} />
+                <DayLessons lessons={lessons} dateKey={key} now={now} remoteHomework={remoteHomework} onOpen={onOpenLesson} />
               </section>
             ))
       )}

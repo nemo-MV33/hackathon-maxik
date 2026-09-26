@@ -7,7 +7,9 @@ if [ -n "$IRNITU_API_TOKEN" ]; then
     while true; do
       now=$(date +%s)
       if [ $((now - last_full)) -ge "${EXPORT_FULL_INTERVAL_SEC:-604800}" ]; then
-        EXPORT_MODE=full node scripts/export-schedule.js webapp/dist/data && last_full=$now \
+        EXPORT_MODE=recent node scripts/export-schedule.js webapp/dist/data \
+          || echo "Выгрузка ближайших недель не удалась, повторим позже"
+        EXPORT_MODE=full node scripts/export-schedule.js webapp/dist/data && last_full=$(date +%s) \
           || echo "Выгрузка расписания на семестр не удалась, повторим позже"
       else
         EXPORT_MODE=recent node scripts/export-schedule.js webapp/dist/data \

@@ -13,7 +13,7 @@ const versionFile = (): Plugin => ({
 });
 
 export default defineConfig({
-  base: process.env.BASE_PATH ?? '/',
+  base: '/',
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   plugins: [react(), devData(), versionFile()],
   server: {

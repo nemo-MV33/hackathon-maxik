@@ -1,8 +1,5 @@
 import { webApp } from '../bridge/max';
 
-const configuredBase = (import.meta.env.VITE_API_URL ?? '').replace(/\/$/, '');
-export const homeworkApiEnabled = Boolean(configuredBase) || !window.location.hostname.endsWith('github.io');
-
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, message?: string) {
     super(message || 'Не удалось выполнить действие');
@@ -13,7 +10,7 @@ export const apiRequest = async <T>(path: string, init: RequestInit = {}): Promi
   const initData = webApp()?.initData;
   let response: Response;
   try {
-    response = await fetch(`${configuredBase}${path}`, {
+    response = await fetch(path, {
       ...init,
       headers: {
         'Content-Type': 'application/json',

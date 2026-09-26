@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { Button, Typography } from '@maxhub/max-ui';
-import { loadWeek, loadGroups } from '../data/schedule';
+import { loadWeek, loadGroups, type Group } from '../data/schedule';
+import { saveHomework } from '../data/homework';
 import { haptic } from '../bridge/max';
-import { homeworkId, saveHomework, useHomework, type SharedHomework } from '../lib/homework';
+import { syncProfile } from '../lib/api';
+import { type SharedHomework } from '../lib/homework';
 import { formatDay, fromDateKey, startOfWeek, toDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useAsync } from '../lib/useAsync';
@@ -22,16 +25,17 @@ const findContext = async (shared: SharedHomework) => {
 export const ImportScreen = ({ shared, profile, onDone }: {
   shared: SharedHomework | null;
   profile: LocalProfile | null;
-  onDone: () => void;
+  onDone: (group?: Group) => void;
 }) => {
   const [context, retry] = useAsync(() => (shared ? findContext(shared) : Promise.resolve(null)), [shared]);
-  const items = useHomework();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   if (!shared) {
     return (
       <div className="screen">
         <ErrorState message="Ссылка с ДЗ повреждена или устарела. Попроси прислать её ещё раз" />
-        <Button stretched onClick={onDone}>Открыть расписание</Button>
+        <Button stretched onClick={() => onDone()}>Открыть расписание</Button>
       </div>
     );
   }
@@ -40,13 +44,26 @@ export const ImportScreen = ({ shared, profile, onDone }: {
 
   const { group, lesson } = context.data ?? {};
   const subject = lesson?.subject ?? `${shared.lessonNumber} пара`;
-  const existing = items[homeworkId(shared.groupId, shared)];
   const otherGroup = profile && profile.group.id !== shared.groupId;
 
-  const accept = () => {
-    saveHomework({ ...shared, subject, updatedAt: new Date().toISOString(), sharedBy: 'import' });
-    haptic.success();
-    onDone();
+  const accept = async () => {
+    if (!group || !lesson || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    let switched = false;
+    try {
+      await syncProfile(group.id, shared.subgroup);
+      switched = true;
+      await saveHomework(lesson, shared.text, 'personal');
+      haptic.success();
+      onDone(group);
+    } catch (error) {
+      if (switched && profile) {
+        await syncProfile(profile.group.id, profile.subgroup).catch(() => {});
+      }
+      setSaveError((error as Error).message);
+      setSaving(false);
+    }
   };
 
   return (
@@ -67,13 +84,12 @@ export const ImportScreen = ({ shared, profile, onDone }: {
           Это ДЗ для группы {group?.title}, а у тебя выбрана {profile.group.title}
         </Typography.Label>
       )}
-      {existing && existing.text !== shared.text && (
-        <Typography.Label className="muted">У тебя уже записано: «{existing.text}». Сохранение заменит его</Typography.Label>
-      )}
-      <Button stretched onClick={accept}>
-        {existing?.text === shared.text ? 'Уже сохранено — открыть расписание' : 'Сохранить себе'}
+      {!lesson && <Typography.Label className="error-text">Пара не найдена в расписании ИРНИТУ, сохранить ДЗ нельзя</Typography.Label>}
+      {saveError && <Typography.Label className="error-text">{saveError}</Typography.Label>}
+      <Button stretched disabled={!group || !lesson || saving} onClick={accept}>
+        {saving ? 'Сохраняем…' : 'Сохранить себе'}
       </Button>
-      <Button stretched variant="ghost" onClick={onDone}>Не сохранять</Button>
+      <Button stretched variant="ghost" onClick={() => onDone()}>Не сохранять</Button>
     </div>
   );
 };

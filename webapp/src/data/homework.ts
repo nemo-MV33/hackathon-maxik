@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Lesson } from './schedule';
-import { apiRequest, homeworkApiEnabled } from '../lib/api';
+import { apiRequest } from '../lib/api';
 
 export type HomeworkItem = {
   groupId: number;
@@ -27,7 +27,6 @@ export type HomeworkData = {
 };
 
 export type HomeworkState =
-  | { status: 'disabled' }
   | { status: 'loading' }
   | { status: 'error'; message: string }
   | { status: 'ready'; data: HomeworkData };
@@ -38,7 +37,7 @@ export const homeworkKey = (lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subg
 export const loadHomework = (groupId: number, from: string, to: string) =>
   apiRequest<HomeworkData>(`/api/homework?groupId=${groupId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
-export const saveHomework = (lesson: Lesson, text: string | null, scope: 'shared' | 'personal') =>
+export const saveHomework = (lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>, text: string | null, scope: 'shared' | 'personal') =>
   apiRequest('/api/homework', {
     method: 'PUT',
     body: JSON.stringify({
@@ -51,14 +50,8 @@ export const saveHomework = (lesson: Lesson, text: string | null, scope: 'shared
   });
 
 export const useRemoteHomework = (groupId: number, from: string, to: string, dependency?: unknown) => {
-  const [state, setState] = useState<HomeworkState>(
-    homeworkApiEnabled ? { status: 'loading' } : { status: 'disabled' },
-  );
+  const [state, setState] = useState<HomeworkState>({ status: 'loading' });
   const refresh = useCallback(() => {
-    if (!homeworkApiEnabled) {
-      setState({ status: 'disabled' });
-      return Promise.resolve();
-    }
     setState({ status: 'loading' });
     return loadHomework(groupId, from, to)
       .then((data) => setState({ status: 'ready', data }) as void)

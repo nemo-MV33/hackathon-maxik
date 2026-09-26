@@ -1,92 +1,19 @@
-import { useEffect, useState } from 'react';
-import type { Lesson } from '../data/schedule';
-
-export type Homework = {
+// Старые ссылки с ДЗ остаются читаемыми после переноса хранения на сервер.
+export type SharedHomework = {
   groupId: number;
   date: string;
   lessonNumber: number;
-  subgroup: number | null;
-  subject: string;
+  subgroup: 1 | 2 | null;
   text: string;
-  updatedAt: string;
-  sharedBy?: 'me' | 'import';
 };
-
-const KEY = 'norfly.homework';
-const EVENT = 'norfly:homework';
-const MAX_PAYLOAD = 500;
-
-export const homeworkId = (groupId: number, lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>) =>
-  `${groupId}:${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
-
-const readAll = (): Record<string, Homework> => {
-  try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {};
-  } catch {
-    return {};
-  }
-};
-
-const writeAll = (items: Record<string, Homework>) => {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(items));
-  } catch {}
-  window.dispatchEvent(new Event(EVENT));
-};
-
-export const saveHomework = (item: Homework) => {
-  const items = readAll();
-  items[homeworkId(item.groupId, item)] = item;
-  writeAll(items);
-};
-
-export const removeHomework = (id: string) => {
-  const items = readAll();
-  delete items[id];
-  writeAll(items);
-};
-
-export const useHomework = () => {
-  const [items, setItems] = useState(readAll);
-  useEffect(() => {
-    const update = () => setItems(readAll());
-    window.addEventListener(EVENT, update);
-    window.addEventListener('storage', update);
-    return () => {
-      window.removeEventListener(EVENT, update);
-      window.removeEventListener('storage', update);
-    };
-  }, []);
-  return items;
-};
-
-const toBase64Url = (bytes: Uint8Array) =>
-  btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
 const fromBase64Url = (value: string) => {
   const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
   return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 };
 
-const pipe = async (bytes: Uint8Array, stream: CompressionStream | DecompressionStream) =>
+const pipe = async (bytes: Uint8Array, stream: DecompressionStream) =>
   new Uint8Array(await new Response(new Blob([bytes as BlobPart]).stream().pipeThrough(stream)).arrayBuffer());
-
-const canCompress = typeof CompressionStream !== 'undefined';
-
-export const encodeHomework = async (item: Homework) => {
-  const json = new TextEncoder().encode(JSON.stringify([
-    item.groupId, item.date, item.lessonNumber, item.subgroup, item.text,
-  ]));
-  if (canCompress) {
-    const compressed = await pipe(json, new CompressionStream('deflate-raw'));
-    if (compressed.length < json.length) return `hw1z${toBase64Url(compressed)}`;
-  }
-  return `hw1j${toBase64Url(json)}`;
-};
-
-export const fitsInLink = async (item: Homework) => (await encodeHomework(item)).length <= MAX_PAYLOAD;
-
-export type SharedHomework = Pick<Homework, 'groupId' | 'date' | 'lessonNumber' | 'subgroup' | 'text'>;
 
 export const decodeHomework = async (payload: string): Promise<SharedHomework | null> => {
   const match = payload.match(/^hw1([zj])([A-Za-z0-9_-]+)$/);

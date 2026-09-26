@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Button, Textarea, Typography } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
-import { homeworkKey, saveHomework as saveRemoteHomework, useRemoteHomework } from '../data/homework';
-import { haptic, miniAppLink, shareText, type ShareResult } from '../bridge/max';
-import {
-  encodeHomework, fitsInLink, homeworkId, removeHomework,
-  saveHomework as saveLocalHomework, useHomework, type Homework,
-} from '../lib/homework';
-import { homeworkApiEnabled } from '../lib/api';
+import { homeworkKey, saveHomework, useRemoteHomework } from '../data/homework';
+import { haptic } from '../bridge/max';
 import { formatDay, fromDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
@@ -70,7 +65,7 @@ const RemoteLessonScreen = ({ lesson, profile, profileRevision, onBack }: Props)
     setSaving(true);
     setNotice(null);
     try {
-      await saveRemoteHomework(lesson, text.trim(), scope);
+      await saveHomework(lesson, text.trim(), scope);
       await refresh();
       setEditing(false);
       setNotice(scope === 'shared'
@@ -88,7 +83,7 @@ const RemoteLessonScreen = ({ lesson, profile, profileRevision, onBack }: Props)
     setSaving(true);
     setNotice(null);
     try {
-      await saveRemoteHomework(lesson, null, target);
+      await saveHomework(lesson, null, target);
       await refresh();
       setEditing(false);
       setNotice(target === 'personal' ? 'Теперь показывается общее ДЗ' : 'Общее ДЗ удалено');
@@ -162,71 +157,7 @@ const RemoteLessonScreen = ({ lesson, profile, profileRevision, onBack }: Props)
   );
 };
 
-const shareNotice = (result: ShareResult) => {
-  if (result.status === 'shared') return 'Готово! Одногруппники смогут сохранить ДЗ по ссылке';
-  if (result.status === 'copied') return 'Текст со ссылкой скопирован — вставь его в чат группы';
-  if (result.status === 'cancelled') return null;
-  return 'Не удалось открыть окно MAX';
-};
-
-const OfflineLessonScreen = ({ lesson, profile, onBack }: Props) => {
-  const items = useHomework();
-  const id = homeworkId(profile.group.id, lesson);
-  const saved = items[id];
-  const [text, setText] = useState(saved?.text ?? '');
-  const [editing, setEditing] = useState(!saved);
-  const [tooLong, setTooLong] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [shareLink, setShareLink] = useState<string | null>(null);
-  const draft: Homework = {
-    groupId: profile.group.id, date: lesson.date, lessonNumber: lesson.lessonNumber,
-    subgroup: lesson.subgroup, subject: lesson.subject, text: text.trim(), updatedAt: new Date().toISOString(),
-  };
-
-  useEffect(() => { fitsInLink(draft).then((fits) => setTooLong(!fits)); }, [text]);
-  useEffect(() => {
-    if (!saved) { setShareLink(null); return; }
-    encodeHomework(saved).then((payload) => setShareLink(miniAppLink(payload)));
-  }, [saved?.text]);
-  const save = () => {
-    if (!draft.text) return;
-    saveLocalHomework({ ...draft, sharedBy: saved?.sharedBy });
-    setEditing(false); setNotice('ДЗ сохранено на этом устройстве'); haptic.success();
-  };
-  const share = () => {
-    if (!saved || !shareLink) return;
-    const message = `📚 ДЗ · ${profile.group.title}\n${lesson.subject} — ${formatDay(fromDateKey(lesson.date))}, ${lesson.time.slice(0, 5)}\n\n${saved.text}\n\nСохранить в norfly:`;
-    shareText(message, shareLink).then((result) => setNotice(shareNotice(result)));
-  };
-
-  return (
-    <div className="screen">
-      <LessonHeading lesson={lesson} onBack={onBack} />
-      <Typography.Title>Домашнее задание</Typography.Title>
-      <Typography.Label className="muted">Офлайн-режим: ДЗ сохраняется на этом устройстве</Typography.Label>
-      {editing ? (
-        <div className="stack">
-          <Textarea autoFocus={!saved} value={text} onChange={(event) => setText(event.target.value)} />
-          {tooLong && <Typography.Label className="error-text">Сократи текст, чтобы поделиться ссылкой</Typography.Label>}
-          <Button stretched disabled={!text.trim()} onClick={save}>Сохранить</Button>
-          {saved && <Button stretched variant="ghost" onClick={() => setEditing(false)}>Отмена</Button>}
-        </div>
-      ) : (
-        <div className="stack">
-          <div className="homework"><Typography.Body className="homework__text">{saved?.text}</Typography.Body></div>
-          <Button stretched disabled={tooLong || !shareLink} onClick={share}>Поделиться</Button>
-          <div className="row">
-            <Button stretched variant="secondary" onClick={() => setEditing(true)}>Изменить</Button>
-            <Button stretched variant="secondary" onClick={() => { removeHomework(id); setText(''); setEditing(true); }}>Удалить</Button>
-          </div>
-        </div>
-      )}
-      {notice && <Typography.Label className="notice">{notice}</Typography.Label>}
-    </div>
-  );
-};
-
 export const LessonScreen = (props: Props) => {
   useBackButton(props.onBack);
-  return homeworkApiEnabled ? <RemoteLessonScreen {...props} /> : <OfflineLessonScreen {...props} />;
+  return <RemoteLessonScreen {...props} />;
 };
