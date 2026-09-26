@@ -18,7 +18,8 @@ watchForUpdates();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MaxUI>
+    {/* Светлая тема всегда: в тёмном режиме MAX карточки теряют обводку и цвета презентации. */}
+    <MaxUI colorScheme="light">
       <I18nProvider>
         <App />
       </I18nProvider>

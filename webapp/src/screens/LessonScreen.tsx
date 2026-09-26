@@ -160,7 +160,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
               <p className="hw-block__label">{t.forMe}</p>
               {item?.personalText
                 ? <p className="hw-block__text">{item.personalText}</p>
-                : <p className="hw-block__empty">{t.noOwnVersion}</p>}
+                : <p className="hw-block__empty">{item?.sharedText ? t.noOwnVersion : t.noOwnYet}</p>}
             </div>
 
             <div className="actions">

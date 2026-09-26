@@ -52,7 +52,7 @@ const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1' }: DayHeadingProp
       <span className="day-heading__summary">
         {lessons.length > 0
           ? `${t.pairs(pairCount(lessons))} · ${lessonStart(lessons[0])}–${lessonEnd(lessons[lessons.length - 1])}`
-          : t.noPairs}
+          : t.noLessonsTitle}
       </span>
     </div>
   );
