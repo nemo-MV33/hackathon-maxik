@@ -1,20 +1,39 @@
-import { Button, Spinner, Typography } from '@maxhub/max-ui';
+import { Button, Spinner } from '@maxhub/max-ui';
+import { useI18n } from '../lib/i18n';
 
-export const Loading = () => (
-  <div className="status"><Spinner /></div>
-);
-
-export const ErrorState = ({ message, onRetry }: { message: string; onRetry?: () => void }) => (
-  <div className="status">
-    <span className="status__icon">⚠️</span>
-    <Typography.Body>{message}</Typography.Body>
-    {onRetry && <Button variant="secondary" onClick={onRetry}>Повторить</Button>}
+export const Loading = ({ label }: { label?: string }) => (
+  <div className="status" role="status" aria-live="polite">
+    <Spinner />
+    {label && <p className="status__text">{label}</p>}
   </div>
 );
 
-export const Empty = ({ icon = '🌿', children }: { icon?: string; children: React.ReactNode }) => (
-  <div className="status">
-    <span className="status__icon">{icon}</span>
-    <Typography.Body className="muted">{children}</Typography.Body>
+export const ScheduleSkeleton = ({ rows = 3 }: { rows?: number }) => (
+  <div className="cards" aria-busy="true">
+    {Array.from({ length: rows }, (_, index) => (
+      <div key={index} className="card card--skeleton">
+        <i className="bone bone--time" />
+        <i className="bone bone--title" />
+        <i className="bone bone--meta" />
+      </div>
+    ))}
+  </div>
+);
+
+export const ErrorState = ({ message, onRetry }: { message: string; onRetry?: () => void }) => {
+  const { t } = useI18n();
+  return (
+    <div className="status status--error" role="alert">
+      <p className="status__title">{t.failedTitle}</p>
+      <p className="status__text">{message}</p>
+      {onRetry && <Button size="small" variant="secondary" onClick={onRetry}>{t.retry}</Button>}
+    </div>
+  );
+};
+
+export const Empty = ({ title, children }: { title: string; children?: React.ReactNode }) => (
+  <div className="status status--empty">
+    <p className="status__title">{title}</p>
+    {children && <p className="status__text">{children}</p>}
   </div>
 );

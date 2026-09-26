@@ -1,3 +1,5 @@
+import { t } from '../lib/i18n';
+
 const DATA_URL = `${import.meta.env.BASE_URL}data/`;
 
 export type Group = { id: number; title: string; institute: string; course: number | null };
@@ -22,7 +24,7 @@ export type Meta = { updatedAt: string; weeks: string[]; groups: number; failed:
 
 export class DataError extends Error {
   constructor(readonly kind: 'missing' | 'network') {
-    super(kind === 'missing' ? 'Расписание ещё не выгружено' : 'Нет связи. Проверь интернет');
+    super(kind === 'missing' ? t().scheduleMissing : t().network);
   }
 }
 

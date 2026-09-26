@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Typography } from '@maxhub/max-ui';
+import { Button } from '@maxhub/max-ui';
 import { loadWeek, loadGroups, type Group } from '../data/schedule';
 import { saveHomework } from '../data/homework';
 import { haptic } from '../bridge/max';
@@ -8,7 +8,9 @@ import { type SharedHomework } from '../lib/homework';
 import { formatDay, fromDateKey, startOfWeek, toDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useAsync } from '../lib/useAsync';
-import { ErrorState, Loading } from '../components/Status';
+import { Empty, ErrorState, Loading } from '../components/Status';
+import { Wordmark } from '../components/Wordmark';
+import { useI18n } from '../lib/i18n';
 
 const findContext = async (shared: SharedHomework) => {
   const [groups, week] = await Promise.all([
@@ -27,6 +29,7 @@ export const ImportScreen = ({ shared, profile, onDone }: {
   profile: LocalProfile | null;
   onDone: (group?: Group) => void;
 }) => {
+  const { t } = useI18n();
   const [context, retry] = useAsync(() => (shared ? findContext(shared) : Promise.resolve(null)), [shared]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -34,17 +37,18 @@ export const ImportScreen = ({ shared, profile, onDone }: {
   if (!shared) {
     return (
       <div className="screen">
-        <ErrorState message="Ссылка с ДЗ повреждена или устарела. Попроси прислать её ещё раз" />
-        <Button stretched onClick={() => onDone()}>Открыть расписание</Button>
+        <Wordmark />
+        <Empty title={t.brokenLinkTitle}>{t.brokenLinkText}</Empty>
+        <Button stretched size="large" onClick={() => onDone()}>{t.openSchedule}</Button>
       </div>
     );
   }
-  if (context.status === 'loading') return <Loading />;
-  if (context.status === 'error') return <ErrorState message={context.message} onRetry={retry} />;
+  if (context.status === 'loading') return <Loading label={t.findingLesson} />;
+  if (context.status === 'error') return <div className="screen"><ErrorState message={context.message} onRetry={retry} /></div>;
 
   const { group, lesson } = context.data ?? {};
-  const subject = lesson?.subject ?? `${shared.lessonNumber} пара`;
-  const otherGroup = profile && profile.group.id !== shared.groupId;
+  const subject = lesson?.subject ?? t.pair(shared.lessonNumber);
+  const otherGroup = profile && group && profile.group.id !== shared.groupId;
 
   const accept = async () => {
     if (!group || !lesson || saving) return;
@@ -68,28 +72,29 @@ export const ImportScreen = ({ shared, profile, onDone }: {
 
   return (
     <div className="screen">
-      <div className="hero">
-        <span className="hero__logo">📬</span>
-        <Typography.Headline>Одногруппник поделился ДЗ</Typography.Headline>
+      <div className="intro">
+        <p className="eyebrow">{t.sharedWithYou}</p>
+        <h1 className="display">{subject}</h1>
       </div>
-      <div className="card">
-        <Typography.Body className="lesson__subject">{subject}</Typography.Body>
-        <Typography.Label className="muted first-letter">
-          {group?.title ?? 'Группа'} · {formatDay(fromDateKey(shared.date))}{lesson ? ` · ${lesson.time.slice(0, 5)}` : ''}
-        </Typography.Label>
-        <Typography.Body className="homework__text">{shared.text}</Typography.Body>
+      <dl className="facts">
+        <div><dt>{t.groupField}</dt><dd>{group?.title ?? t.groupNotFound}{shared.subgroup ? `, ${t.subgroup(shared.subgroup)}` : ''}</dd></div>
+        <div><dt>{t.when}</dt><dd className="first-letter">{formatDay(fromDateKey(shared.date))}{lesson ? <> · <span className="mono">{lesson.time}</span></> : ''}</dd></div>
+      </dl>
+      <div className="hw-block hw-block--quote">
+        <p className="hw-block__label">{t.task}</p>
+        <p className="hw-block__text">{shared.text}</p>
       </div>
       {otherGroup && (
-        <Typography.Label className="error-text">
-          Это ДЗ для группы {group?.title}, а у тебя выбрана {profile.group.title}
-        </Typography.Label>
+        <p className="callout">
+          {t.otherGroupWarning(group.title, profile.group.title)}
+        </p>
       )}
-      {!lesson && <Typography.Label className="error-text">Пара не найдена в расписании ИРНИТУ, сохранить ДЗ нельзя</Typography.Label>}
-      {saveError && <Typography.Label className="error-text">{saveError}</Typography.Label>}
-      <Button stretched disabled={!group || !lesson || saving} onClick={accept}>
-        {saving ? 'Сохраняем…' : 'Сохранить себе'}
-      </Button>
-      <Button stretched variant="ghost" onClick={() => onDone()}>Не сохранять</Button>
+      {!lesson && <p className="callout callout--error">{t.lessonMissing}</p>}
+      {saveError && <p className="callout callout--error" role="alert">{saveError}</p>}
+      <div className="actions">
+        <Button stretched size="large" disabled={!group || !lesson} loading={saving} onClick={accept}>{t.saveForMe}</Button>
+        <Button stretched variant="ghost" disabled={saving} onClick={() => onDone()}>{t.dontSave}</Button>
+      </div>
     </div>
   );
 };

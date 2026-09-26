@@ -51,8 +51,9 @@ export const saveHomework = (lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'sub
 
 export const useRemoteHomework = (groupId: number, from: string, to: string, dependency?: unknown) => {
   const [state, setState] = useState<HomeworkState>({ status: 'loading' });
-  const refresh = useCallback(() => {
-    setState({ status: 'loading' });
+  const refresh = useCallback((silent = false) => {
+    // Тихое обновление после сохранения не прячет уже показанное ДЗ за спиннером.
+    if (!silent) setState({ status: 'loading' });
     return loadHomework(groupId, from, to)
       .then((data) => setState({ status: 'ready', data }) as void)
       .catch((error: Error) => setState({ status: 'error', message: error.message }));

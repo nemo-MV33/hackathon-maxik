@@ -1,76 +1,59 @@
-import { Fragment, useMemo, useState } from 'react';
-import { Typography } from '@maxhub/max-ui';
+import { useEffect, useRef, useState } from 'react';
 import { loadMeta, loadWeek, type Lesson } from '../data/schedule';
 import {
-  addDays, formatDay, formatShortDay, formatUpdatedAt, fromDateKey, irkutskNow, minutesUntil, startOfWeek, toDateKey,
+  addDays, formatDay, formatRange, formatUpdatedAt, fromDateKey, startOfWeek, toDateKey,
 } from '../lib/date';
+import { useI18n } from '../lib/i18n';
 import type { LocalProfile } from '../lib/profile';
 import { useAsync } from '../lib/useAsync';
-import { LessonCard } from '../components/LessonCard';
-import { Empty, ErrorState, Loading } from '../components/Status';
-import { homeworkKey, useRemoteHomework, type HomeworkItem } from '../data/homework';
+import { useNow } from '../lib/useNow';
+import { haptic } from '../bridge/max';
+import { DayTimeline, lessonEnd, lessonStart } from '../components/Timeline';
+import { Empty, ErrorState, ScheduleSkeleton } from '../components/Status';
+import { ChevronLeft, ChevronRight } from '../components/Icon';
+import { homeworkKey, useRemoteHomework } from '../data/homework';
 
 type Mode = 'day' | 'week';
 
-const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'];
+const MODE_KEY = 'norfly.mode';
+
+const readMode = (): Mode => {
+  try {
+    return localStorage.getItem(MODE_KEY) === 'week' ? 'week' : 'day';
+  } catch {
+    return 'day';
+  }
+};
 
 const forSubgroup = (lessons: Lesson[], subgroup: 1 | 2 | null) =>
   lessons.filter((lesson) => !subgroup || !lesson.subgroup || lesson.subgroup === subgroup);
 
-const endTime = (lesson: Lesson) => lesson.time.slice(6);
+const pairCount = (lessons: Lesson[]) => new Set(lessons.map((lesson) => lesson.lessonNumber)).size;
 
-const liveLabel = (lesson: Lesson, now: Date) => {
-  const untilStart = minutesUntil(lesson.date, lesson.time, now);
-  const untilEnd = minutesUntil(lesson.date, endTime(lesson), now);
-  if (untilStart <= 0 && untilEnd > 0) return `Идёт сейчас · ещё ${untilEnd} мин`;
-  if (untilStart > 0 && untilStart <= 120) return `Через ${untilStart} мин`;
-  return undefined;
-};
+const dayDiff = (key: string, todayKey: string) =>
+  Math.round((fromDateKey(key).getTime() - fromDateKey(todayKey).getTime()) / 86_400_000);
 
-const formatGap = (minutes: number) => {
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return [hours && `${hours} ч`, rest && `${rest} мин`].filter(Boolean).join(' ');
-};
+type DayHeadingProps = { dateKey: string; todayKey: string; lessons: Lesson[]; level?: 'h1' | 'h2' };
 
-const toMinutes = (time: string) => {
-  const [hours, minutes] = time.slice(0, 5).split(':').map(Number);
-  return hours * 60 + minutes;
-};
-
-const gapMinutes = (previous: Lesson, next: Lesson) => toMinutes(next.time) - toMinutes(endTime(previous));
-
-type DayProps = {
-  lessons: Lesson[];
-  dateKey: string;
-  now: Date;
-  remoteHomework: Map<string, HomeworkItem> | null;
-  onOpen: (lesson: Lesson) => void;
-};
-
-const DayLessons = ({ lessons, dateKey, now, remoteHomework, onOpen }: DayProps) => {
-  const day = lessons.filter((lesson) => lesson.date === dateKey);
-  if (day.length === 0) return <Empty>Пар нет — можно отдохнуть</Empty>;
-  const isToday = dateKey === toDateKey(now);
-  const next = isToday ? day.find((lesson) => minutesUntil(lesson.date, endTime(lesson), now) > 0) : undefined;
+const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1' }: DayHeadingProps) => {
+  const { t } = useI18n();
+  const Tag = level;
+  const diff = dayDiff(dateKey, todayKey);
+  const relative = { 0: t.today, 1: t.tomorrow, [-1]: t.yesterday }[diff];
+  // «суббота, 26 сентября» → две строки: день недели и дата.
+  const [weekday, date] = formatDay(fromDateKey(dateKey)).split(/,\s*/);
   return (
-    <div className="stack">
-      {day.map((lesson, index) => {
-        const previous = day[index - 1];
-        const gap = previous && previous.lessonNumber !== lesson.lessonNumber ? gapMinutes(previous, lesson) : 0;
-        return (
-          <Fragment key={`${lesson.lessonNumber}-${lesson.subject}-${lesson.subgroup}`}>
-            {gap >= 40 && <div className="gap">окно {formatGap(gap)}</div>}
-            <LessonCard
-              lesson={lesson}
-              live={lesson === next ? liveLabel(lesson, now) : undefined}
-              past={isToday && minutesUntil(lesson.date, endTime(lesson), now) <= 0}
-              homework={remoteHomework?.get(homeworkKey(lesson))?.text}
-              onClick={() => onOpen(lesson)}
-            />
-          </Fragment>
-        );
-      })}
+    <div className={`day-heading day-heading--${level}`}>
+      {relative && <span className={`day-heading__eyebrow${diff === 0 ? ' is-today' : ''}`}>{relative}</span>}
+      <Tag className="day-heading__title">
+        <span className="first-letter">{weekday}{date ? ',' : ''}</span>
+        {date && <>{level === 'h1' ? <br /> : ' '}{date}</>}
+      </Tag>
+      <span className="day-heading__summary">
+        {lessons.length > 0
+          ? `${t.pairs(pairCount(lessons))} · ${lessonStart(lessons[0])}–${lessonEnd(lessons[lessons.length - 1])}`
+          : t.noPairs}
+      </span>
     </div>
   );
 };
@@ -83,10 +66,18 @@ type ScheduleProps = {
 };
 
 export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson }: ScheduleProps) => {
-  const now = useMemo(() => irkutskNow(), []);
+  const { t } = useI18n();
+  const now = useNow();
   const todayKey = toDateKey(now);
-  const [mode, setMode] = useState<Mode>('day');
+  const [mode, setModeState] = useState<Mode>(readMode);
   const [selected, setSelected] = useState(todayKey);
+  const todayRef = useRef<HTMLElement>(null);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+
+  const setMode = (value: Mode) => {
+    setModeState(value);
+    try { localStorage.setItem(MODE_KEY, value); } catch {}
+  };
 
   const weekStart = toDateKey(startOfWeek(fromDateKey(selected)));
   const days = Array.from({ length: 7 }, (_, index) => toDateKey(addDays(fromDateKey(weekStart), index)));
@@ -101,98 +92,124 @@ export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson
 
   const availableWeeks = meta.status === 'ready' ? meta.data.weeks : [];
   const lessons = week.status === 'ready' ? forSubgroup(week.data.lessons, profile.subgroup) : [];
+  const lessonsOn = (key: string) => lessons.filter((lesson) => lesson.date === key);
+
+  const weekKeyOf = (offset: number) => toDateKey(addDays(fromDateKey(weekStart), offset * 7));
+  const canShift = (weeks: number) => availableWeeks.includes(weekKeyOf(weeks));
   const shiftWeek = (weeks: number) => {
-    const target = toDateKey(addDays(fromDateKey(weekStart), weeks * 7));
+    const target = weekKeyOf(weeks);
     const sameWeekday = toDateKey(addDays(fromDateKey(target), (fromDateKey(selected).getUTCDay() + 6) % 7));
     setSelected(target === toDateKey(startOfWeek(now)) ? todayKey : sameWeekday);
   };
-  const canShift = (weeks: number) => availableWeeks.includes(toDateKey(addDays(fromDateKey(weekStart), weeks * 7)));
+  const shiftDay = (delta: number) => {
+    const target = toDateKey(addDays(fromDateKey(selected), delta));
+    const targetWeek = toDateKey(startOfWeek(fromDateKey(target)));
+    if (targetWeek !== weekStart && !availableWeeks.includes(targetWeek)) return;
+    haptic.tap();
+    setSelected(target);
+  };
+
+  useEffect(() => {
+    if (mode === 'week' && week.status === 'ready') todayRef.current?.scrollIntoView({ block: 'start' });
+  }, [mode, week.status]);
+
+  const onTouchStart = (event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    swipe.current = { x: touch.clientX, y: touch.clientY };
+  };
+  const onTouchEnd = (event: React.TouchEvent) => {
+    const start = swipe.current;
+    swipe.current = null;
+    if (!start || mode !== 'day') return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) > 64 && Math.abs(dx) > Math.abs(dy) * 1.6) shiftDay(dx < 0 ? 1 : -1);
+  };
+
+  const selectedLessons = lessonsOn(selected);
+  const weekDays = days.filter((key) => lessonsOn(key).length > 0);
 
   return (
-    <div className="screen">
-      <div className="header">
-        <div className="header__group">
-          <Typography.Headline>{profile.group.title}</Typography.Headline>
-          <Typography.Label className="muted">
-            {profile.subgroup ? `${profile.subgroup} подгруппа` : 'вся группа'}
-          </Typography.Label>
+    <div className="screen screen--schedule">
+      <header className="topbar">
+        <button type="button" className="chip chip--group" onClick={onChangeGroup} aria-label={t.groupLabel(profile.group.title)}>
+          <span className="chip__title">{profile.group.title}</span>
+          <span className="chip__sub">{profile.subgroup ? t.subgroupShort(profile.subgroup) : t.wholeGroup}</span>
+          <ChevronRight size={14} />
+        </button>
+        <div className="segment" role="tablist" aria-label={t.scheduleView}>
+          {(['day', 'week'] as const).map((value) => (
+            <button key={value} type="button" role="tab" aria-selected={mode === value} onClick={() => setMode(value)}>
+              {value === 'day' ? t.day : t.week}
+            </button>
+          ))}
         </div>
-        <button type="button" className="chip-button" onClick={onChangeGroup}>Сменить</button>
-      </div>
+      </header>
 
-      <div className="segmented" role="tablist">
-        {(['day', 'week'] as const).map((value) => (
-          <button key={value} type="button" role="tab" aria-selected={mode === value} onClick={() => setMode(value)}>
-            {value === 'day' ? 'День' : 'Неделя'}
-          </button>
-        ))}
-      </div>
+      {mode === 'day' && <DayHeading dateKey={selected} todayKey={todayKey} lessons={selectedLessons} />}
 
       <div className="week-nav">
-        <button type="button" className="icon-button" aria-label="Предыдущая неделя" disabled={!canShift(-1)} onClick={() => shiftWeek(-1)}>‹</button>
-        <Typography.Label className="muted">
-          {formatShortDay(fromDateKey(days[0]))} — {formatShortDay(fromDateKey(days[6]))}
-          {week.status === 'ready' && ` · ${week.data.weekEven ? 'чётная' : 'нечётная'}`}
-        </Typography.Label>
-        <button type="button" className="icon-button" aria-label="Следующая неделя" disabled={!canShift(1)} onClick={() => shiftWeek(1)}>›</button>
+        <button type="button" className="icon-button" aria-label={t.previousWeek} disabled={!canShift(-1)} onClick={() => shiftWeek(-1)}>
+          <ChevronLeft size={18} />
+        </button>
+        <span className="week-nav__range">
+          {formatRange(fromDateKey(days[0]), fromDateKey(days[6]))}
+          {week.status === 'ready' && <span className="week-nav__parity"> · {week.data.weekEven ? t.even : t.odd}</span>}
+        </span>
+        <button type="button" className="icon-button" aria-label={t.nextWeek} disabled={!canShift(1)} onClick={() => shiftWeek(1)}>
+          <ChevronRight size={18} />
+        </button>
       </div>
 
       {mode === 'day' && (
-        <div className="days">
+        <div className="days" role="group" aria-label={t.weekDays}>
           {days.map((key, index) => {
-            const classes = [
-              'day',
-              key === todayKey && 'day--today',
-              key === selected && 'day--selected',
-              lessons.some((lesson) => lesson.date === key) && 'day--has-lessons',
-            ];
+            const count = new Set(lessonsOn(key).map((lesson) => lesson.lessonNumber)).size;
+            const classes = ['day', key === todayKey && 'day--today', key === selected && 'day--selected', key < todayKey && 'day--past'];
             return (
               <button
                 key={key}
                 type="button"
                 className={classes.filter(Boolean).join(' ')}
                 aria-pressed={key === selected}
+                aria-label={`${formatDay(fromDateKey(key))}, ${count ? t.pairs(count) : t.noPairs}`}
                 onClick={() => setSelected(key)}
               >
-                <span className="day__weekday">{WEEKDAYS[index]}</span>
+                <span className="day__weekday">{t.weekdays[index]}</span>
                 <span className="day__number">{fromDateKey(key).getUTCDate()}</span>
-                <span className="day__dot" />
+                <span className="day__ticks" aria-hidden="true">
+                  {Array.from({ length: Math.min(count, 6) }, (_, tick) => <i key={tick} />)}
+                </span>
               </button>
             );
           })}
         </div>
       )}
 
-      {week.status === 'loading' && <Loading />}
       {week.status === 'error' && <ErrorState message={week.message} onRetry={retry} />}
 
-      {week.status === 'ready' && mode === 'day' && (
-        <div className="stack">
-          <span className="section-title">
-            {selected === todayKey ? 'Сегодня, ' : selected === toDateKey(addDays(now, 1)) ? 'Завтра, ' : ''}
-            {formatDay(fromDateKey(selected))}
-          </span>
-          <DayLessons lessons={lessons} dateKey={selected} now={now} remoteHomework={remoteHomework} onOpen={onOpenLesson} />
-        </div>
+      {mode === 'day' && week.status !== 'error' && (
+        <section className="day-view" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          {week.status === 'loading' && <ScheduleSkeleton />}
+          {week.status === 'ready' && (selectedLessons.length === 0
+            ? <Empty title={t.noLessonsTitle}>{selected < todayKey ? t.noLessonsPast : t.noLessonsFree}</Empty>
+            : <DayTimeline lessons={selectedLessons} dateKey={selected} todayKey={todayKey} now={now} homework={remoteHomework} onOpen={onOpenLesson} />)}
+        </section>
       )}
 
-      {week.status === 'ready' && mode === 'week' && (
-        lessons.length === 0
-          ? <Empty icon="🏖️">На этой неделе пар нет</Empty>
-          : days
-            .filter((key) => lessons.some((lesson) => lesson.date === key))
-            .map((key) => (
-              <section key={key} className="stack">
-                <span className="section-title">{formatDay(fromDateKey(key))}</span>
-                <DayLessons lessons={lessons} dateKey={key} now={now} remoteHomework={remoteHomework} onOpen={onOpenLesson} />
-              </section>
-            ))
-      )}
+      {mode === 'week' && week.status === 'loading' && <ScheduleSkeleton rows={5} />}
+      {mode === 'week' && week.status === 'ready' && (weekDays.length === 0
+        ? <Empty title={t.emptyWeekTitle}>{t.emptyWeekText}</Empty>
+        : weekDays.map((key) => (
+          <section key={key} className="week-day" ref={key === todayKey ? todayRef : undefined}>
+            <DayHeading dateKey={key} todayKey={todayKey} lessons={lessonsOn(key)} level="h2" />
+            <DayTimeline lessons={lessonsOn(key)} dateKey={key} todayKey={todayKey} now={now} homework={remoteHomework} onOpen={onOpenLesson} />
+          </section>
+        )))}
 
       {meta.status === 'ready' && (
-        <span className="footnote">
-          Расписание ИРНИТУ · обновлено {formatUpdatedAt(meta.data.updatedAt)}
-        </span>
+        <p className="footnote">{t.footnote(formatUpdatedAt(meta.data.updatedAt))}</p>
       )}
     </div>
   );

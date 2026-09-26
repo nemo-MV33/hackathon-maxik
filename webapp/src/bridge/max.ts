@@ -10,6 +10,7 @@ type WebApp = {
   initDataUnsafe: { user?: MaxUser; start_param?: string };
   platform?: string;
   ready?: () => void;
+  openLink?: (url: string) => void;
   BackButton?: {
     show: () => void;
     hide: () => void;
@@ -33,6 +34,8 @@ declare global {
 export const BOT_NAME = import.meta.env.VITE_BOT_NAME ?? 't692_hakaton_max_bot';
 
 export const webApp = (): WebApp | undefined => window.WebApp;
+// Вне MAX скрипт моста тоже загружается, но без initData кнопка «Назад» клиента не появится.
+export const hasNativeBackButton = () => Boolean(window.WebApp?.initData && window.WebApp.BackButton);
 export const currentUser = (): MaxUser | undefined => window.WebApp?.initDataUnsafe?.user;
 
 export const startParam = (): string | undefined => {
@@ -42,6 +45,15 @@ export const startParam = (): string | undefined => {
 };
 
 export const miniAppLink = (payload: string) => `https://max.ru/${BOT_NAME}?startapp=${payload}`;
+
+export const openExternal = (url: string) => {
+  const app = window.WebApp;
+  if (app?.initData && app.openLink) {
+    app.openLink(url);
+    return true;
+  }
+  return false;
+};
 
 export const haptic = {
   success: () => window.WebApp?.HapticFeedback?.notificationOccurred('success'),

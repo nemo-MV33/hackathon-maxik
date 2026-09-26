@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
-import { Button, Textarea, Typography } from '@maxhub/max-ui';
+import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
-import { homeworkKey, saveHomework, useRemoteHomework } from '../data/homework';
-import { haptic } from '../bridge/max';
-import { formatDay, fromDateKey } from '../lib/date';
+import { homeworkKey, saveHomework, useRemoteHomework, type HomeworkData } from '../data/homework';
+import { hasNativeBackButton, haptic, openExternal } from '../bridge/max';
+import { formatDay, formatStamp, fromDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
 import { ErrorState, Loading } from '../components/Status';
-import { lessonKindClass } from '../lib/lessonKind';
+import { ChevronLeft } from '../components/Icon';
+import { isControlLesson, lessonKindClass, lessonKindCode, lessonKindName } from '../lib/lessonKind';
+import { useI18n } from '../lib/i18n';
 
 type Props = {
   lesson: Lesson;
@@ -16,148 +18,204 @@ type Props = {
   onBack: () => void;
 };
 
-const LessonHeading = ({ lesson, onBack }: Pick<Props, 'lesson' | 'onBack'>) => (
-  <>
-    <button type="button" className="chip-button back" onClick={onBack}>‹ Расписание</button>
-    <div className={`card lesson-head ${lessonKindClass(lesson.lessonType)}`}>
-      <div className="tags">
-        <span className="tag">{lesson.lessonType}</span>
-        {lesson.subgroup && <span className="tag tag--neutral">{lesson.subgroup} подгруппа</span>}
-        {lesson.transferred && <span className="tag tag--neutral">перенос</span>}
-      </div>
-      <Typography.Headline>{lesson.subject}</Typography.Headline>
-      <div className="info-row"><span>🗓</span><span className="first-letter">{formatDay(fromDateKey(lesson.date))}, {lesson.lessonNumber} пара · {lesson.time}</span></div>
-      {lesson.auditories.length > 0 && <div className="info-row"><span>📍</span><span>{lesson.auditories.join(', ')}</span></div>}
-      {lesson.teachers.length > 0 && <div className="info-row"><span>👤</span><span>{lesson.teachers.join(', ')}</span></div>}
-      {lesson.comment && <div className="info-row"><span>💬</span><span>{lesson.comment}</span></div>}
-    </div>
-  </>
-);
+type Scope = 'shared' | 'personal';
 
-const RemoteLessonScreen = ({ lesson, profile, profileRevision, onBack }: Props) => {
+const MAX_LENGTH = 2_000;
+
+const safeLink = (link?: string) => (link && /^https?:\/\//i.test(link) ? link : undefined);
+
+const LessonFacts = ({ lesson }: { lesson: Lesson }) => {
+  const { t } = useI18n();
+  return (
+  <dl className="facts">
+    <div><dt>{t.when}</dt><dd className="first-letter">{formatDay(fromDateKey(lesson.date))}<br /><span className="mono">{lesson.time}</span> · {t.pair(lesson.lessonNumber)}</dd></div>
+    {lesson.auditories.length > 0 && <div><dt>{t.where}</dt><dd>{lesson.auditories.join(', ')}</dd></div>}
+    {lesson.teachers.length > 0 && <div><dt>{t.who}</dt><dd>{lesson.teachers.join(', ')}</dd></div>}
+    {lesson.subgroup && <div><dt>{t.forWhom}</dt><dd>{t.forSubgroup(lesson.subgroup)}</dd></div>}
+    {lesson.comment && <div><dt>{t.note}</dt><dd>{lesson.comment}</dd></div>}
+    {safeLink(lesson.link) && (
+      <div><dt>{t.link}</dt><dd><a
+        href={safeLink(lesson.link)}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(event) => { if (openExternal(lesson.link!)) event.preventDefault(); }}
+      >{lesson.link!.replace(/^https?:\/\//i, '')}</a></dd></div>
+    )}
+  </dl>
+  );
+};
+
+const LessonHeading = ({ lesson }: { lesson: Lesson }) => {
+  const { t } = useI18n();
+  return (
+  <header className={`lesson-head ${lessonKindClass(lesson.lessonType)}${isControlLesson(lesson.lessonType) ? ' is-control' : ''}`}>
+    <p className="eyebrow">
+      <span className="kind-code">{lessonKindCode(lesson.lessonType)}</span>
+      {lessonKindName(lesson.lessonType)}
+      {lesson.transferred && <span className="flag">{t.transferred}</span>}
+    </p>
+    <h1 className="display">{lesson.subject}</h1>
+  </header>
+  );
+};
+
+export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props) => {
+  const { t } = useI18n();
   const [homework, refresh] = useRemoteHomework(profile.group.id, lesson.date, lesson.date, profileRevision);
   const item = homework.status === 'ready'
     ? homework.data.items.find((candidate) => homeworkKey(candidate) === homeworkKey(lesson))
     : undefined;
   const canEditShared = homework.status === 'ready' && homework.data.canEditShared;
-  const [scope, setScope] = useState<'shared' | 'personal'>('personal');
+  const [scope, setScope] = useState<Scope>('personal');
   const [text, setText] = useState('');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+
+  // Во время редактирования системная «Назад» закрывает редактор, а не экран пары.
+  useBackButton(editing && !saving ? () => setEditing(false) : onBack);
 
   useEffect(() => {
-    if (homework.status !== 'ready') return;
-    const initialScope = homework.data.canEditShared ? 'shared' : 'personal';
-    setScope(initialScope);
-    setText(initialScope === 'shared' ? item?.sharedText ?? '' : item?.personalText ?? item?.sharedText ?? '');
-  }, [homework.status, item?.updatedAt]);
+    if (!notice || notice.tone === 'error') return undefined;
+    const timer = window.setTimeout(() => setNotice(null), 4_000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
-  const startEditing = (nextScope: 'shared' | 'personal') => {
+  const startEditing = (nextScope: Scope) => {
     setScope(nextScope);
     setText(nextScope === 'shared' ? item?.sharedText ?? '' : item?.personalText ?? item?.sharedText ?? '');
     setNotice(null);
+    setConfirmDelete(false);
     setEditing(true);
   };
 
-  const save = async () => {
-    if (!text.trim() || saving) return;
+  const run = async (action: () => Promise<unknown>, success: string) => {
     setSaving(true);
     setNotice(null);
     try {
-      await saveHomework(lesson, text.trim(), scope);
-      await refresh();
+      await action();
+      await refresh(true);
       setEditing(false);
-      setNotice(scope === 'shared'
-        ? 'Общее ДЗ обновлено для всей группы'
-        : 'Личная версия сохранена только для тебя');
+      setConfirmDelete(false);
+      setNotice({ tone: 'ok', text: success });
       haptic.success();
     } catch (error) {
-      setNotice((error as Error).message);
+      setNotice({ tone: 'error', text: (error as Error).message });
     } finally {
       setSaving(false);
     }
   };
 
-  const reset = async (target: 'shared' | 'personal') => {
-    setSaving(true);
-    setNotice(null);
-    try {
-      await saveHomework(lesson, null, target);
-      await refresh();
-      setEditing(false);
-      setNotice(target === 'personal' ? 'Теперь показывается общее ДЗ' : 'Общее ДЗ удалено');
-    } catch (error) {
-      setNotice((error as Error).message);
-    } finally {
-      setSaving(false);
+  const save = () => {
+    if (!text.trim() || saving) return;
+    void run(
+      () => saveHomework(lesson, text.trim(), scope),
+      scope === 'shared' ? t.savedShared : t.savedOwn,
+    );
+  };
+
+  const remove = (target: Scope) => {
+    if (target === 'shared' && !confirmDelete) {
+      setConfirmDelete(true);
+      return;
     }
+    void run(
+      () => saveHomework(lesson, null, target),
+      target === 'personal' ? t.deletedOwn : t.deletedShared,
+    );
   };
 
   return (
-    <div className="screen">
-      <LessonHeading lesson={lesson} onBack={onBack} />
-      <Typography.Title>Домашнее задание</Typography.Title>
-      {homework.status === 'loading' && <Loading />}
-      {homework.status === 'error' && <ErrorState message={homework.message} onRetry={refresh} />}
-      {homework.status === 'ready' && !editing && (
-        <div className="stack">
-          <div className="homework stack">
-            <Typography.Label className="faint">👥 Общее для группы</Typography.Label>
-            <Typography.Body className="homework__text">{item?.sharedText || 'Пока не записано'}</Typography.Body>
-            {item?.sharedText && (
-              <Typography.Label className="muted">
-                {item.authorName ? `Записал: ${item.authorName}` : 'Записано в группе'}
-                {item.version > 1 ? ` · версия ${item.version}` : ''}
-              </Typography.Label>
-            )}
-          </div>
-          <div className={`homework stack${item?.personalText ? ' homework--personal' : ''}`}>
-            <Typography.Label className="faint">🔒 Личная версия</Typography.Label>
-            <Typography.Body className="homework__text">
-              {item?.personalText || 'Нет — используется общее ДЗ'}
-            </Typography.Body>
-          </div>
-          <Button stretched onClick={() => startEditing('personal')}>
-            {item?.personalText ? 'Изменить личное ДЗ' : 'Записать себе'}
-          </Button>
-          {item?.personalText && (
-            <Button stretched variant="secondary" disabled={saving} onClick={() => reset('personal')}>
-              Вернуть общее ДЗ
-            </Button>
-          )}
-          {canEditShared && (
-            <Button stretched variant="secondary" onClick={() => startEditing('shared')}>
-              {item?.sharedText ? 'Изменить для группы' : 'Записать для группы'}
-            </Button>
-          )}
-        </div>
+    <div className="screen screen--lesson">
+      {!hasNativeBackButton() && (
+        <button type="button" className="back-link" onClick={onBack}><ChevronLeft size={18} />{t.scheduleBack}</button>
       )}
-      {homework.status === 'ready' && editing && (
-        <div className="stack">
-          <Typography.Label className="muted">
-            {scope === 'shared' ? 'Общее ДЗ увидит вся группа' : 'Эту версию увидишь только ты'}
-          </Typography.Label>
-          <Textarea
-            autoFocus
-            maxLength={2_000}
-            placeholder="Например: стр. 45, № 1–10. Подготовить доклад"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-          />
-          <Typography.Label className="faint counter">{text.length}/2000</Typography.Label>
-          <Button stretched disabled={!text.trim() || saving} onClick={save}>
-            {saving ? 'Сохраняем…' : 'Сохранить'}
-          </Button>
-          <Button stretched variant="ghost" disabled={saving} onClick={() => setEditing(false)}>Отмена</Button>
+      <LessonHeading lesson={lesson} />
+      <LessonFacts lesson={lesson} />
+
+      <section className="homework" aria-labelledby="homework-title">
+        <div className="section-head">
+          <h2 id="homework-title" className="section-title">{t.homeworkTitle}</h2>
+          {homework.status === 'ready' && <p className="section-note">{t.roles[homework.data.role]}</p>}
         </div>
-      )}
-      {notice && <Typography.Label className="notice" role="status">{notice}</Typography.Label>}
+
+        {homework.status === 'loading' && <Loading />}
+        {homework.status === 'error' && <ErrorState message={homework.message} onRetry={() => refresh()} />}
+
+        {homework.status === 'ready' && !editing && (
+          <>
+            <div className="hw-block">
+              <p className="hw-block__label">{t.forGroup}</p>
+              {item?.sharedText
+                ? <p className="hw-block__text">{item.sharedText}</p>
+                : <p className="hw-block__empty">{t.nobodyWrote}</p>}
+              {item?.sharedText && (
+                <p className="hw-block__meta">
+                  {[item.authorName, formatStamp(item.updatedAt), item.version > 1 && t.edit(item.version)].filter(Boolean).join(' · ')}
+                </p>
+              )}
+            </div>
+            <div className={`hw-block${item?.personalText ? ' hw-block--personal' : ''}`}>
+              <p className="hw-block__label">{t.forMe}</p>
+              {item?.personalText
+                ? <p className="hw-block__text">{item.personalText}</p>
+                : <p className="hw-block__empty">{t.noOwnVersion}</p>}
+            </div>
+
+            <div className="actions">
+              {canEditShared && (
+                <Button stretched size="large" onClick={() => startEditing('shared')}>
+                  {item?.sharedText ? t.editShared : t.writeShared}
+                </Button>
+              )}
+              <Button stretched size="large" variant={canEditShared ? 'secondary' : 'primary'} onClick={() => startEditing('personal')}>
+                {item?.personalText ? t.editOwn : t.writeOwn}
+              </Button>
+              {item?.personalText && (
+                <Button stretched variant="ghost" disabled={saving} onClick={() => remove('personal')}>
+                  {t.deleteOwn}
+                </Button>
+              )}
+              {canEditShared && item?.sharedText && (
+                <Button
+                  stretched
+                  variant={confirmDelete ? 'destructive' : 'ghost'}
+                  loading={saving && confirmDelete}
+                  onClick={() => remove('shared')}
+                >
+                  {confirmDelete ? t.confirmDelete : t.deleteShared}
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+
+        {homework.status === 'ready' && editing && (
+          <div className="editor">
+            <p className="editor__scope">
+              {scope === 'shared' ? t.sharedScope : t.ownScope}
+            </p>
+            <Textarea
+              autoFocus
+              maxLength={MAX_LENGTH}
+              rows={6}
+              placeholder={t.placeholder}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+            />
+            <p className={`editor__counter${text.length > MAX_LENGTH * 0.9 ? ' is-near' : ''}`}>{text.length} / {MAX_LENGTH}</p>
+            <div className="actions">
+              <Button stretched size="large" disabled={!text.trim()} loading={saving} onClick={save}>{t.save}</Button>
+              <Button stretched variant="ghost" disabled={saving} onClick={() => setEditing(false)}>{t.cancel}</Button>
+            </div>
+          </div>
+        )}
+
+        {notice && (
+          <p className={`toast toast--${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.text}</p>
+        )}
+      </section>
     </div>
   );
-};
-
-export const LessonScreen = (props: Props) => {
-  useBackButton(props.onBack);
-  return <RemoteLessonScreen {...props} />;
 };
