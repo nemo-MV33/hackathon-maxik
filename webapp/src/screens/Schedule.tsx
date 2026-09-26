@@ -33,9 +33,9 @@ const pairCount = (lessons: Lesson[]) => new Set(lessons.map((lesson) => lesson.
 const dayDiff = (key: string, todayKey: string) =>
   Math.round((fromDateKey(key).getTime() - fromDateKey(todayKey).getTime()) / 86_400_000);
 
-type DayHeadingProps = { dateKey: string; todayKey: string; lessons: Lesson[]; level?: 'h1' | 'h2' };
+type DayHeadingProps = { dateKey: string; todayKey: string; lessons: Lesson[]; level?: 'h1' | 'h2'; loading?: boolean };
 
-const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1' }: DayHeadingProps) => {
+const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1', loading = false }: DayHeadingProps) => {
   const { t } = useI18n();
   const Tag = level;
   const diff = dayDiff(dateKey, todayKey);
@@ -49,8 +49,9 @@ const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1' }: DayHeadingProp
         <span className="first-letter">{weekday}{date ? ',' : ''}</span>
         {date && <>{level === 'h1' ? <br /> : ' '}{date}</>}
       </Tag>
+      {/* Пока неделя не загрузилась, строка пустая той же высоты: «Пар нет» до данных было бы неправдой. */}
       <span className="day-heading__summary">
-        {lessons.length > 0
+        {loading ? '\u00a0' : lessons.length > 0
           ? `${t.pairs(pairCount(lessons))} · ${lessonStart(lessons[0])}–${lessonEnd(lessons[lessons.length - 1])}`
           : t.noLessonsTitle}
       </span>
@@ -147,7 +148,7 @@ export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson
         </div>
       </header>
 
-      {mode === 'day' && <DayHeading dateKey={selected} todayKey={todayKey} lessons={selectedLessons} />}
+      {mode === 'day' && <DayHeading dateKey={selected} todayKey={todayKey} lessons={selectedLessons} loading={week.status !== 'ready'} />}
 
       <div className="week-nav">
         <button type="button" className="icon-button" aria-label={t.previousWeek} disabled={!canShift(-1)} onClick={() => shiftWeek(-1)}>

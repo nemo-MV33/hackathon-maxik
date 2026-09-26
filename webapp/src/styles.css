@@ -365,7 +365,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* Скелетон */
 
-.card--skeleton { gap: 10px; border-color: var(--outline); background: var(--surface); cursor: default; }
+.card--skeleton { box-sizing: border-box; gap: 10px; border-color: var(--outline); background: var(--surface); cursor: default; }
 .bone { display: block; border-radius: 6px; background: var(--surface-2); animation: bone 1.2s ease-in-out infinite alternate; }
 .bone--time { width: 90px; height: 20px; }
 .bone--title { width: 65%; height: 16px; }
