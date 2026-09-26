@@ -1,836 +1,796 @@
 import { Bot, Keyboard } from '@maxhub/max-bot-api';
-import { addDays, formatHumanDate, toDateKey } from '../lib/date.js';
-import { formatSchedule, formatSearchResults, formatWeekTitle } from './format.js';
+import { addDays, toDateKey } from '../lib/date.js';
+import { parseCommand } from './commands.js';
+import { formatDate, formatHomework, formatScheduleDay, formatScheduleWeek } from './format.js';
+import { DEFAULT_LANGUAGE, normalizeLanguage, texts } from './i18n.js';
+
+// Кнопки несут всё нужное в payload, поэтому переживают перезапуск бота.
+// В памяти остаётся только «что пользователь сейчас печатает»: текст ДЗ, причину опоздания, поиск.
 
 const PAGE_SIZE = 8;
-const sessions = new Map();
-const userId = (ctx) => ctx.user?.user_id ?? ctx.message?.sender?.user_id ?? ctx.chatId;
-const sessionKey = (ctx) => `${ctx.chatId}:${userId(ctx)}`;
-const sessionFor = (ctx) => sessions.get(sessionKey(ctx)) ?? {};
-const saveSession = (ctx, patch) => {
-  const value = { ...sessionFor(ctx), ...patch };
-  sessions.set(sessionKey(ctx), value);
-  return value;
-};
-const buttonText = (value) => String(value).slice(0, 54);
-const isGroupChat = (ctx) => ctx.message?.recipient?.chat_type === 'chat';
-const displayName = (user) => user?.name || (user?.username ? `@${user.username}` : `MAX ID ${user?.user_id}`);
+const MAX_TEXT = 3_900;
+const HOMEWORK_LIMIT = 2_000;
 
-const groupMenu = () => Keyboard.inlineKeyboard([
-  [
-    Keyboard.button.callback('Сегодня', 'group-schedule:today'),
-    Keyboard.button.callback('Завтра', 'group-schedule:tomorrow'),
-    Keyboard.button.callback('Неделя', 'group-schedule:week'),
-  ],
-  [
-    Keyboard.button.callback('Домашнее задание', 'group-homework:list'),
-    Keyboard.button.callback('Добавить ДЗ', 'group-homework:create'),
-  ],
-  [Keyboard.button.callback('Кто записывает ДЗ', 'group-homework:team')],
-]);
+const COMMANDS = [
+  { name: 'start', description: 'Меню · Menu' },
+  { name: 'today', description: 'Пары на сегодня · Today' },
+  { name: 'tomorrow', description: 'Пары на завтра · Tomorrow' },
+  { name: 'week', description: 'Неделя · Week' },
+  { name: 'homework', description: 'Домашка · Homework' },
+  { name: 'add', description: 'Записать ДЗ · Add homework' },
+  { name: 'find', description: 'Найти расписание · Search' },
+  { name: 'absence', description: 'Предупредить старосту · Tell the representative' },
+  { name: 'settings', description: 'Настройки и язык · Settings' },
+  { name: 'setup', description: 'Привязать чат к группе · Link chat' },
+  { name: 'help', description: 'Все команды · Help' },
+];
 
-const setupKeyboard = () => Keyboard.inlineKeyboard([
-  [Keyboard.button.callback('Настроить учебную группу', 'group-setup:start', { intent: 'positive' })],
-]);
-
-const mainKeyboard = (miniAppUrl) => {
-  const rows = [
-    [Keyboard.button.callback('Моё расписание', 'menu:mine', { intent: 'positive' })],
-    [
-      Keyboard.button.callback('Группа', 'menu:group'),
-      Keyboard.button.callback('Преподаватель', 'menu:teacher'),
-      Keyboard.button.callback('Аудитория', 'menu:auditory'),
-    ],
-    [
-      Keyboard.button.callback('Домашние задания', 'personal-homework:list'),
-      Keyboard.button.callback('Мой профиль', 'profile:view'),
-    ],
-  ];
-  if (miniAppUrl) rows.push([Keyboard.button.link('Открыть приложение', miniAppUrl)]);
-  return Keyboard.inlineKeyboard(rows);
+const ALIASES = {
+  menu: 'start',
+  schedule: 'today',
+  profile: 'settings',
+  language: 'language',
+  lang: 'language',
+  search: 'find',
+  homework_create: 'add',
+  homework_personal: 'add',
+  homework_team: 'team',
+  homework_access: 'access',
 };
 
-const replyMenu = (ctx, miniAppUrl) => ctx.reply([
-  '**norfly — расписание ИРНИТУ**', '',
-  'Расписание группы, преподавателя или аудитории в одном месте.',
-].join('\n'), { format: 'markdown', attachments: [mainKeyboard(miniAppUrl)] });
+const buttonText = (value) => String(value).slice(0, 64);
+const clip = (text) => (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT).trimEnd()}\n…` : text);
+const button = (text, payload, intent) => Keyboard.button.callback(buttonText(text), payload, intent ? { intent } : undefined);
+const userId = (ctx) => ctx.user?.user_id ?? ctx.message?.sender?.user_id;
+const isGroupChat = (ctx) => ctx.message?.recipient?.chat_type === 'chat' || ctx.chat?.type === 'chat';
+const displayName = (user) => user?.name
+  || [user?.first_name, user?.last_name].filter(Boolean).join(' ')
+  || (user?.username ? `@${user.username}` : `MAX ID ${user?.user_id}`);
+const subgroupFromCode = (code) => (code === '1' ? 1 : code === '2' ? 2 : null);
+const lessonKey = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 
-const pagedKeyboard = (items, kind, page, labelOf) => {
-  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-  const safePage = Math.min(Math.max(page, 0), totalPages - 1);
-  const start = safePage * PAGE_SIZE;
-  const rows = items.slice(start, start + PAGE_SIZE).map((item, offset) => [
-    Keyboard.button.callback(buttonText(labelOf(item)), `pick:${kind}:${start + offset}`),
-  ]);
-  const navigation = [];
-  if (safePage > 0) navigation.push(Keyboard.button.callback('← Назад', `page:${kind}:${safePage - 1}`));
-  navigation.push(Keyboard.button.callback(`${safePage + 1}/${totalPages}`, 'noop'));
-  if (safePage + 1 < totalPages) navigation.push(Keyboard.button.callback('Дальше →', `page:${kind}:${safePage + 1}`));
-  rows.push(navigation);
-  const backLabels = {
-    institute: '← Главное меню',
-    course: '← Изменить институт',
-    studentGroup: '← Изменить курс',
-    result: '← Главное меню',
-  };
-  rows.push([Keyboard.button.callback(backLabels[kind], `back:${kind}`)]);
-  return Keyboard.inlineKeyboard(rows);
-};
-
-const renderPicker = async (ctx, kind, page = 0) => {
-  const session = sessionFor(ctx);
-  const titles = {
-    institute: 'Выбери институт:', course: 'Выбери курс:',
-    studentGroup: 'Выбери группу:', result: 'Выбери подходящий вариант:',
-  };
-  const labelOf = {
-    institute: (item) => item,
-    course: (item) => `${item} курс`,
-    studentGroup: (item) => item.title,
-    result: (item) => item.title || item.fullName,
-  }[kind];
-  await ctx.reply(titles[kind], {
-    attachments: [pagedKeyboard(session.candidates ?? [], kind, page, labelOf)],
-  });
-};
-
-const isChatManager = async (ctx) => {
-  try {
-    const response = await ctx.getChatAdmins();
-    return response.members?.some((member) => member.user_id === userId(ctx) && (member.is_owner || member.is_admin));
-  } catch {
-    return false;
-  }
-};
-
-const requireChatManager = async (ctx) => {
-  if (await isChatManager(ctx)) return true;
-  await ctx.reply('Настраивать бота может владелец или администратор чата. Добавь бота в администраторы с правом чтения сообщений и повтори команду.');
-  return false;
-};
-
-const formatHomework = (items) => {
-  if (!items.length) return 'Актуальных домашних заданий пока нет.';
-  return ['**Домашнее задание**', '', ...items.flatMap((item) => [
-    `📅 **${formatHumanDate(item.lessonDate)} · ${item.lessonTime}**`,
-    `**${item.subject}**`,
-    item.text,
-    item.source === 'personal' ? '_Личная версия · видна только тебе_' : '',
-    '',
-  ].filter(Boolean))].join('\n').trim();
-};
-
-const homeworkKeyboard = (personal) => Keyboard.inlineKeyboard(personal ? [
-  [Keyboard.button.callback('Записать личное ДЗ', 'personal-homework:create', { intent: 'positive' })],
-  [Keyboard.button.callback('Главное меню', 'menu:main')],
-] : [
-  [Keyboard.button.callback('Добавить ДЗ', 'group-homework:create', { intent: 'positive' })],
-  [Keyboard.button.callback('Меню группы', 'group-schedule:today')],
-]);
-
-const persistProfile = async (ctx, preferences, patch) => {
-  const saved = await preferences.get(userId(ctx));
-  const value = { ...saved, ...patch };
-  await preferences.set(userId(ctx), value);
-  return value;
-};
-
-const beginStudentSetup = async (ctx, service) => {
-  const institutes = await service.institutes();
-  saveSession(ctx, { step: 'institute', institutes, candidates: institutes });
-  await renderPicker(ctx, 'institute');
-};
-
-const beginSearch = async (ctx, kind) => {
-  saveSession(ctx, { step: `search:${kind}`, candidates: [] });
-  const labels = {
-    group: 'Напиши название группы, например ИСТб-26-1.',
-    teacher: 'Напиши фамилию преподавателя.',
-    auditory: 'Напиши аудиторию, например Б-307.',
-  };
-  await ctx.reply(labels[kind]);
-};
-
-const scheduleKeyboard = (mode) => {
-  const rows = [[
-    Keyboard.button.callback('Сегодня', 'schedule:today'),
-    Keyboard.button.callback('Завтра', 'schedule:tomorrow'),
-    Keyboard.button.callback('Неделя', 'schedule:week', { intent: mode === 'week' ? 'positive' : 'default' }),
-  ]];
-  if (mode === 'week') rows.push([
-    Keyboard.button.callback('← Неделя', 'week:previous'),
-    Keyboard.button.callback('Текущая', 'week:current'),
-    Keyboard.button.callback('Неделя →', 'week:next'),
-  ]);
-  rows.push([
-    Keyboard.button.callback('Профиль', 'profile:view'),
-    Keyboard.button.callback('Меню', 'menu:main'),
-  ]);
-  return Keyboard.inlineKeyboard(rows);
-};
-
-const showSchedule = async (ctx, service, mode = 'today') => {
-  const session = sessionFor(ctx);
-  if (!session.selection) return ctx.reply('Сначала выбери своё расписание через главное меню.');
-  const offset = mode === 'week' ? (session.weekOffset ?? 0) : 0;
-  const baseDate = addDays(new Date(), offset * 7);
-  const targetDate = mode === 'tomorrow' ? addDays(new Date(), 1) : baseDate;
-  const schedule = await service[`${session.selection.kind}Schedule`](session.selection.id, {
-    week: targetDate, subgroup: session.subgroup,
-  });
-  const body = formatSchedule(schedule, {
-    date: mode === 'week' ? undefined : targetDate,
-  });
-  const text = mode === 'week' ? `${formatWeekTitle(schedule)}\n\n${body}` : body;
-  await ctx.reply(text, { format: 'markdown', attachments: [scheduleKeyboard(mode)] });
-};
-
-const showProfile = async (ctx, preferences) => {
-  const saved = await preferences.get(userId(ctx));
-  const user = ctx.user ?? {};
-  const lines = [
-    '**Мой профиль**', '',
-    `Имя: ${user.name || [user.first_name, user.last_name].filter(Boolean).join(' ') || 'не указано'}`,
-    user.username ? `Ник: @${user.username}` : '',
-    `MAX ID: ${userId(ctx)}`,
-    '',
-    saved.institute ? `Институт: ${saved.institute}` : 'Институт: не выбран',
-    saved.course ? `Курс: ${saved.course}` : 'Курс: не выбран',
-    saved.selection?.kind === 'group' ? `Группа: ${saved.selection.title}` : 'Группа: не выбрана',
-    saved.selection?.kind === 'group'
-      ? `Подгруппа: ${saved.subgroup ?? 'вся группа'}`
-      : '',
-    `Напоминания: ${saved.remindersEnabled === false ? 'выключены' : 'включены'}`,
-  ].filter(Boolean);
-  await ctx.reply(lines.join('\n'), {
-    format: 'markdown',
-    attachments: [Keyboard.inlineKeyboard([
-      [Keyboard.button.callback('Изменить учебные данные', 'profile:change')],
-      [Keyboard.button.callback(
-        saved.remindersEnabled === false ? 'Включить напоминания' : 'Выключить напоминания',
-        'profile:toggle-reminders',
-      )],
-      [Keyboard.button.callback('Главное меню', 'menu:main')],
-    ])],
-  });
-};
-
-export const createBot = ({ token, service, miniAppUrl, preferences, community }) => {
+export const createBot = ({
+  token, service, miniAppUrl, miniAppButton = 'app', preferences, community,
+}) => {
   const bot = new Bot(token);
-  const restoreProfile = async (ctx) => {
-    const current = sessionFor(ctx);
-    if (current.restored) return current;
-    const saved = await preferences.get(userId(ctx));
-    return saveSession(ctx, { ...saved, restored: true });
+  const sessions = new Map();
+
+  const sessionKey = (ctx) => `${ctx.chatId}:${userId(ctx)}`;
+  const session = (ctx) => sessions.get(sessionKey(ctx)) ?? {};
+  const setSession = (ctx, value) => {
+    if (value) sessions.set(sessionKey(ctx), value);
+    else sessions.delete(sessionKey(ctx));
   };
 
-  const beginGroupSetup = async (ctx) => {
-    if (!isGroupChat(ctx) || !await requireChatManager(ctx)) return;
-    const institutes = await service.institutes();
-    saveSession(ctx, {
-      step: 'institute', institutes, candidates: institutes,
-      groupSetup: { chatId: ctx.chatId },
-    });
-    await renderPicker(ctx, 'institute');
+  const savePrefs = async (ctx, patch) => {
+    const value = { ...await preferences.get(userId(ctx)), ...patch };
+    await preferences.set(userId(ctx), value);
+    ctx.prefs = value;
+    return value;
   };
 
-  const groupConfigFor = async (ctx) => community.getChat(ctx.chatId);
-
-  const showGroupSchedule = async (ctx, mode = 'today') => {
-    const config = await groupConfigFor(ctx);
-    if (!config?.group) {
-      await ctx.reply('Чат ещё не привязан к учебной группе.', { attachments: [setupKeyboard()] });
-      return;
+  // Ответ на нажатие кнопки меняет то же сообщение, чтобы чат не превращался в ленту меню.
+  const show = async (ctx, text, rows = []) => {
+    const attachments = rows.length ? [Keyboard.inlineKeyboard(rows)] : [];
+    if (ctx.update.update_type === 'message_callback') {
+      return ctx.answerOnCallback({ message: { text: clip(text), format: 'markdown', attachments } });
     }
-    const targetDate = mode === 'tomorrow' ? addDays(new Date(), 1) : new Date();
-    const schedule = await service.groupSchedule(config.group.id, {
-      week: targetDate,
-      subgroup: config.subgroup ?? null,
-    });
-    const body = formatSchedule(schedule, { date: mode === 'week' ? undefined : targetDate });
-    const text = mode === 'week' ? `${formatWeekTitle(schedule)}\n\n${body}` : body;
-    await ctx.reply(text, { format: 'markdown', attachments: [groupMenu()] });
+    return ctx.reply(clip(text), { format: 'markdown', attachments });
+  };
+  const toast = (ctx, text) => (ctx.update.update_type === 'message_callback'
+    ? ctx.answerOnCallback({ notification: text })
+    : ctx.reply(text));
+
+  const appButton = (t) => {
+    if (miniAppButton === 'link') return miniAppUrl ? Keyboard.button.link(t.openApp, miniAppUrl) : null;
+    if (!bot.botInfo?.username) return null;
+    return { type: 'open_app', text: t.openApp, web_app: bot.botInfo.username, contact_id: bot.botInfo.user_id };
   };
 
-  const homeworkForContext = async (ctx) => {
-    let groupId;
-    let profile;
-    if (isGroupChat(ctx)) groupId = (await groupConfigFor(ctx))?.group?.id;
-    else {
-      profile = await preferences.get(userId(ctx));
-      groupId = profile?.selection?.id;
+  const isChatManager = async (ctx) => {
+    try {
+      const response = await ctx.getChatAdmins();
+      return response.members?.some((member) => member.user_id === userId(ctx) && (member.is_owner || member.is_admin));
+    } catch {
+      return false;
     }
-    if (!groupId) {
-      await ctx.reply(isGroupChat(ctx)
-        ? 'Сначала настрой учебную группу командой /setup.'
-        : 'Сначала выбери свою группу в профиле.');
-      return;
+  };
+
+  const ownGroup = (prefs) => (prefs.selection?.kind === 'group' ? prefs.selection : null);
+
+  // Меню и приветствие
+
+  const languagePrompt = (ctx) => show(ctx, texts(DEFAULT_LANGUAGE).languagePrompt, [[
+    button('Русский', 'lang:ru'), button('English', 'lang:en'),
+  ]]);
+
+  const privateMenu = async (ctx) => {
+    const { t, prefs } = ctx;
+    const group = ownGroup(prefs);
+    const app = appButton(t);
+    if (!group) {
+      setSession(ctx, { step: 'own-group' });
+      const rows = [[button(t.chooseByInstitute, 'inst:0')]];
+      if (app) rows.push([app]);
+      return show(ctx, `${t.welcomeTitle}\n\n${t.welcomeNoGroup}`, rows);
     }
-    const items = isGroupChat(ctx)
-      ? await community.homeworkForGroup(groupId)
-      : await community.homeworkForUser(groupId, userId(ctx), { subgroup: profile.subgroup });
-    await ctx.reply(formatHomework(items), {
-      format: 'markdown', attachments: [homeworkKeyboard(!isGroupChat(ctx))],
+    setSession(ctx, null);
+    const rows = [
+      [button(t.today, `s:group:${group.id}:d0`, 'positive'), button(t.tomorrow, `s:group:${group.id}:d1`), button(t.week, `s:group:${group.id}:w0`)],
+      [button(t.homework, 'hw:list'), button(t.addPersonal, 'ph:pick')],
+      [button(t.search, 'find'), button(t.settings, 'settings')],
+    ];
+    if (app) rows.push([app]);
+    return show(ctx, `${t.menuTitle({ group: group.title, subgroup: prefs.subgroup })}\n\n${t.menuHint}`, rows);
+  };
+
+  const groupMenuRows = (t) => [
+    [button(t.today, 'g:d0', 'positive'), button(t.tomorrow, 'g:d1'), button(t.week, 'g:w0')],
+    [button(t.homework, 'hw:list'), button(t.addHomework, 'gh:pick')],
+  ];
+
+  const start = async (ctx) => {
+    if (isGroupChat(ctx)) return groupHelp(ctx);
+    if (!normalizeLanguage(ctx.prefs.lang)) return languagePrompt(ctx);
+    return privateMenu(ctx);
+  };
+
+  const help = (ctx) => {
+    if (isGroupChat(ctx)) return groupHelp(ctx);
+    return show(ctx, ctx.t.help, [[button(ctx.t.menu, 'menu')]]);
+  };
+  const groupHelp = async (ctx) => {
+    const config = await community.getChat(ctx.chatId);
+    const rows = config?.group ? groupMenuRows(ctx.t) : [[button(ctx.t.setup, 'setup', 'positive')]];
+    return show(ctx, ctx.t.helpGroup, rows);
+  };
+
+  // Расписание
+
+  const entityTitle = async (kind, id) => {
+    const lists = { group: () => service.groups(), teacher: () => service.teachers(), auditory: () => service.auditories() };
+    const items = await lists[kind]().catch(() => []);
+    const item = items.find((candidate) => candidate.id === Number(id));
+    return item?.title ?? item?.fullName ?? item?.name ?? '';
+  };
+
+  const scheduleRows = (t, prefix, mode, offset, extra = []) => {
+    const rows = [[
+      button(t.today, `${prefix}:d0`, mode === 'd' && offset === 0 ? 'positive' : undefined),
+      button(t.tomorrow, `${prefix}:d1`, mode === 'd' && offset === 1 ? 'positive' : undefined),
+      button(t.week, `${prefix}:w0`, mode === 'w' && offset === 0 ? 'positive' : undefined),
+    ]];
+    if (mode === 'w') {
+      rows.push([
+        button(t.previousWeek, `${prefix}:w${offset - 1}`),
+        ...(offset !== 0 ? [button(t.currentWeek, `${prefix}:w0`)] : []),
+        button(t.nextWeek, `${prefix}:w${offset + 1}`),
+      ]);
+    }
+    return [...rows, ...extra];
+  };
+
+  const renderSchedule = async (ctx, { kind, id, subgroup, title, mode, offset, prefix, extraRows }) => {
+    const { t, lang } = ctx;
+    const date = mode === 'w' ? addDays(new Date(), offset * 7) : addDays(new Date(), offset);
+    let schedule;
+    try {
+      schedule = await service[`${kind}Schedule`](id, { week: date, subgroup });
+    } catch (error) {
+      console.error('Schedule request failed:', error.message);
+      return show(ctx, t.scheduleUnavailable, [[button(t.menu, 'menu')]]);
+    }
+    const text = mode === 'w'
+      ? formatScheduleWeek(lang, schedule, { title })
+      : formatScheduleDay(lang, schedule, date, { title });
+    return show(ctx, text, scheduleRows(t, prefix, mode, offset, extraRows));
+  };
+
+  const showSchedule = async (ctx, kind, id, mode, offset) => {
+    const { t, prefs } = ctx;
+    const own = ownGroup(prefs);
+    const isOwn = kind === 'group' && own?.id === Number(id);
+    const name = isOwn ? own.title : await entityTitle(kind, id);
+    const suffix = isOwn ? ` · ${t.menuTitle({ group: '', subgroup: prefs.subgroup }).split(' · ')[1]}` : '';
+    const extraRows = [];
+    if (kind === 'group' && !isOwn) extraRows.push([button(t.makeMine, `mine:${id}`)]);
+    extraRows.push([button(t.menu, 'menu')]);
+    return renderSchedule(ctx, {
+      kind, id: Number(id), subgroup: isOwn ? prefs.subgroup ?? null : null,
+      title: `**${name}**${suffix}`, mode, offset, prefix: `s:${kind}:${id}`, extraRows,
     });
   };
 
-  const canEditHomework = async (ctx, config) => {
-    if (!config) return false;
-    if (config.homeworkMode === 'all') return true;
-    const actorId = userId(ctx);
-    return actorId === config.headman?.userId || (config.editors ?? []).some((editor) => editor.userId === actorId);
+  const showOwnSchedule = async (ctx, mode, offset) => {
+    const group = ownGroup(ctx.prefs);
+    if (!group) {
+      setSession(ctx, { step: 'own-group' });
+      return show(ctx, ctx.t.noGroupYet, [[button(ctx.t.chooseByInstitute, 'inst:0')]]);
+    }
+    return showSchedule(ctx, 'group', group.id, mode, offset);
   };
+
+  const showChatSchedule = async (ctx, mode, offset) => {
+    const config = await community.getChat(ctx.chatId);
+    if (!config?.group) return show(ctx, ctx.t.groupNotConfigured, [[button(ctx.t.setup, 'setup', 'positive')]]);
+    const subgroup = config.subgroup ?? null;
+    return renderSchedule(ctx, {
+      kind: 'group', id: config.group.id, subgroup,
+      title: ctx.t.menuTitle({ group: config.group.title, subgroup }),
+      mode, offset, prefix: 'g',
+      extraRows: [[button(ctx.t.homework, 'hw:list'), button(ctx.t.addHomework, 'gh:pick')]],
+    });
+  };
+
+  const scheduleCommand = (mode, offset) => (ctx) => (isGroupChat(ctx)
+    ? showChatSchedule(ctx, mode, offset)
+    : showOwnSchedule(ctx, mode, offset));
+
+  // Поиск и выбор группы
+
+  const search = async (query, { groupsOnly = false } = {}) => {
+    const [groups, teachers, auditories] = await Promise.all([
+      service.searchGroups(query, { limit: 20 }),
+      groupsOnly ? [] : service.searchTeachers(query, { limit: 20 }),
+      groupsOnly ? [] : service.searchAuditories(query, { limit: 20 }),
+    ]);
+    return [
+      ...groups.map((item) => ({ kind: 'group', id: item.id, title: item.title, hint: item.institute })),
+      ...teachers.map((item) => ({ kind: 'teacher', id: item.id, title: item.fullName || item.name })),
+      ...auditories.map((item) => ({ kind: 'auditory', id: item.id, title: item.title })),
+    ];
+  };
+
+  const kindLabel = (t, kind) => ({ group: t.kindGroup, teacher: t.kindTeacher, auditory: t.kindAuditory }[kind]);
+
+  const handleSearch = async (ctx, query, { mode }) => {
+    const { t } = ctx;
+    let results;
+    try {
+      results = await search(query, { groupsOnly: mode !== 'any' });
+    } catch (error) {
+      console.error('Search failed:', error.message);
+      return show(ctx, t.scheduleUnavailable);
+    }
+    if (!results.length) return show(ctx, t.searchEmpty(query), mode === 'own' ? [[button(t.chooseByInstitute, 'inst:0')]] : []);
+    // Единственное совпадение открываем сразу — без лишнего нажатия.
+    if (results.length === 1) {
+      const [item] = results;
+      if (mode === 'own') return subgroupPrompt(ctx, item, 'sub');
+      if (mode === 'link') return subgroupPrompt(ctx, item, 'lsub');
+      return showSchedule(ctx, item.kind, item.id, 'd', 0);
+    }
+    const payload = (item) => {
+      if (mode === 'own') return `mine:${item.id}`;
+      if (mode === 'link') return `link:${item.id}`;
+      return `s:${item.kind}:${item.id}:d0`;
+    };
+    const rows = results.slice(0, PAGE_SIZE).map((item) => [button(
+      mode === 'any' ? `${item.title} · ${kindLabel(t, item.kind)}` : item.title,
+      payload(item),
+    )]);
+    rows.push(mode === 'link' ? [button(t.cancel, 'cancel')] : [button(t.menu, 'menu')]);
+    return show(ctx, t.searchResults(query), rows);
+  };
+
+  const subgroupPrompt = (ctx, group, prefix) => show(ctx, ctx.t.subgroupPrompt(group.title), [[
+    button(ctx.t.subgroupNumber(1), `${prefix}:${group.id}:1`),
+    button(ctx.t.subgroupNumber(2), `${prefix}:${group.id}:2`),
+  ], [button(ctx.t.subgroupAll, `${prefix}:${group.id}:all`)]]);
+
+  const findGroup = async (id) => (await service.groups()).find((group) => group.id === Number(id));
+
+  const pagedRows = (t, items, page, toButton, pagePrefix, backPayload) => {
+    const total = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    const safe = Math.min(Math.max(page, 0), total - 1);
+    const rows = items.slice(safe * PAGE_SIZE, (safe + 1) * PAGE_SIZE).map((item, index) => [toButton(item, safe * PAGE_SIZE + index)]);
+    if (total > 1) {
+      rows.push([
+        ...(safe > 0 ? [button('‹', `${pagePrefix}${safe - 1}`)] : []),
+        button(t.page(safe + 1, total), 'noop'),
+        ...(safe + 1 < total ? [button('›', `${pagePrefix}${safe + 1}`)] : []),
+      ]);
+    }
+    rows.push([button(t.back, backPayload)]);
+    return rows;
+  };
+
+  // Домашнее задание
 
   const upcomingLessons = async (groupId, subgroup) => {
-    const thisWeek = await service.groupSchedule(groupId, { week: new Date(), subgroup });
-    const nextWeek = await service.groupSchedule(groupId, { week: addDays(new Date(), 7), subgroup });
+    const [thisWeek, nextWeek] = await Promise.all([
+      service.groupSchedule(groupId, { week: new Date(), subgroup }),
+      service.groupSchedule(groupId, { week: addDays(new Date(), 7), subgroup }),
+    ]);
     const today = toDateKey(new Date());
+    const seen = new Set();
     return [...thisWeek.lessons, ...nextWeek.lessons]
       .filter((lesson) => lesson.date >= today)
-      .filter((lesson, index, all) => all.findIndex((candidate) =>
-        candidate.date === lesson.date
-        && candidate.lessonNumber === lesson.lessonNumber
-        && (candidate.subgroup ?? null) === (lesson.subgroup ?? null)) === index)
+      .filter((lesson) => !seen.has(lessonKey(lesson)) && seen.add(lessonKey(lesson)))
       .slice(0, 14);
   };
 
-  const lessonPicker = async (ctx, lessons, prefix, title) => {
-    if (!lessons.length) return ctx.reply('В ближайших двух неделях занятий не найдено.');
-    const rows = lessons.map((lesson, index) => [Keyboard.button.callback(
-      buttonText(`${formatHumanDate(lesson.date)} · ${lesson.time} · ${lesson.subject}`),
-      `${prefix}:${index}`,
+  const findLesson = async (groupId, subgroup, key) =>
+    (await upcomingLessons(groupId, subgroup)).find((lesson) => lessonKey(lesson) === key);
+
+  const lessonWhen = (lang, lesson) => `${formatDate(lang, lesson.date)} · ${lesson.time}`;
+
+  const lessonPicker = async (ctx, groupId, subgroup, prefix, prompt) => {
+    const { t, lang } = ctx;
+    let lessons;
+    try {
+      lessons = await upcomingLessons(groupId, subgroup);
+    } catch {
+      return show(ctx, t.scheduleUnavailable);
+    }
+    if (!lessons.length) return show(ctx, t.noUpcomingLessons, [[button(t.menu, isGroupChat(ctx) ? 'help' : 'menu')]]);
+    const rows = lessons.map((lesson) => [button(
+      `${formatDate(lang, lesson.date, { weekday: 'short', day: 'numeric' })} · ${lesson.time.slice(0, 5)} · ${lesson.subject}`,
+      `${prefix}:${lessonKey(lesson)}`,
     )]);
-    rows.push([Keyboard.button.callback('Отмена', 'homework:cancel')]);
-    await ctx.reply(title, { attachments: [Keyboard.inlineKeyboard(rows)] });
+    rows.push([button(t.cancel, 'cancel')]);
+    return show(ctx, prompt, rows);
   };
 
-  const beginHomework = async (ctx) => {
-    if (!isGroupChat(ctx)) {
-      await ctx.reply('Добавлять ДЗ нужно в чате учебной группы. В личке можно посмотреть уже записанное через /homework.');
-      return;
-    }
-    const config = await groupConfigFor(ctx);
-    if (!config?.group) return ctx.reply('Сначала настрой учебную группу командой /setup.');
-    if (!await canEditHomework(ctx, config)) {
-      await ctx.reply('Добавлять ДЗ сейчас могут староста и назначенные редакторы.');
-      return;
-    }
-    const lessons = await upcomingLessons(config.group.id, config.subgroup ?? null);
-    saveSession(ctx, { step: 'homework:lesson', homeworkChatId: ctx.chatId, homeworkLessons: lessons });
-    await lessonPicker(ctx, lessons, 'homework:lesson', 'К какой паре записать общее ДЗ?');
+  const canEditHomework = (ctx, config) => {
+    if (!config) return false;
+    if (config.homeworkMode === 'all') return true;
+    const actor = userId(ctx);
+    return actor === config.headman?.userId || (config.editors ?? []).some((editor) => editor.userId === actor);
   };
 
-  const beginPersonalHomework = async (ctx) => {
-    if (isGroupChat(ctx)) return ctx.reply('Личные заметки к ДЗ доступны в личном чате с ботом.');
-    const profile = await preferences.get(userId(ctx));
-    if (profile.selection?.kind !== 'group') return ctx.reply('Сначала выбери свою группу в профиле.');
-    const lessons = await upcomingLessons(profile.selection.id, profile.subgroup ?? null);
-    saveSession(ctx, { step: 'personal-homework:lesson', personalHomeworkLessons: lessons });
-    await lessonPicker(ctx, lessons, 'personal-homework:lesson', 'К какой паре добавить личную версию ДЗ?');
-  };
-
-  const showHomeworkTeam = async (ctx) => {
-    if (!isGroupChat(ctx)) return;
-    const config = await groupConfigFor(ctx);
-    if (!config?.group) return ctx.reply('Сначала настрой учебную группу командой /setup.');
-    const editors = config.editors ?? [];
-    const lines = [
-      '**Команда ДЗ**', '',
-      `Староста: ${config.headman?.name ?? 'не назначен'}`,
-      `Редакторы: ${editors.length ? editors.map((editor) => editor.name).join(', ') : 'нет'}`,
-      `Доступ: ${config.homeworkMode === 'all' ? 'все участники' : 'староста и редакторы'}`,
-      '',
-      'Староста может ответить /editor на сообщение человека, чтобы выдать или снять права.',
-    ];
-    await ctx.reply(lines.join('\n'), { format: 'markdown' });
-  };
-
-  const beginNotice = async (ctx) => {
+  const showHomework = async (ctx) => {
+    const { t, lang, prefs } = ctx;
     if (isGroupChat(ctx)) {
-      await ctx.reply('Сообщение старосте отправляется из личного чата с ботом — так причина и фото не попадут в общий чат.');
-      return;
+      const config = await community.getChat(ctx.chatId);
+      if (!config?.group) return show(ctx, t.groupNotConfigured, [[button(t.setup, 'setup', 'positive')]]);
+      const items = await community.homeworkForGroup(config.group.id, { subgroup: config.subgroup ?? null });
+      return show(ctx, formatHomework(lang, items), [[button(t.addHomework, 'gh:pick'), button(t.team, 'team')]]);
     }
-    const profile = await preferences.get(userId(ctx));
-    const chats = profile.selection?.id ? await community.chatsForGroup(profile.selection.id) : [];
-    const configured = chats.filter((chat) => chat.headman?.userId);
-    if (!configured.length) {
-      await ctx.reply('Для твоей группы ещё не настроен чат со старостой. Проверь группу в профиле или попроси старосту настроить бота в учебном чате.');
-      return;
-    }
-    saveSession(ctx, { noticeChats: configured });
-    await ctx.reply('Что передать старосте?', { attachments: [Keyboard.inlineKeyboard([[
-      Keyboard.button.callback('Опоздаю', 'notice:type:late'),
-      Keyboard.button.callback('Не приду', 'notice:type:absent'),
-    ]])] });
+    const group = ownGroup(prefs);
+    if (!group) return show(ctx, t.noGroupYet);
+    const items = await community.homeworkForUser(group.id, userId(ctx), { subgroup: prefs.subgroup });
+    return show(ctx, formatHomework(lang, items), [[button(t.addPersonal, 'ph:pick')], [button(t.menu, 'menu')]]);
   };
 
-  const commands = [
-    { name: 'start', description: 'Открыть главное меню' },
-    { name: 'schedule', description: 'Показать расписание' },
-    { name: 'homework', description: 'Посмотреть домашнее задание' },
-    { name: 'homework_create', description: 'Добавить домашнее задание' },
-    { name: 'homework_personal', description: 'Записать личную версию ДЗ' },
-    { name: 'absence', description: 'Сообщить старосте' },
-    { name: 'setup', description: 'Настроить учебную группу' },
-    { name: 'headman', description: 'Назначить старосту' },
-    { name: 'editor', description: 'Выдать или снять права на ДЗ' },
-    { name: 'homework_team', description: 'Показать редакторов ДЗ' },
-    { name: 'homework_access', description: 'Настроить доступ к ДЗ' },
-    { name: 'profile', description: 'Открыть профиль' },
-  ];
-  const updateCommands = () => bot.api.setMyCommands(commands).catch((error) => {
-    console.error('Failed to update bot commands, retrying:', error.message);
-    const timer = setTimeout(updateCommands, 30_000);
-    timer.unref();
-  });
-  updateCommands();
-  bot.command('start', async (ctx) => { await restoreProfile(ctx); await replyMenu(ctx, miniAppUrl); });
-  bot.command('schedule', async (ctx) => {
-    if (isGroupChat(ctx)) await showGroupSchedule(ctx);
-    else { await restoreProfile(ctx); await showSchedule(ctx, service); }
-  });
-  bot.command('homework', homeworkForContext);
-  bot.command('homework_create', beginHomework);
-  bot.command('homework_personal', beginPersonalHomework);
-  bot.command('homework_team', showHomeworkTeam);
-  bot.command('absence', beginNotice);
-  bot.command('setup', beginGroupSetup);
-  bot.command('headman', async (ctx) => {
-    if (!isGroupChat(ctx) || !await requireChatManager(ctx)) return;
-    const target = ctx.message?.link?.type === 'reply' ? ctx.message.link.sender : ctx.message?.sender;
-    if (!target || target.is_bot) return ctx.reply('Ответь командой /headman на сообщение человека, которого нужно назначить старостой.');
-    const config = await groupConfigFor(ctx);
-    if (!config?.group) return ctx.reply('Сначала привяжи чат к учебной группе командой /setup.');
+  const beginAdd = async (ctx) => {
+    const { t, prefs } = ctx;
+    if (!isGroupChat(ctx)) {
+      const group = ownGroup(prefs);
+      if (!group) return show(ctx, t.noGroupYet);
+      return lessonPicker(ctx, group.id, prefs.subgroup ?? null, 'ph', t.personalLessonPrompt);
+    }
+    const config = await community.getChat(ctx.chatId);
+    if (!config?.group) return show(ctx, t.groupNotConfigured, [[button(t.setup, 'setup', 'positive')]]);
+    if (!canEditHomework(ctx, config)) return show(ctx, t.homeworkForbidden);
+    return lessonPicker(ctx, config.group.id, config.subgroup ?? null, 'gh', t.homeworkLessonPrompt);
+  };
+
+  // Группа: настройка и роли
+
+  const beginSetup = async (ctx, query = '') => {
+    if (!isGroupChat(ctx)) return show(ctx, ctx.t.helpGroup);
+    if (!await isChatManager(ctx)) return show(ctx, ctx.t.needChatAdmin);
+    if (query) return handleSearch(ctx, query, { mode: 'link' });
+    setSession(ctx, { step: 'setup' });
+    return show(ctx, ctx.t.setupSearchPrompt, [[button(ctx.t.cancel, 'cancel')]]);
+  };
+
+  const replyTarget = (ctx) => (ctx.message?.link?.type === 'reply' ? ctx.message.link.sender : null);
+
+  const assignHeadman = async (ctx) => {
+    const { t } = ctx;
+    if (!isGroupChat(ctx)) return show(ctx, t.helpGroup);
+    if (!await isChatManager(ctx)) return show(ctx, t.needChatAdmin);
+    const config = await community.getChat(ctx.chatId);
+    if (!config?.group) return show(ctx, t.groupNotConfigured, [[button(t.setup, 'setup', 'positive')]]);
+    const target = replyTarget(ctx);
+    if (!target || target.is_bot) return show(ctx, t.headmanHint);
     await community.setChat(ctx.chatId, {
       headman: { userId: target.user_id, name: displayName(target), username: target.username ?? null },
     });
-    await ctx.reply(`Староста группы — **${displayName(target)}**. Чтобы получать личные обращения, ему нужно один раз открыть бота и нажать «Начать».`, { format: 'markdown' });
-  });
-  bot.command('editor', async (ctx) => {
-    if (!isGroupChat(ctx)) return;
-    const config = await groupConfigFor(ctx);
-    if (!config?.headman || userId(ctx) !== config.headman.userId) {
-      await ctx.reply('Назначать редакторов ДЗ может староста.');
-      return;
-    }
-    const target = ctx.message?.link?.type === 'reply' ? ctx.message.link.sender : null;
-    if (!target || target.is_bot) return ctx.reply('Ответь командой /editor на сообщение будущего редактора ДЗ.');
-    const exists = (config.editors ?? []).some((editor) => editor.userId === target.user_id);
-    const editors = (config.editors ?? []).filter((editor) => editor.userId !== target.user_id);
-    if (!exists) editors.push({ userId: target.user_id, name: displayName(target), username: target.username ?? null });
+    return show(ctx, t.headmanSet(displayName(target)));
+  };
+
+  const toggleEditor = async (ctx) => {
+    const { t } = ctx;
+    if (!isGroupChat(ctx)) return show(ctx, t.helpGroup);
+    const config = await community.getChat(ctx.chatId);
+    if (!config?.headman || userId(ctx) !== config.headman.userId) return show(ctx, t.editorOnlyHeadman);
+    const target = replyTarget(ctx);
+    if (!target || target.is_bot) return show(ctx, t.editorHint);
+    const current = config.editors ?? [];
+    const exists = current.some((editor) => editor.userId === target.user_id);
+    const editors = exists
+      ? current.filter((editor) => editor.userId !== target.user_id)
+      : [...current, { userId: target.user_id, name: displayName(target), username: target.username ?? null }];
     await community.setChat(ctx.chatId, { editors });
-    await ctx.reply(exists
-      ? `${displayName(target)} больше не может изменять общее ДЗ.`
-      : `${displayName(target)} теперь может добавлять и исправлять общее ДЗ.`);
-  });
-  bot.command('homework_access', async (ctx) => {
-    if (!isGroupChat(ctx)) return;
-    const config = await groupConfigFor(ctx);
-    if (!config?.headman || userId(ctx) !== config.headman.userId) {
-      await ctx.reply('Настраивать доступ к ДЗ может староста.');
-      return;
+    return show(ctx, exists ? t.editorRemoved(displayName(target)) : t.editorAdded(displayName(target)));
+  };
+
+  const showTeam = async (ctx) => {
+    const { t } = ctx;
+    if (!isGroupChat(ctx)) return show(ctx, t.helpGroup);
+    const config = await community.getChat(ctx.chatId);
+    if (!config?.group) return show(ctx, t.groupNotConfigured, [[button(t.setup, 'setup', 'positive')]]);
+    return show(ctx, [
+      t.teamTitle, '',
+      t.teamHeadman(config.headman?.name),
+      t.teamEditors((config.editors ?? []).map((editor) => editor.name)),
+      t.teamAccess(config.homeworkMode === 'all'),
+    ].join('\n'));
+  };
+
+  const accessPrompt = async (ctx) => {
+    const { t } = ctx;
+    if (!isGroupChat(ctx)) return show(ctx, t.helpGroup);
+    const config = await community.getChat(ctx.chatId);
+    if (!config?.headman || userId(ctx) !== config.headman.userId) return show(ctx, t.accessOnlyHeadman);
+    return show(ctx, t.accessPrompt, [[button(t.accessEditors, 'acc:editors'), button(t.accessAll, 'acc:all')]]);
+  };
+
+  // Настройки
+
+  const showSettings = async (ctx) => {
+    const { t, prefs } = ctx;
+    if (isGroupChat(ctx)) return groupHelp(ctx);
+    const group = ownGroup(prefs);
+    const reminders = prefs.remindersEnabled !== false;
+    const rows = [[button(t.changeGroup, 'set:group')]];
+    if (group) rows.push([button(t.changeSubgroup, `set:sub:${group.id}`)]);
+    rows.push([button(reminders ? t.remindersOff : t.remindersOn, 'set:rem')]);
+    rows.push([button(t.changeLanguage, 'set:lang')]);
+    rows.push([button(t.menu, 'menu')]);
+    const lines = [
+      t.settingsGroup(group?.title),
+      group ? t.settingsSubgroup(prefs.subgroup) : '',
+      t.settingsReminders(reminders),
+      t.settingsLanguage,
+    ].filter(Boolean);
+    return show(ctx, `${t.settingsTitle}\n\n${lines.join('\n')}`, rows);
+  };
+
+  const switchLanguage = async (ctx, next) => {
+    if (isGroupChat(ctx)) {
+      if (!await isChatManager(ctx)) return show(ctx, ctx.t.needChatAdmin);
+      const config = await community.getChat(ctx.chatId);
+      const lang = next ?? ((config?.lang ?? ctx.lang) === 'ru' ? 'en' : 'ru');
+      await community.setChat(ctx.chatId, { lang });
+      ctx.lang = lang;
+      ctx.t = texts(lang);
+      return groupHelp(ctx);
     }
-    await ctx.reply('Кто может добавлять домашние задания?', { attachments: [Keyboard.inlineKeyboard([[
-      Keyboard.button.callback('Староста и редакторы', 'homework-access:editors'),
-      Keyboard.button.callback('Все участники', 'homework-access:all'),
-    ]])] });
+    const lang = next ?? (ctx.lang === 'ru' ? 'en' : 'ru');
+    await savePrefs(ctx, { lang });
+    ctx.lang = lang;
+    ctx.t = texts(lang);
+    return null;
+  };
+
+  // Сообщение старосте
+
+  const beginAbsence = async (ctx) => {
+    const { t, prefs } = ctx;
+    if (isGroupChat(ctx)) return show(ctx, t.absenceInGroup);
+    const group = ownGroup(prefs);
+    if (!group) return show(ctx, t.noGroupYet);
+    const chats = (await community.chatsForGroup(group.id)).filter((chat) => chat.headman?.userId);
+    if (!chats.length) return show(ctx, t.absenceNoHeadman, [[button(t.menu, 'menu')]]);
+    return show(ctx, t.absencePrompt, [
+      [button(t.absenceLate, 'abs:late'), button(t.absenceMissing, 'abs:absent')],
+      [button(t.cancel, 'cancel')],
+    ]);
+  };
+
+  const sendAbsence = async (ctx, state, text) => {
+    const { t, prefs } = ctx;
+    const images = (ctx.message?.body?.attachments ?? []).filter((attachment) => attachment.type === 'image');
+    if (!text) return ctx.reply(t.absenceNeedsText);
+    const group = ownGroup(prefs);
+    const chat = group && (await community.chatsForGroup(group.id)).find((item) => item.headman?.userId);
+    setSession(ctx, null);
+    if (!chat) return ctx.reply(t.absenceNoHeadman);
+    const headmanLang = (await preferences.get(chat.headman.userId)).lang;
+    const message = texts(headmanLang).absenceToHeadman(state.kind, chat.group.title, text);
+    const attachments = images.map((image) => ({ type: 'image', payload: { token: image.payload.token } }));
+    const notice = { chatId: chat.chatId, groupId: chat.group.id, senderId: userId(ctx), type: state.kind, text, imageCount: images.length };
+    try {
+      await bot.api.sendMessageToUser(chat.headman.userId, message, { format: 'markdown', attachments });
+      await community.addNotice(notice);
+      return ctx.reply(t.absenceSent);
+    } catch {
+      await community.addNotice({ ...notice, status: 'pending' });
+      return ctx.reply(t.absencePending);
+    }
+  };
+
+  // Команды
+
+  const commandHandlers = {
+    start,
+    help,
+    today: scheduleCommand('d', 0),
+    tomorrow: scheduleCommand('d', 1),
+    week: scheduleCommand('w', 0),
+    homework: showHomework,
+    add: beginAdd,
+    find: (ctx, args) => {
+      if (isGroupChat(ctx)) return groupHelp(ctx);
+      if (args) return handleSearch(ctx, args, { mode: ownGroup(ctx.prefs) ? 'any' : 'own' });
+      setSession(ctx, { step: ownGroup(ctx.prefs) ? 'search' : 'own-group' });
+      return show(ctx, ctx.t.searchPrompt);
+    },
+    settings: showSettings,
+    language: async (ctx, args) => {
+      const next = normalizeLanguage(args.toLowerCase());
+      await switchLanguage(ctx, next);
+      if (!isGroupChat(ctx)) return privateMenu(ctx);
+      return null;
+    },
+    absence: beginAbsence,
+    setup: beginSetup,
+    headman: assignHeadman,
+    editor: toggleEditor,
+    team: showTeam,
+    access: accessPrompt,
+  };
+
+  bot.syncCommands = () => bot.api.setMyCommands(COMMANDS);
+
+  // Язык и профиль нужны почти каждому обработчику — читаем один раз на апдейт.
+  bot.use(async (ctx, next) => {
+    const id = userId(ctx);
+    ctx.prefs = id ? await preferences.get(id) : {};
+    let lang = normalizeLanguage(ctx.prefs.lang);
+    if (ctx.chatId && isGroupChat(ctx)) lang = normalizeLanguage((await community.getChat(ctx.chatId))?.lang) ?? lang;
+    ctx.lang = lang ?? DEFAULT_LANGUAGE;
+    ctx.t = texts(ctx.lang);
+    return next();
   });
-  bot.command('profile', (ctx) => showProfile(ctx, preferences));
-  bot.on('bot_started', async (ctx) => { await restoreProfile(ctx); await replyMenu(ctx, miniAppUrl); });
+
+  bot.on('bot_started', start);
   bot.on('bot_added', async (ctx) => {
     if (ctx.update.is_channel) return;
-    await ctx.reply([
-      '**norfly в учебной группе**', '',
-      'Я свяжу этот чат с расписанием ИРНИТУ, домашними заданиями и личными обращениями к старосте.', '',
-      'Сделайте меня администратором с правом чтения сообщений, затем владелец или администратор чата сможет начать настройку.',
-    ].join('\n'), { format: 'markdown', attachments: [setupKeyboard()] });
+    await ctx.reply(ctx.t.groupWelcome, { format: 'markdown', attachments: [Keyboard.inlineKeyboard([[button(ctx.t.setup, 'setup', 'positive')]])] });
   });
   bot.on('bot_removed', (ctx) => community.removeChat(ctx.chatId));
 
-  bot.action('noop', (ctx) => ctx.answerOnCallback({ notification: 'Выбери вариант из списка' }));
-  bot.action('group-setup:start', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Настройка группы' });
-    await beginGroupSetup(ctx);
-  });
-  for (const mode of ['today', 'tomorrow', 'week']) {
-    bot.action(`group-schedule:${mode}`, async (ctx) => {
-      await ctx.answerOnCallback({ notification: 'Загружаю расписание' });
-      await showGroupSchedule(ctx, mode);
-    });
-  }
-  bot.action('group-homework:list', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Домашнее задание' });
-    await homeworkForContext(ctx);
-  });
-  bot.action('group-homework:create', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Добавление ДЗ' });
-    await beginHomework(ctx);
-  });
-  bot.action('group-homework:team', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Команда ДЗ' });
-    await showHomeworkTeam(ctx);
-  });
-  bot.action('personal-homework:list', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Домашние задания' });
-    await homeworkForContext(ctx);
-  });
-  bot.action('personal-homework:create', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Личное ДЗ' });
-    await beginPersonalHomework(ctx);
-  });
-  bot.action('menu:main', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Главное меню' });
-    await replyMenu(ctx, miniAppUrl);
-  });
-  bot.action('menu:mine', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Открываю' });
-    const profile = await preferences.get(userId(ctx));
-    if (profile.selection?.kind === 'group') {
-      saveSession(ctx, {
-        selection: profile.selection,
-        subgroup: profile.subgroup,
-        institute: profile.institute,
-        course: profile.course,
-      });
-      await showSchedule(ctx, service);
-    }
-    else await beginStudentSetup(ctx, service);
-  });
-  bot.action('profile:view', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Профиль' });
-    await showProfile(ctx, preferences);
-  });
-  bot.action('profile:change', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Настройка профиля' });
-    await beginStudentSetup(ctx, service);
-  });
-  bot.action('profile:toggle-reminders', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Настройка изменена' });
-    const saved = await preferences.get(userId(ctx));
-    await preferences.set(userId(ctx), {
-      ...saved,
-      remindersEnabled: saved.remindersEnabled === false,
-    });
-    await showProfile(ctx, preferences);
-  });
-  for (const kind of ['group', 'teacher', 'auditory']) {
-    bot.action(`menu:${kind}`, async (ctx) => {
-      await ctx.answerOnCallback({ notification: 'Поиск' });
-      await beginSearch(ctx, kind);
-    });
-  }
+  // Кнопки
 
-  bot.action(/page:(institute|course|studentGroup|result):(\d+)/, async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Следующая страница' });
-    await renderPicker(ctx, ctx.match[1], Number(ctx.match[2]));
+  bot.action('noop', (ctx) => ctx.answerOnCallback({ notification: ctx.t.pickFromList }));
+  bot.action('menu', (ctx) => (isGroupChat(ctx) ? groupHelp(ctx) : privateMenu(ctx)));
+  bot.action('help', help);
+  bot.action(/^lang:(ru|en)$/, async (ctx) => {
+    await switchLanguage(ctx, ctx.match[1]);
+    return privateMenu(ctx);
   });
-  bot.action('back:institute', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Главное меню' });
-    await replyMenu(ctx, miniAppUrl);
+  bot.action('find', (ctx) => {
+    setSession(ctx, { step: 'search' });
+    return show(ctx, ctx.t.searchPrompt, [[button(ctx.t.menu, 'menu')]]);
   });
-  bot.action('back:course', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Выбор института' });
-    const session = saveSession(ctx, {
-      step: 'institute',
-      candidates: sessionFor(ctx).institutes ?? [],
-    });
-    if (!session.candidates.length) return beginStudentSetup(ctx, service);
-    await renderPicker(ctx, 'institute');
-  });
-  bot.action('back:studentGroup', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Выбор курса' });
-    saveSession(ctx, { step: 'course', candidates: sessionFor(ctx).courses ?? [] });
-    await renderPicker(ctx, 'course');
-  });
-  bot.action('back:result', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Главное меню' });
-    await replyMenu(ctx, miniAppUrl);
-  });
-  bot.action(/pick:institute:(\d+)/, async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Институт выбран' });
-    const institute = sessionFor(ctx).candidates?.[Number(ctx.match[1])];
-    if (!institute) return beginStudentSetup(ctx, service);
-    const groups = await service.searchGroups('', { institute, limit: 2_000 });
-    const courses = [...new Set(groups.map((group) => group.course).filter(Boolean))].sort();
-    saveSession(ctx, { step: 'course', institute, groups, courses, candidates: courses });
-    await renderPicker(ctx, 'course');
-  });
-  bot.action(/pick:course:(\d+)/, async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Курс выбран' });
-    const session = sessionFor(ctx);
-    const course = session.candidates?.[Number(ctx.match[1])];
-    const groups = session.groups?.filter((group) => group.course === course) ?? [];
-    saveSession(ctx, { step: 'studentGroup', course, candidates: groups });
-    await renderPicker(ctx, 'studentGroup');
-  });
-  bot.action(/pick:studentGroup:(\d+)/, async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Группа выбрана' });
-    const session = sessionFor(ctx);
-    const group = session.candidates?.[Number(ctx.match[1])];
-    if (!group) return beginStudentSetup(ctx, service);
-    const selection = { kind: 'group', id: group.id, title: group.title };
-    saveSession(ctx, { selection, step: 'subgroup' });
-    if (!session.groupSetup) {
-      await persistProfile(ctx, preferences, {
-        institute: session.institute, course: session.course, selection, subgroup: null,
-      });
-    }
-    await ctx.reply(`Группа **${group.title}**. Выбери подгруппу:`, {
-      format: 'markdown',
-      attachments: [Keyboard.inlineKeyboard([[
-        Keyboard.button.callback('Вся группа', 'subgroup:all'),
-        Keyboard.button.callback('1', 'subgroup:1'),
-        Keyboard.button.callback('2', 'subgroup:2'),
-      ]])],
-    });
-  });
-  bot.action(/pick:result:(\d+)/, async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Выбрано' });
-    const session = sessionFor(ctx);
-    const selected = session.candidates?.[Number(ctx.match[1])];
-    if (!selected) return replyMenu(ctx, miniAppUrl);
-    const selection = { kind: session.searchKind, id: selected.id, title: selected.title || selected.fullName };
-    saveSession(ctx, { selection, subgroup: null, step: null, weekOffset: 0 });
-    await showSchedule(ctx, service, 'week');
-  });
-  for (const subgroup of ['all', '1', '2']) {
-    bot.action(`subgroup:${subgroup}`, async (ctx) => {
-      await ctx.answerOnCallback({ notification: 'Профиль сохранён' });
-      const value = subgroup === 'all' ? null : Number(subgroup);
-      const session = saveSession(ctx, { subgroup: value, step: null, weekOffset: 0 });
-      if (session.groupSetup) {
-        const chat = await ctx.getChat();
-        await community.setChat(session.groupSetup.chatId, {
-          title: chat.title,
-          institute: session.institute,
-          course: session.course,
-          group: session.selection,
-          subgroup: value,
-          homeworkMode: 'editors',
-          configuredBy: userId(ctx),
-          configuredAt: new Date().toISOString(),
-        });
-        saveSession(ctx, { groupSetup: null });
-        await ctx.reply(`Чат привязан к группе **${session.selection.title}**. Теперь назначь старосту: ответь командой /headman на его сообщение.`, {
-          format: 'markdown', attachments: [groupMenu()],
-        });
-      } else {
-        await persistProfile(ctx, preferences, { subgroup: value });
-        await showSchedule(ctx, service, 'week');
-      }
-    });
-  }
+  bot.action(/^s:(group|teacher|auditory):(\d+):([dw])(-?\d+)$/, (ctx) =>
+    showSchedule(ctx, ctx.match[1], Number(ctx.match[2]), ctx.match[3], Number(ctx.match[4])));
+  bot.action(/^g:([dw])(-?\d+)$/, (ctx) => showChatSchedule(ctx, ctx.match[1], Number(ctx.match[2])));
 
-  bot.action(/homework:lesson:(\d+)/, async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Пара выбрана' });
-    const session = sessionFor(ctx);
-    const lesson = session.homeworkLessons?.[Number(ctx.match[1])];
-    if (!lesson || session.homeworkChatId !== ctx.chatId) return ctx.reply('Выбор устарел. Начни ещё раз через /homework_create.');
-    saveSession(ctx, { step: 'homework:text', homeworkLesson: lesson });
-    await ctx.reply(`**${lesson.subject}**\n${formatHumanDate(lesson.date)} · ${lesson.time}\n\nОтправь домашнее задание одним следующим сообщением.`, { format: 'markdown' });
+  bot.action(/^mine:(\d+)$/, async (ctx) => {
+    const group = await findGroup(ctx.match[1]);
+    if (!group) return toast(ctx, ctx.t.selectionExpired);
+    return subgroupPrompt(ctx, group, 'sub');
   });
-  bot.action(/personal-homework:lesson:(\d+)/, async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Пара выбрана' });
-    const session = sessionFor(ctx);
-    const lesson = session.personalHomeworkLessons?.[Number(ctx.match[1])];
-    if (!lesson || isGroupChat(ctx)) return ctx.reply('Выбор устарел. Начни ещё раз через /homework_personal.');
-    const profile = await preferences.get(userId(ctx));
-    const current = await community.homeworkForUser(profile.selection.id, userId(ctx), {
-      from: lesson.date, to: lesson.date, subgroup: profile.subgroup,
+  bot.action(/^sub:(\d+):(all|1|2)$/, async (ctx) => {
+    const group = await findGroup(ctx.match[1]);
+    if (!group) return toast(ctx, ctx.t.selectionExpired);
+    await savePrefs(ctx, {
+      selection: { kind: 'group', id: group.id, title: group.title },
+      institute: group.institute, course: group.course, subgroup: subgroupFromCode(ctx.match[2]),
     });
-    const selected = current.find((item) => item.lessonNumber === lesson.lessonNumber
-      && (item.subgroup ?? null) === (lesson.subgroup ?? null));
-    saveSession(ctx, { step: 'personal-homework:text', personalHomeworkLesson: lesson });
-    const rows = [[Keyboard.button.callback('Отмена', 'homework:cancel')]];
-    if (selected?.personalText) rows.unshift([
-      Keyboard.button.callback('Вернуть общее ДЗ', 'personal-homework:reset', { intent: 'negative' }),
-    ]);
-    await ctx.reply([
-      `**${lesson.subject}**`,
-      `${formatHumanDate(lesson.date)} · ${lesson.time}`,
-      selected?.sharedText ? `\nОбщее ДЗ: ${selected.sharedText}` : '',
-      '\nОтправь свою версию одним сообщением. Её увидишь только ты.',
-    ].filter(Boolean).join('\n'), { format: 'markdown', attachments: [Keyboard.inlineKeyboard(rows)] });
+    setSession(ctx, null);
+    return showSchedule(ctx, 'group', group.id, 'd', 0);
   });
-  bot.action('personal-homework:reset', async (ctx) => {
-    const session = sessionFor(ctx);
-    const lesson = session.personalHomeworkLesson;
-    const profile = await preferences.get(userId(ctx));
-    if (!lesson || profile.selection?.kind !== 'group') {
-      await ctx.answerOnCallback({ notification: 'Выбор устарел' });
-      return;
-    }
+
+  bot.action(/^inst:(\d+)$/, async (ctx) => {
+    const institutes = await service.institutes();
+    return show(ctx, ctx.t.pickInstitute, pagedRows(ctx.t, institutes, Number(ctx.match[1]),
+      (name, index) => button(name, `crs:${index}`), 'inst:', 'menu'));
+  });
+  bot.action(/^crs:(\d+)$/, async (ctx) => {
+    const institute = (await service.institutes())[Number(ctx.match[1])];
+    if (!institute) return toast(ctx, ctx.t.selectionExpired);
+    const groups = await service.searchGroups('', { institute, limit: 5_000 });
+    const courses = [...new Set(groups.map((group) => group.course).filter(Boolean))].sort((a, b) => a - b);
+    return show(ctx, `**${institute}**\n\n${ctx.t.pickCourse}`, pagedRows(ctx.t, courses, 0,
+      (course) => button(ctx.t.courseLabel(course), `grp:${ctx.match[1]}:${course}:0`), `crs:${ctx.match[1]}:`, 'inst:0'));
+  });
+  bot.action(/^grp:(\d+):(\d+):(\d+)$/, async (ctx) => {
+    const [, instituteIndex, course, page] = ctx.match;
+    const institute = (await service.institutes())[Number(instituteIndex)];
+    if (!institute) return toast(ctx, ctx.t.selectionExpired);
+    const groups = await service.searchGroups('', { institute, course: Number(course), limit: 5_000 });
+    return show(ctx, `**${institute}** · ${ctx.t.courseLabel(course)}\n\n${ctx.t.pickGroup}`,
+      pagedRows(ctx.t, groups, Number(page), (group) => button(group.title, `mine:${group.id}`),
+        `grp:${instituteIndex}:${course}:`, `crs:${instituteIndex}`));
+  });
+
+  bot.action('settings', showSettings);
+  bot.action('set:group', (ctx) => {
+    setSession(ctx, { step: 'own-group' });
+    return show(ctx, ctx.t.changeGroupPrompt, [[button(ctx.t.chooseByInstitute, 'inst:0')], [button(ctx.t.back, 'settings')]]);
+  });
+  bot.action(/^set:sub:(\d+)$/, async (ctx) => {
+    const group = await findGroup(ctx.match[1]);
+    if (!group) return toast(ctx, ctx.t.selectionExpired);
+    return subgroupPrompt(ctx, group, 'sub');
+  });
+  bot.action('set:rem', async (ctx) => {
+    await savePrefs(ctx, { remindersEnabled: ctx.prefs.remindersEnabled === false });
+    return showSettings(ctx);
+  });
+  bot.action('set:lang', async (ctx) => {
+    await switchLanguage(ctx);
+    return showSettings(ctx);
+  });
+
+  bot.action('hw:list', showHomework);
+  bot.action('ph:pick', beginAdd);
+  bot.action('gh:pick', beginAdd);
+  bot.action(/^ph:(\d{4}-\d{2}-\d{2}:\d+:\d+)$/, async (ctx) => {
+    const { t, lang, prefs } = ctx;
+    const group = ownGroup(prefs);
+    if (!group || isGroupChat(ctx)) return toast(ctx, t.selectionExpired);
+    const lesson = await findLesson(group.id, prefs.subgroup ?? null, ctx.match[1]);
+    if (!lesson) return toast(ctx, t.selectionExpired);
+    const current = (await community.homeworkForUser(group.id, userId(ctx), {
+      from: lesson.date, to: lesson.date, subgroup: prefs.subgroup,
+    })).find((item) => lessonKey({ date: item.lessonDate, lessonNumber: item.lessonNumber, subgroup: item.subgroup }) === lessonKey(lesson));
+    setSession(ctx, { step: 'personal-text', lesson });
+    const rows = [];
+    if (current?.personalText) rows.push([button(t.personalReset, `phr:${lessonKey(lesson)}`, 'negative')]);
+    rows.push([button(t.cancel, 'cancel')]);
+    return show(ctx, t.personalTextPrompt(lesson.subject, lessonWhen(lang, lesson), current?.sharedText), rows);
+  });
+  bot.action(/^phr:(\d{4}-\d{2}-\d{2}):(\d+):(\d+)$/, async (ctx) => {
+    const group = ownGroup(ctx.prefs);
+    if (!group) return toast(ctx, ctx.t.selectionExpired);
     await community.removePersonalHomework(userId(ctx), {
-      groupId: profile.selection.id,
+      groupId: group.id, lessonDate: ctx.match[1], lessonNumber: Number(ctx.match[2]), subgroup: Number(ctx.match[3]) || null,
+    });
+    setSession(ctx, null);
+    return show(ctx, ctx.t.personalResetDone, [[button(ctx.t.homework, 'hw:list'), button(ctx.t.menu, 'menu')]]);
+  });
+  bot.action(/^gh:(\d{4}-\d{2}-\d{2}:\d+:\d+)$/, async (ctx) => {
+    const { t, lang } = ctx;
+    const config = await community.getChat(ctx.chatId);
+    if (!config?.group || !canEditHomework(ctx, config)) return toast(ctx, t.homeworkForbidden);
+    const lesson = await findLesson(config.group.id, config.subgroup ?? null, ctx.match[1]);
+    if (!lesson) return toast(ctx, t.selectionExpired);
+    setSession(ctx, { step: 'group-text', lesson });
+    return show(ctx, t.homeworkTextPrompt(lesson.subject, lessonWhen(lang, lesson)), [[button(t.cancel, 'cancel')]]);
+  });
+  bot.action('cancel', (ctx) => {
+    setSession(ctx, null);
+    return show(ctx, ctx.t.homeworkCancelled, [[button(ctx.t.menu, isGroupChat(ctx) ? 'help' : 'menu')]]);
+  });
+
+  bot.action(/^abs:(late|absent)$/, (ctx) => {
+    setSession(ctx, { step: 'absence-text', kind: ctx.match[1] });
+    return show(ctx, ctx.match[1] === 'late' ? ctx.t.absenceDetailsLate : ctx.t.absenceDetailsMissing, [[button(ctx.t.cancel, 'cancel')]]);
+  });
+
+  bot.action('setup', (ctx) => beginSetup(ctx));
+  bot.action(/^link:(\d+)$/, async (ctx) => {
+    if (!await isChatManager(ctx)) return toast(ctx, ctx.t.needChatAdmin);
+    const group = await findGroup(ctx.match[1]);
+    if (!group) return toast(ctx, ctx.t.selectionExpired);
+    return subgroupPrompt(ctx, group, 'lsub');
+  });
+  bot.action(/^lsub:(\d+):(all|1|2)$/, async (ctx) => {
+    if (!await isChatManager(ctx)) return toast(ctx, ctx.t.needChatAdmin);
+    const group = await findGroup(ctx.match[1]);
+    if (!group) return toast(ctx, ctx.t.selectionExpired);
+    const chat = await ctx.getChat().catch(() => null);
+    const current = await community.getChat(ctx.chatId);
+    await community.setChat(ctx.chatId, {
+      title: chat?.title ?? current?.title ?? null,
+      lang: current?.lang ?? ctx.lang,
+      institute: group.institute,
+      course: group.course,
+      group: { kind: 'group', id: group.id, title: group.title },
+      subgroup: subgroupFromCode(ctx.match[2]),
+      homeworkMode: current?.homeworkMode ?? 'editors',
+      configuredBy: userId(ctx),
+      configuredAt: new Date().toISOString(),
+    });
+    setSession(ctx, null);
+    return show(ctx, ctx.t.chatLinked(group.title), groupMenuRows(ctx.t));
+  });
+  bot.action('team', showTeam);
+  bot.action(/^acc:(editors|all)$/, async (ctx) => {
+    const config = await community.getChat(ctx.chatId);
+    if (!config?.headman || userId(ctx) !== config.headman.userId) return toast(ctx, ctx.t.accessOnlyHeadman);
+    await community.setChat(ctx.chatId, { homeworkMode: ctx.match[1] });
+    return show(ctx, ctx.t.accessSaved(ctx.match[1] === 'all'));
+  });
+
+  // Сообщения: команды, ввод по шагам, поиск
+
+  const saveGroupHomework = async (ctx, state, text) => {
+    const { t } = ctx;
+    const config = await community.getChat(ctx.chatId);
+    setSession(ctx, null);
+    if (!config?.group || !canEditHomework(ctx, config)) return ctx.reply(t.homeworkRightsChanged);
+    const { lesson } = state;
+    await community.upsertHomework({
+      chatId: ctx.chatId,
+      groupId: config.group.id,
+      groupTitle: config.group.title,
       lessonDate: lesson.date,
       lessonNumber: lesson.lessonNumber,
+      lessonTime: lesson.time,
       subgroup: lesson.subgroup ?? null,
+      subject: lesson.subject,
+      text,
+      authorId: userId(ctx),
+      authorName: displayName(ctx.message.sender),
     });
-    saveSession(ctx, { step: null, personalHomeworkLesson: null, personalHomeworkLessons: null });
-    await ctx.answerOnCallback({ notification: 'Личная версия удалена' });
-    await ctx.reply('Теперь для этой пары снова показывается общее ДЗ.');
-  });
-  bot.action('homework:cancel', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Отменено' });
-    saveSession(ctx, {
-      step: null, homeworkLesson: null, homeworkLessons: null,
-      personalHomeworkLesson: null, personalHomeworkLessons: null,
-    });
-    await ctx.reply('Добавление домашнего задания отменено.');
-  });
-  for (const type of ['late', 'absent']) {
-    bot.action(`notice:type:${type}`, async (ctx) => {
-      await ctx.answerOnCallback({ notification: type === 'late' ? 'Опоздание' : 'Отсутствие' });
-      saveSession(ctx, { step: 'notice:details', noticeType: type });
-      await ctx.reply(type === 'late'
-        ? 'Напиши причину и примерное время опоздания одним сообщением. При необходимости прикрепи фото.'
-        : 'Напиши причину отсутствия одним сообщением. При необходимости прикрепи фото.');
-    });
-  }
-  for (const mode of ['editors', 'all']) {
-    bot.action(`homework-access:${mode}`, async (ctx) => {
-      const config = await groupConfigFor(ctx);
-      if (!config?.headman || userId(ctx) !== config.headman.userId) {
-        await ctx.answerOnCallback({ notification: 'Доступно только старосте' });
-        return;
-      }
-      await community.setChat(ctx.chatId, { homeworkMode: mode });
-      await ctx.answerOnCallback({ notification: 'Настройка сохранена' });
-      await ctx.reply(mode === 'all'
-        ? 'Теперь добавлять ДЗ могут все участники чата.'
-        : 'Теперь добавлять ДЗ могут староста и назначенные редакторы.');
-    });
-  }
+    return show(ctx, t.homeworkSaved(lesson.subject), [[button(t.homework, 'hw:list')]]);
+  };
 
-  for (const mode of ['today', 'tomorrow', 'week']) {
-    bot.action(`schedule:${mode}`, async (ctx) => {
-      await ctx.answerOnCallback({ notification: 'Загружаю' });
-      if (mode === 'week') saveSession(ctx, { weekOffset: 0 });
-      await showSchedule(ctx, service, mode);
+  const savePersonalHomework = async (ctx, state, text) => {
+    const { t, prefs } = ctx;
+    const group = ownGroup(prefs);
+    setSession(ctx, null);
+    if (!group) return ctx.reply(t.noGroupYet);
+    const { lesson } = state;
+    await community.setPersonalHomework(userId(ctx), {
+      groupId: group.id,
+      groupTitle: group.title,
+      lessonDate: lesson.date,
+      lessonNumber: lesson.lessonNumber,
+      lessonTime: lesson.time,
+      subgroup: lesson.subgroup ?? null,
+      subject: lesson.subject,
+      text,
     });
-  }
-  bot.action('week:previous', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Предыдущая неделя' });
-    saveSession(ctx, { weekOffset: (sessionFor(ctx).weekOffset ?? 0) - 1 });
-    await showSchedule(ctx, service, 'week');
-  });
-  bot.action('week:current', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Текущая неделя' });
-    saveSession(ctx, { weekOffset: 0 });
-    await showSchedule(ctx, service, 'week');
-  });
-  bot.action('week:next', async (ctx) => {
-    await ctx.answerOnCallback({ notification: 'Следующая неделя' });
-    saveSession(ctx, { weekOffset: (sessionFor(ctx).weekOffset ?? 0) + 1 });
-    await showSchedule(ctx, service, 'week');
-  });
+    return show(ctx, t.personalSaved(lesson.subject), [[button(t.homework, 'hw:list'), button(t.menu, 'menu')]]);
+  };
 
   bot.on('message_created', async (ctx) => {
-    const text = ctx.message?.body?.text?.trim();
-    if (text?.startsWith('/')) return;
-    const session = sessionFor(ctx);
-    if (session.step === 'homework:text') {
-      if (!text) return ctx.reply('Домашнее задание нужно отправить текстом.');
-      if (text.length > 2_000) return ctx.reply('Сократи ДЗ до 2000 символов.');
-      const config = await groupConfigFor(ctx);
-      if (!config?.group || !await canEditHomework(ctx, config)) {
-        saveSession(ctx, { step: null });
-        return ctx.reply('Не удалось сохранить ДЗ: права или настройка группы изменились.');
-      }
-      const lesson = session.homeworkLesson;
-      await community.upsertHomework({
-        chatId: ctx.chatId,
-        groupId: config.group.id,
-        groupTitle: config.group.title,
-        lessonDate: lesson.date,
-        lessonNumber: lesson.lessonNumber,
-        lessonTime: lesson.time,
-        subgroup: lesson.subgroup ?? null,
-        subject: lesson.subject,
-        text,
-        authorId: userId(ctx),
-        authorName: displayName(ctx.message.sender),
-      });
-      saveSession(ctx, { step: null, homeworkLesson: null, homeworkLessons: null });
-      await ctx.reply(`ДЗ по предмету **${lesson.subject}** сохранено.`, { format: 'markdown' });
-      return;
+    const text = ctx.message?.body?.text?.trim() ?? '';
+    const command = parseCommand(ctx.message, { botId: bot.botInfo?.user_id, botUsername: bot.botInfo?.username });
+    if (command) {
+      const name = ALIASES[command.name] ?? command.name;
+      const handler = commandHandlers[name];
+      if (handler) return handler(ctx, command.args);
+      const addressed = /^\/[a-z0-9_]+@/i.test(text) || /^@/.test(text);
+      if (isGroupChat(ctx) && !addressed) return undefined;
+      return show(ctx, `${ctx.t.unknownCommand}\n\n${isGroupChat(ctx) ? ctx.t.helpGroup : ctx.t.help}`);
     }
-    if (session.step === 'personal-homework:text') {
-      if (isGroupChat(ctx)) return;
-      if (!text) return ctx.reply('Личное ДЗ нужно отправить текстом.');
-      if (text.length > 2_000) return ctx.reply('Сократи ДЗ до 2000 символов.');
-      const profile = await preferences.get(userId(ctx));
-      const lesson = session.personalHomeworkLesson;
-      if (!lesson || profile.selection?.kind !== 'group') {
-        saveSession(ctx, { step: null });
-        return ctx.reply('Выбор устарел. Начни ещё раз через /homework_personal.');
-      }
-      await community.setPersonalHomework(userId(ctx), {
-        groupId: profile.selection.id,
-        groupTitle: profile.selection.title,
-        lessonDate: lesson.date,
-        lessonNumber: lesson.lessonNumber,
-        lessonTime: lesson.time,
-        subgroup: lesson.subgroup ?? null,
-        subject: lesson.subject,
-        text,
-      });
-      saveSession(ctx, { step: null, personalHomeworkLesson: null, personalHomeworkLessons: null });
-      await ctx.reply(`Личная версия ДЗ по предмету **${lesson.subject}** сохранена. Общее ДЗ группы не изменилось.`, { format: 'markdown' });
-      return;
+    if (text.startsWith('/')) return undefined;
+
+    const state = session(ctx);
+    if (['group-text', 'personal-text'].includes(state.step)) {
+      if (!text) return ctx.reply(ctx.t.homeworkNeedsText);
+      if (text.length > HOMEWORK_LIMIT) return ctx.reply(ctx.t.homeworkTooLong);
+      return state.step === 'group-text' ? saveGroupHomework(ctx, state, text) : savePersonalHomework(ctx, state, text);
     }
-    if (session.step === 'notice:details') {
-      const images = (ctx.message?.body?.attachments ?? []).filter((attachment) => attachment.type === 'image');
-      if (!text) return ctx.reply('Добавь к фото короткое описание причины.');
-      const chat = session.noticeChats?.[0];
-      if (!chat?.headman?.userId) {
-        saveSession(ctx, { step: null });
-        return ctx.reply('Староста для этой группы больше не настроен.');
-      }
-      const kind = session.noticeType === 'late' ? 'Опоздание' : 'Отсутствие';
-      const message = [
-        `**${kind} · ${chat.group.title}**`, '',
-        text,
-        '',
-        '_Обращение отправлено через анонимную форму norfly._',
-      ].join('\n');
-      const attachments = images.map((image) => ({ type: 'image', payload: { token: image.payload.token } }));
-      try {
-        await bot.api.sendMessageToUser(chat.headman.userId, message, { format: 'markdown', attachments });
-        await community.addNotice({
-          chatId: chat.chatId, groupId: chat.group.id, senderId: userId(ctx),
-          type: session.noticeType, text, imageCount: images.length,
-        });
-        await ctx.reply('Сообщение отправлено старосте. Твоё имя в сообщении не указано.');
-      } catch (error) {
-        await community.addNotice({
-          chatId: chat.chatId, groupId: chat.group.id, senderId: userId(ctx),
-          type: session.noticeType, text, imageCount: images.length, status: 'pending',
-        });
-        await ctx.reply('Сохранил обращение, но староста ещё не открыл личный чат с ботом. Попроси его один раз нажать «Начать».');
-      }
-      saveSession(ctx, { step: null, noticeType: null, noticeChats: null });
-      return;
+    if (state.step === 'absence-text') return sendAbsence(ctx, state, text);
+    if (state.step === 'setup') {
+      if (!text) return undefined;
+      return handleSearch(ctx, text, { mode: 'link' });
     }
-    if (!text) return;
-    if (!session.step?.startsWith('search:')) {
-      if (!isGroupChat(ctx)) await ctx.reply('Используй кнопки меню — так быстрее и удобнее.');
-      return;
-    }
-    const kind = session.step.split(':')[1];
-    const method = { group: 'searchGroups', teacher: 'searchTeachers', auditory: 'searchAuditories' }[kind];
-    const candidates = await service[method](text, { limit: 40 });
-    if (!candidates.length) {
-      await ctx.reply(formatSearchResults('Результаты:', [], text));
-      return;
-    }
-    saveSession(ctx, { step: 'result', searchKind: kind, candidates });
-    await renderPicker(ctx, 'result');
+    if (isGroupChat(ctx) || !text) return undefined;
+    if (!normalizeLanguage(ctx.prefs.lang)) return languagePrompt(ctx);
+    const own = state.step === 'own-group' || !ownGroup(ctx.prefs);
+    return handleSearch(ctx, text, { mode: own ? 'own' : 'any' });
   });
 
   bot.catch(async (error, ctx) => {
     console.error('Bot update failed:', error);
-    try { await ctx.reply('Не удалось выполнить действие. Попробуй ещё раз.'); } catch {}
+    try {
+      const t = ctx.t ?? texts(DEFAULT_LANGUAGE);
+      if (ctx.update?.update_type === 'message_callback') await ctx.answerOnCallback({ notification: t.failed });
+      else await ctx.reply(t.failed);
+    } catch {}
   });
   return bot;
 };

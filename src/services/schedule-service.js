@@ -7,9 +7,19 @@ const normalizeSearch = (value) => String(value ?? '')
   .replace(/\s+/g, ' ')
   .trim();
 
+// «истб251», «ИСТб 25-1» и «istb-25-1» должны находить «ИСТб-25-1».
+const compactSearch = (value) => normalizeSearch(value).replace(/[\s.\-–—]+/g, '');
+const LATIN = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
+const transliterate = (value) => [...value].map((char) => LATIN[char] ?? char).join('');
+
 const includesQuery = (fields, query) => {
   const normalized = normalizeSearch(query);
-  return !normalized || fields.some((field) => normalizeSearch(field).includes(normalized));
+  const compact = compactSearch(query);
+  return !normalized || fields.some((field) => {
+    const target = compactSearch(field);
+    return normalizeSearch(field).includes(normalized)
+      || (compact && (target.includes(compact) || transliterate(target).includes(compact)));
+  });
 };
 
 export class ScheduleService {

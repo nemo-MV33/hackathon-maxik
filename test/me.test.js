@@ -74,6 +74,10 @@ test('profile saved from the mini app is shared with the bot storage', async (t)
   const stored = await preferences.get(42);
   assert.deepEqual(stored.selection, { kind: 'group', id: 478237, title: 'ИСТб-25-1' });
   assert.equal(stored.subgroup, 2);
+
+  const english = await request('/api/me', { user, method: 'PUT', body: JSON.stringify({ lang: 'en' }) });
+  assert.equal((await english.json()).profile.lang, 'en');
+  assert.equal((await preferences.get(42)).lang, 'en');
 });
 
 test('PUT /api/me validates input', async (t) => {
@@ -84,6 +88,7 @@ test('PUT /api/me validates input', async (t) => {
   assert.equal((await put('{broken')).status, 400);
   assert.equal((await put(JSON.stringify({ groupId: 1 }))).status, 400);
   assert.equal((await put(JSON.stringify({ subgroup: 5 }))).status, 400);
+  assert.equal((await put(JSON.stringify({ lang: 'de' }))).status, 400);
   assert.equal((await put('x'.repeat(70_000))).status, 413);
 });
 

@@ -45,6 +45,7 @@ paths:
                 groupId: { type: integer, minimum: 1 }
                 subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
                 remindersEnabled: { type: boolean }
+                lang: { type: string, enum: [ru, en] }
       responses:
         '200':
           description: Профиль сохранён
@@ -145,6 +146,7 @@ components:
         course: { type: [integer, 'null'] }
         subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
         remindersEnabled: { type: boolean }
+        lang: { type: [string, 'null'], enum: [ru, en, null], description: Язык, выбранный в боте или приложении }
     ProfileResponse:
       type: object
       required: [profile]

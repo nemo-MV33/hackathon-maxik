@@ -10,6 +10,8 @@ export const config = {
   initDataMaxAgeSec: numberFromEnv('INIT_DATA_MAX_AGE_SEC', 24 * 60 * 60),
   devUserId: process.env.NODE_ENV === 'production' ? 0 : numberFromEnv('DEV_USER_ID', 0),
   miniAppUrl: process.env.MINI_APP_URL?.trim() ?? '',
+  // app — кнопка MAX open_app (приложение открывается с авторизацией), link — обычная ссылка на MINI_APP_URL.
+  miniAppButton: process.env.MINI_APP_BUTTON?.trim() === 'link' ? 'link' : 'app',
   irnitu: {
     baseUrl: process.env.IRNITU_API_URL?.trim() ?? 'https://schedule.istu.edu/api/',
     token: process.env.IRNITU_API_TOKEN?.trim() ?? '',

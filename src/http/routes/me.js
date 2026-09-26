@@ -14,6 +14,7 @@ const publicProfile = (saved) => ({
   course: saved.course ?? null,
   subgroup: saved.subgroup ?? null,
   remindersEnabled: saved.remindersEnabled !== false,
+  lang: saved.lang ?? null,
 });
 
 const parseSubgroup = (value) => {
@@ -55,6 +56,11 @@ export const updateMe = async ({ user, preferences, service, body }) => {
       throw new HttpError(400, 'invalid_reminders', 'remindersEnabled должен быть true или false');
     }
     patch.remindersEnabled = body.remindersEnabled;
+  }
+
+  if ('lang' in body) {
+    if (!['ru', 'en'].includes(body.lang)) throw new HttpError(400, 'invalid_lang', 'lang должен быть ru или en');
+    patch.lang = body.lang;
   }
 
   const value = await preferences.set(user.id, { ...saved, ...patch });

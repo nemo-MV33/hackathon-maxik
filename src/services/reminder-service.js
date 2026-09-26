@@ -1,3 +1,5 @@
+import { texts } from '../bot/i18n.js';
+
 const CHECK_INTERVAL_MS = 30_000;
 const TIME_ZONE = 'Asia/Irkutsk';
 
@@ -62,10 +64,11 @@ export class ReminderService {
             const reminderKey = `${lesson.date}:${lesson.id}:${lesson.lessonNumber}`;
             const sent = profile.sentReminders ?? [];
             if (sent.includes(reminderKey)) continue;
-            await this.bot.api.sendMessageToUser(Number(id), [
-              `⏰ Через 15 минут начнётся **${lesson.subject}**`,
-              `${lesson.time}${lesson.auditories.length ? ` · ${lesson.auditories.join(', ')}` : ''}`,
-            ].join('\n'), { format: 'markdown' });
+            await this.bot.api.sendMessageToUser(
+              Number(id),
+              texts(profile.lang).reminder(lesson.subject, lesson.time, lesson.auditories.join(', ')),
+              { format: 'markdown' },
+            );
             profile.sentReminders = [...sent.slice(-99), reminderKey];
             await this.preferences.set(id, profile);
           }

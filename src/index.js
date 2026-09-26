@@ -26,6 +26,7 @@ const bot = createBot({
   token: config.botToken,
   service,
   miniAppUrl: config.miniAppUrl,
+  miniAppButton: config.miniAppButton,
   preferences,
   community,
 });
@@ -46,6 +47,12 @@ server.listen(config.port, () => {
   console.log(`HTTP API is listening on port ${config.port}`);
 });
 reminders.start();
+
+const syncCommands = () => bot.syncCommands().catch((error) => {
+  console.error('Failed to update bot commands, retrying:', error.message);
+  setTimeout(syncCommands, 30_000).unref();
+});
+syncCommands();
 
 const stop = async (signal) => {
   stopping = true;
