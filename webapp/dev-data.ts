@@ -32,6 +32,14 @@ const week = (offset: number) => {
       });
     }
   }
+  if (offset === 1) {
+    const examDay = new Date(start);
+    examDay.setDate(start.getDate() + 2);
+    lessons.push({
+      date: dateKey(examDay), lessonNumber: 5, time: TIMES[4], subject: 'Математический анализ', lessonType: 'экзамен',
+      subgroup: null, teachers: ['Иванова А. П.'], auditories: ['Ж-301'],
+    });
+  }
   return { weekStart: dateKey(start), weekEven: offset % 2 === 0, lessons };
 };
 
@@ -39,7 +47,11 @@ export const devData = (): Plugin => ({
   name: 'norfly-dev-data',
   apply: 'serve',
   configureServer(server) {
-    const settings = { remindersEnabled: true, notifications: { summary: true, homework: true, changes: true } };
+    const settings = {
+      remindersEnabled: true, onboarded: false,
+      notifications: { summary: true, homework: true, changes: true, exams: true },
+    };
+    const notes: Record<string, unknown>[] = [];
     const homework = new Map<string, {
       sharedText: string | null;
       personalText: string | null;
@@ -63,20 +75,30 @@ export const devData = (): Plugin => ({
         if (request.method === 'PUT') {
           const body = await readBody(request);
           if (typeof body.remindersEnabled === 'boolean') settings.remindersEnabled = body.remindersEnabled;
+          if (typeof body.onboarded === 'boolean') settings.onboarded = body.onboarded;
           Object.assign(settings.notifications, body.notifications ?? {});
         }
         return send(response, {
           user: { id: 1, firstName: 'Тест' },
           profile: {
             group: { id: 1, title: 'ДЕМО-25-1' }, institute: 'Демо-институт', course: 1, subgroup: 1,
-            remindersEnabled: settings.remindersEnabled, notifications: settings.notifications,
+            remindersEnabled: settings.remindersEnabled, onboarded: settings.onboarded, notifications: settings.notifications,
           },
         });
       }
       if (url.pathname === '/api/absence' && request.method === 'POST') {
         const body = await readBody(request);
         if (!body.reason && !body.text?.trim()) return send(response, { error: 'invalid_text', message: 'Укажи причину' }, 400);
+        notes.push({
+          id: String(notes.length + 1), kind: body.kind, senderName: 'Тест', reason: body.reason ?? null, text: body.text ?? null,
+          lesson: body.lessonDate ? { date: body.lessonDate, lessonNumber: body.lessonNumber, subject: 'Пара', time: '' } : null,
+          createdAt: new Date().toISOString(), acceptedAt: notes.length % 2 ? new Date().toISOString() : null, date: body.lessonDate,
+        });
         return send(response, { status: 'sent' });
+      }
+      if (url.pathname === '/api/absence') {
+        const date = url.searchParams.get('date');
+        return send(response, { role: 'headman', date, items: notes.filter((note) => !date || note.date === date) });
       }
       if (url.pathname !== '/api/homework') return next();
       if (request.method === 'PUT') {

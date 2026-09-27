@@ -188,9 +188,56 @@ test('POST /api/absence и настройки уведомлений в /api/me'
   assert.equal(calls[1].lesson, undefined, 'пару определит бот');
 
   const me = await (await call('/api/me', 'GET')).json();
-  assert.deepEqual(me.profile.notifications, { summary: true, homework: true, changes: true });
+  assert.deepEqual(me.profile.notifications, { summary: true, homework: true, changes: true, exams: true });
+  assert.equal(me.profile.onboarded, false);
   const updated = await (await call('/api/me', 'PUT', { notifications: { changes: false } })).json();
-  assert.deepEqual(updated.profile.notifications, { summary: true, homework: true, changes: false });
+  assert.deepEqual(updated.profile.notifications, { summary: true, homework: true, changes: false, exams: true });
   assert.equal((await preferences.get(7)).notifications.changes, false);
   assert.equal((await call('/api/me', 'PUT', { notifications: { spam: true } })).status, 400);
+});
+
+test('напоминания о контрольных за 3 дня и накануне, без повторов', async (t) => {
+  const in3 = irkutskDateKey(NOW, 3);
+  const { notifications, sent, user } = await setup(t, [
+    lesson(TOMORROW, 2, { lessonType: 'экзамен', subject: 'Физика' }),
+    lesson(in3, 1, { lessonType: 'зачёт', subject: 'История' }),
+    lesson(TOMORROW, 1, { lessonType: 'консультация', subject: 'Физика' }),
+  ]);
+  await user(1);
+  await user(2, { notifications: { exams: false } });
+  assert.equal(await notifications.sendExamReminders(), 2);
+  assert.ok(sent.every((item) => item.userId === 1));
+  assert.ok(sent.some((item) => /Завтра экзамен:\*\* Физика/.test(item.text)));
+  assert.ok(sent.some((item) => /Через 3 дня зачёт:\*\* История/.test(item.text)));
+  assert.equal(await notifications.sendExamReminders(), 0, 'повторно не напоминает');
+});
+
+test('GET /api/absence: староста видит группу, студент — только свои', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'norfly-absences-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const preferences = new PreferencesStore(join(directory, 'preferences.json'));
+  const community = new CommunityStore(join(directory, 'community.json'));
+  await community.setChat(-5, { group: GROUP, headman: { userId: 3, name: 'Маша' } });
+  await preferences.set(7, { selection: GROUP });
+  await preferences.set(8, { selection: GROUP });
+  await community.addNotice({ id: 'a', date: '2026-10-01', groupId: 11, chatId: -5, senderId: 7, senderName: 'Аня', kind: 'late', reasonCode: 'transport' });
+  await community.addNotice({ id: 'b', date: '2026-10-01', groupId: 11, chatId: -5, senderId: 8, senderName: 'Олег', kind: 'absent', text: 'Болею' });
+  await community.acceptNotice('a');
+  const server = createHttpServer({ service: {}, preferences, community, botToken: BOT_TOKEN });
+  await new Promise((resolve) => server.listen(0, resolve));
+  t.after(() => server.close());
+  const get = async (user) => (await fetch(`http://localhost:${server.address().port}/api/absence?date=2026-10-01`, {
+    headers: { Authorization: `tma ${initDataFor(user)}` },
+  })).json();
+
+  const headman = await get({ id: 3, first_name: 'Маша' });
+  assert.equal(headman.role, 'headman');
+  assert.deepEqual(headman.items.map((item) => item.senderName), ['Аня', 'Олег']);
+  assert.ok(headman.items[0].acceptedAt);
+
+  const student = await get({ id: 7, first_name: 'Аня' });
+  assert.equal(student.role, 'student');
+  assert.equal(student.items.length, 1);
+  assert.equal(student.items[0].senderName, null);
+  assert.equal(student.items[0].reason, 'transport');
 });

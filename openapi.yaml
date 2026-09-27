@@ -47,6 +47,7 @@ paths:
                 remindersEnabled: { type: boolean }
                 lang: { type: string, enum: [ru, en] }
                 notifications: { $ref: '#/components/schemas/NotificationsPatch' }
+                onboarded: { type: boolean, description: Пользователь прошёл знакомство }
       responses:
         '200':
           description: Профиль сохранён
@@ -56,6 +57,40 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/absence:
+    get:
+      summary: Сообщения об опоздании за день
+      description: Старосте — все сообщения его группы с именами, студенту — только свои.
+      parameters:
+        - in: query
+          name: date
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: Сообщения и статус «принято»
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role, date, items]
+                properties:
+                  role: { type: string, enum: [headman, student] }
+                  date: { type: string, format: date }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, kind, createdAt, acceptedAt]
+                      properties:
+                        id: { type: string }
+                        kind: { type: string, enum: [late, absent] }
+                        senderName: { type: [string, 'null'] }
+                        reason: { type: [string, 'null'] }
+                        text: { type: [string, 'null'] }
+                        lesson: { type: [object, 'null'] }
+                        createdAt: { type: string, format: date-time }
+                        acceptedAt: { type: [string, 'null'], format: date-time }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       summary: Сообщить старосте об опоздании или отсутствии
       description: Бот отправляет старосте группы личное сообщение с именем студента, парой и причиной.
@@ -183,11 +218,13 @@ components:
         remindersEnabled: { type: boolean }
         lang: { type: [string, 'null'], enum: [ru, en, null], description: Язык, выбранный в боте или приложении }
         notifications: { $ref: '#/components/schemas/Notifications' }
+        onboarded: { type: boolean }
     Notifications:
       type: object
       description: Уведомления в личный чат с ботом
-      required: [summary, homework, changes]
+      required: [summary, homework, changes, exams]
       properties:
+        exams: { type: boolean, description: Экзамены и зачёты за 3 дня и накануне }
         summary: { type: boolean, description: Сводка на завтра в 20:00 }
         homework: { type: boolean, description: Новое или изменённое ДЗ группы }
         changes: { type: boolean, description: Переносы, отмены и смена аудитории }
@@ -198,6 +235,7 @@ components:
         summary: { type: boolean }
         homework: { type: boolean }
         changes: { type: boolean }
+        exams: { type: boolean }
     ProfileResponse:
       type: object
       required: [profile]

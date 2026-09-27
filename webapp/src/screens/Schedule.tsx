@@ -14,6 +14,8 @@ import { ChevronLeft, ChevronRight, UserIcon } from '../components/Icon';
 import { AbsenceSheet } from '../components/AbsenceSheet';
 import type { AbsenceKind } from '../lib/api';
 import type { LaunchTarget } from '../App';
+import { daysBetween, useUpcomingExams } from '../lib/exams';
+import { lessonKindName } from '../lib/lessonKind';
 import { homeworkKey, useRemoteHomework } from '../data/homework';
 
 type Mode = 'day' | 'week';
@@ -70,10 +72,11 @@ type ScheduleProps = {
   onChangeGroup: () => void;
   onOpenLesson: (lesson: Lesson) => void;
   onOpenProfile: () => void;
+  onOpenExams: () => void;
 };
 
 export const Schedule = ({
-  profile, profileRevision, launch, onLaunchHandled, onChangeGroup, onOpenLesson, onOpenProfile,
+  profile, profileRevision, launch, onLaunchHandled, onChangeGroup, onOpenLesson, onOpenProfile, onOpenExams,
 }: ScheduleProps) => {
   const { t } = useI18n();
   const now = useNow();
@@ -81,6 +84,7 @@ export const Schedule = ({
   const [mode, setModeState] = useState<Mode>(readMode);
   const [selected, setSelected] = useState(launch?.date ?? todayKey);
   const [absence, setAbsence] = useState<{ kind: AbsenceKind; lesson: Lesson } | null>(null);
+  const exams = useUpcomingExams(profile.group.id, profile.subgroup, todayKey);
   const openAbsence = (kind: AbsenceKind, lesson: Lesson) => setAbsence({ kind, lesson });
   const todayRef = useRef<HTMLElement>(null);
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -171,6 +175,16 @@ export const Schedule = ({
           ))}
         </div>
       </header>
+
+      {exams.length > 0 && (
+        <button type="button" className="exam-banner" onClick={onOpenExams}>
+          <span className="exam-banner__title">{t.examsSoon(exams.length)}</span>
+          <span className="exam-banner__next">
+            {t.examsNext(lessonKindName(exams[0].lessonType), exams[0].subject, t.daysLeft(daysBetween(todayKey, exams[0].date)))}
+          </span>
+          <ChevronRight size={18} />
+        </button>
+      )}
 
       {mode === 'day' && <DayHeading dateKey={selected} todayKey={todayKey} lessons={selectedLessons} loading={week.status !== 'ready'} />}
 

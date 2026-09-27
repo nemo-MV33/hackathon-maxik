@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Switch } from '@maxhub/max-ui';
-import { currentUser, hasNativeBackButton, haptic } from '../bridge/max';
-import { loadMe, updateSettings, type Notifications, type RemoteProfile } from '../lib/api';
+import { currentUser, hasNativeBackButton, haptic, miniAppLink, shareText } from '../bridge/max';
+import { loadAbsences, loadMe, updateSettings, type AbsenceNote, type Notifications, type RemoteProfile } from '../lib/api';
 import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
 import { useI18n } from '../lib/i18n';
@@ -18,7 +18,7 @@ type Props = {
 type Settings = Pick<RemoteProfile, 'remindersEnabled' | 'notifications'>;
 type SettingKey = 'reminders' | keyof Notifications;
 
-const SETTINGS: SettingKey[] = ['reminders', 'summary', 'homework', 'changes'];
+const SETTINGS: SettingKey[] = ['reminders', 'summary', 'homework', 'changes', 'exams'];
 
 // Заготовка профиля: шапка и группа. Раздел «Уведомления» рабочий — настройки общие с ботом.
 export const ProfileScreen = ({ profile, onChangeGroup, onBack }: Props) => {
@@ -28,6 +28,8 @@ export const ProfileScreen = ({ profile, onChangeGroup, onBack }: Props) => {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<SettingKey | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [lateness, setLateness] = useState<AbsenceNote[] | null>(null);
+  const [inviteNotice, setInviteNotice] = useState<string | null>(null);
 
   useBackButton(onBack);
 
@@ -37,14 +39,25 @@ export const ProfileScreen = ({ profile, onChangeGroup, onBack }: Props) => {
     loadMe()
       .then(({ profile: remote }) => active && setSettings({ remindersEnabled: remote.remindersEnabled, notifications: remote.notifications }))
       .catch((failure: Error) => active && setError(failure.message));
+    loadAbsences()
+      .then((data) => active && data.role === 'headman' && setLateness(data.items))
+      .catch(() => {});
     return () => { active = false; };
   }, [attempt]);
+
+  const invite = async () => {
+    const link = miniAppLink(`group_${profile.group.id}_${profile.subgroup ?? 0}`);
+    const result = await shareText(t.inviteText(profile.group.title), link);
+    if (result.status === 'copied') setInviteNotice(t.inviteCopied);
+    else if (result.status === 'manual') setInviteNotice(link);
+  };
 
   const labels: Record<SettingKey, [string, string]> = {
     reminders: [t.notifyReminders, t.notifyRemindersHint],
     summary: [t.notifySummary, t.notifySummaryHint],
     homework: [t.notifyHomework, t.notifyHomeworkHint],
     changes: [t.notifyChanges, t.notifyChangesHint],
+    exams: [t.notifyExams, t.notifyExamsHint],
   };
 
   const isOn = (key: SettingKey) => (key === 'reminders' ? settings!.remindersEnabled : settings!.notifications[key]);
@@ -101,7 +114,38 @@ export const ProfileScreen = ({ profile, onChangeGroup, onBack }: Props) => {
           <span className="settings-row__text"><span className="settings-row__title">{t.profileLanguage}</span></span>
           <LanguageSwitch />
         </div>
+        <button type="button" className="settings-row" onClick={invite}>
+          <span className="settings-row__text"><span className="settings-row__title">{t.invite}</span></span>
+          <ChevronRight size={18} />
+        </button>
       </section>
+      {inviteNotice && <p className="toast toast--ok" role="status">{inviteNotice}</p>}
+
+      {lateness && (
+        <section className="settings" aria-labelledby="lateness-title">
+          <div className="section-head">
+            <h2 id="lateness-title" className="section-title">{t.lateTodayTitle}</h2>
+          </div>
+          {lateness.length === 0
+            ? <p className="hw-block__empty">{t.lateTodayEmpty}</p>
+            : (
+              <div className="settings-list">
+                {lateness.map((note) => (
+                  <div key={note.id} className="settings-row">
+                    <span className="settings-row__text">
+                      <span className="settings-row__title">{note.senderName} · {t.lateKind(note.kind)}</span>
+                      <span className="settings-row__hint">
+                        {[note.lesson && `${t.pairShort(note.lesson.lessonNumber)} · ${note.lesson.subject}`,
+                          note.reason ? t.absenceReasons[note.reason] : note.text].filter(Boolean).join(' · ')}
+                      </span>
+                    </span>
+                    <span className={`status-pill${note.acceptedAt ? ' is-ok' : ''}`}>{note.acceptedAt ? t.accepted : t.waiting}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+        </section>
+      )}
 
       <section className="settings" aria-labelledby="notifications-title">
         <div className="section-head">

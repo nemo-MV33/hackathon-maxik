@@ -11,7 +11,7 @@ import { ChevronLeft } from '../components/Icon';
 import { isControlLesson, lessonKindClass, lessonKindCode, lessonKindName } from '../lib/lessonKind';
 import { useI18n } from '../lib/i18n';
 import { AbsenceSheet } from '../components/AbsenceSheet';
-import type { AbsenceKind } from '../lib/api';
+import { loadAbsences, type AbsenceKind, type AbsenceNote } from '../lib/api';
 import { useNow } from '../lib/useNow';
 
 type Props = {
@@ -76,6 +76,18 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
   const [absence, setAbsence] = useState<AbsenceKind | null>(null);
+  const [myNotes, setMyNotes] = useState<AbsenceNote[]>([]);
+
+  useEffect(() => {
+    if (absence) return undefined;
+    let active = true;
+    loadAbsences(lesson.date)
+      .then((data) => active && setMyNotes(data.role === 'student'
+        ? data.items.filter((note) => !note.lesson || note.lesson.lessonNumber === lesson.lessonNumber)
+        : []))
+      .catch(() => {});
+    return () => { active = false; };
+  }, [absence, lesson.date, lesson.lessonNumber]);
   const now = useNow();
   const todayKey = toDateKey(now);
   const lessonOver = lesson.date < todayKey || (lesson.date === todayKey
@@ -145,6 +157,17 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
         <div className="absence-actions absence-actions--wide">
           <button type="button" className="pill-button" onClick={() => setAbsence('late')}>{t.late}</button>
           <button type="button" className="pill-button" onClick={() => setAbsence('absent')}>{t.absent}</button>
+        </div>
+      )}
+      {myNotes.length > 0 && (
+        <div className="hw-block">
+          <p className="hw-block__label">{t.yourNotes}</p>
+          {myNotes.map((note) => (
+            <p key={note.id} className="note-status">
+              <span>{t.lateKind(note.kind)} · {note.reason ? t.absenceReasons[note.reason] : note.text}</span>
+              <span className={`status-pill${note.acceptedAt ? ' is-ok' : ''}`}>{note.acceptedAt ? t.accepted : t.waiting}</span>
+            </p>
+          ))}
         </div>
       )}
       {absence && <AbsenceSheet kind={absence} lesson={lesson} onClose={() => setAbsence(null)} />}

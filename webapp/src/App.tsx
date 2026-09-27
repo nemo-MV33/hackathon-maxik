@@ -8,6 +8,9 @@ import { Schedule } from './screens/Schedule';
 import { LessonScreen } from './screens/LessonScreen';
 import { ImportScreen } from './screens/ImportScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
+import { WelcomeScreen } from './screens/WelcomeScreen';
+import { InviteScreen } from './screens/InviteScreen';
+import { ExamsScreen } from './screens/ExamsScreen';
 import { Loading } from './components/Status';
 import { loadMe, syncProfile } from './lib/api';
 import { isLang, useI18n } from './lib/i18n';
@@ -18,7 +21,10 @@ type Route =
   | { name: 'lesson'; lesson: Lesson }
   | { name: 'import'; shared: SharedHomework | null }
   | { name: 'decoding' }
-  | { name: 'profile' };
+  | { name: 'profile' }
+  | { name: 'welcome' }
+  | { name: 'exams' }
+  | { name: 'invite'; groupId: number; subgroup: 1 | 2 | null };
 
 // Кнопки в уведомлениях бота открывают приложение с start_param: day_2026-10-02 или lesson_2026-10-02_2_0.
 export type LaunchTarget = { date: string; lessonNumber?: number; subgroup?: number | null };
@@ -32,7 +38,14 @@ const launchTarget = (): LaunchTarget | undefined => {
   return undefined;
 };
 
-const initialRoute = (): Route => (startParam()?.startsWith('hw') ? { name: 'decoding' } : { name: 'schedule' });
+// Приглашение одногруппника: startapp=group_478237_1 — новичок сразу видит свою группу.
+const initialRoute = (): Route => {
+  const value = startParam() ?? '';
+  if (value.startsWith('hw')) return { name: 'decoding' };
+  const invite = value.match(/^group_(\d+)_([012])$/);
+  if (invite) return { name: 'invite', groupId: Number(invite[1]), subgroup: invite[2] === '0' ? null : (Number(invite[2]) as 1 | 2) };
+  return { name: 'schedule' };
+};
 
 export const App = () => {
   const [profile, saveProfile] = useProfile();
@@ -43,6 +56,8 @@ export const App = () => {
   const { lang, setLang } = useI18n();
   // В MAX профиль общий с ботом: сначала узнаём, что выбрано там, и только потом показываем экраны.
   const [ready, setReady] = useState(() => !webApp()?.initData);
+  // null — неизвестно (открыто вне MAX), тогда экран знакомства не показываем.
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (ready) return undefined;
@@ -51,6 +66,7 @@ export const App = () => {
     loadMe()
       .then(({ profile: remote }) => {
         if (!active) return;
+        setOnboarded(remote.onboarded);
         if (isLang(remote.lang) && remote.lang !== lang) setLang(remote.lang);
         if (remote.group) {
           saveProfile({
@@ -103,12 +119,54 @@ export const App = () => {
     );
   }
 
+  const afterGroupChosen = () => {
+    if (onboarded === false) setRoute({ name: 'welcome' });
+    else toSchedule();
+  };
+
+  if (route.name === 'invite') {
+    return (
+      <InviteScreen
+        groupId={route.groupId}
+        subgroup={route.subgroup}
+        onAccept={(group, subgroup) => {
+          saveProfile({ group, subgroup });
+          if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
+          afterGroupChosen();
+        }}
+        onOther={() => setRoute({ name: 'onboarding' })}
+      />
+    );
+  }
+
+  if (route.name === 'welcome' && profile) {
+    return (
+      <WelcomeScreen
+        groupTitle={profile.group.title}
+        onDone={(next) => {
+          setOnboarded(true);
+          setRoute(next === 'profile' ? { name: 'profile' } : { name: 'schedule' });
+        }}
+      />
+    );
+  }
+
   if (!profile || route.name === 'onboarding') {
     return (
       <Onboarding
         current={profile}
-        onDone={(value) => { saveProfile(value); toSchedule(); }}
+        onDone={(value) => { saveProfile(value); afterGroupChosen(); }}
         onCancel={profile ? toSchedule : undefined}
+      />
+    );
+  }
+
+  if (route.name === 'exams') {
+    return (
+      <ExamsScreen
+        profile={profile}
+        onBack={toSchedule}
+        onOpenLesson={(lesson) => setRoute({ name: 'lesson', lesson })}
       />
     );
   }
@@ -133,6 +191,10 @@ export const App = () => {
       profileRevision={profileRevision}
       launch={launch}
       onLaunchHandled={() => setLaunch(undefined)}
+      onOpenExams={() => {
+        scheduleScroll.current = window.scrollY;
+        setRoute({ name: 'exams' });
+      }}
       onOpenProfile={() => {
         scheduleScroll.current = window.scrollY;
         setRoute({ name: 'profile' });

@@ -55,3 +55,34 @@ export const postAbsence = async ({ user, preferences, service, sendAbsence, bod
   if (result.status === 'no_group') throw new HttpError(409, 'group_not_selected', 'Сначала выбери учебную группу');
   return { status: result.status };
 };
+
+const irkutskToday = () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Irkutsk', year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date());
+
+// Старосте — все сообщения группы за день, студенту — только его собственные (без чужих имён).
+export const getAbsences = async ({ user, preferences, community, url }) => {
+  const date = url.searchParams.get('date') ?? irkutskToday();
+  if (!DATE_PATTERN.test(date)) throw new HttpError(400, 'invalid_date', 'Дата должна быть в формате YYYY-MM-DD');
+  const headmanChat = (await community.chatsWithRole(user.id))
+    .find((chat) => String(chat.headman?.userId) === String(user.id));
+  const prefs = await preferences.get(user.id);
+  const groupId = headmanChat?.group.id ?? (prefs.selection?.kind === 'group' ? prefs.selection.id : null);
+  if (!groupId) return { role: 'student', date, items: [] };
+  const notices = await community.noticesForDay(groupId, date, headmanChat ? {} : { senderId: user.id });
+  return {
+    role: headmanChat ? 'headman' : 'student',
+    date,
+    items: notices.map((item) => ({
+      id: item.id,
+      kind: item.kind,
+      senderName: headmanChat ? item.senderName ?? null : null,
+      reason: item.reasonCode ?? null,
+      text: item.text ?? null,
+      lesson: item.lesson ?? null,
+      createdAt: item.createdAt,
+      acceptedAt: item.acceptedAt ?? null,
+      status: item.status,
+    })),
+  };
+};

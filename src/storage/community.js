@@ -163,6 +163,40 @@ export class CommunityStore {
     return this.#data.notices.filter((item) => item.status === 'pending' && chatIds.has(String(item.chatId)));
   }
 
+  async getNotice(id) {
+    await this.#load();
+    return this.#data.notices.find((item) => item.id === id) ?? null;
+  }
+
+  async acceptNotice(id) {
+    await this.#load();
+    const item = this.#data.notices.find((candidate) => candidate.id === id);
+    if (!item) return null;
+    if (!item.acceptedAt) {
+      item.acceptedAt = new Date().toISOString();
+      await this.#queueSave();
+    }
+    return item;
+  }
+
+  // Сообщения об опоздании за день: для старосты — вся группа, для студента — только свои.
+  async noticesForDay(groupId, dateKey, { senderId } = {}) {
+    await this.#load();
+    return this.#data.notices
+      .filter((item) => String(item.groupId) === String(groupId))
+      .filter((item) => (item.date ?? item.lesson?.date ?? item.createdAt?.slice(0, 10)) === dateKey)
+      .filter((item) => senderId === undefined || String(item.senderId) === String(senderId))
+      .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
+  }
+
+  async chatsWithRole(userId) {
+    await this.#load();
+    const id = String(userId);
+    return Object.values(this.#data.chats).filter((chat) => chat.group && (
+      String(chat.headman?.userId) === id || (chat.editors ?? []).some((editor) => String(editor.userId) === id)
+    ));
+  }
+
   async markNoticeSent(id) {
     await this.#load();
     const item = this.#data.notices.find((candidate) => candidate.id === id);

@@ -36,11 +36,12 @@ export type RemoteProfile = {
   subgroup: 1 | 2 | null;
   lang: 'ru' | 'en' | null;
   remindersEnabled: boolean;
+  onboarded: boolean;
   notifications: Notifications;
 };
 
-export type Notifications = { summary: boolean; homework: boolean; changes: boolean };
-export type SettingsPatch = { remindersEnabled?: boolean; notifications?: Partial<Notifications> };
+export type Notifications = { summary: boolean; homework: boolean; changes: boolean; exams: boolean };
+export type SettingsPatch = { remindersEnabled?: boolean; onboarded?: boolean; notifications?: Partial<Notifications> };
 
 export type RemoteUser = { id: number; firstName: string | null; lastName: string | null; username: string | null };
 
@@ -64,3 +65,17 @@ export const sendAbsence = (input: AbsenceInput) =>
 export const syncProfile = (groupId: number, subgroup: 1 | 2 | null) => apiRequest('/api/me', {
   method: 'PUT', body: JSON.stringify({ groupId, subgroup }),
 });
+
+export type AbsenceNote = {
+  id: string;
+  kind: AbsenceKind;
+  senderName: string | null;
+  reason: string | null;
+  text: string | null;
+  lesson: { date: string; lessonNumber: number; subject: string; time: string } | null;
+  createdAt: string;
+  acceptedAt: string | null;
+};
+
+export const loadAbsences = (date?: string) =>
+  apiRequest<{ role: 'headman' | 'student'; date: string; items: AbsenceNote[] }>(`/api/absence${date ? `?date=${date}` : ''}`);

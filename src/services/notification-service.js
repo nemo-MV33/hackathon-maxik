@@ -1,12 +1,13 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { Keyboard } from '@maxhub/max-bot-api';
-import { notificationEnabled } from '../bot/create-bot.js';
+import { CONTROL_TYPES, notificationEnabled } from '../bot/create-bot.js';
 import { formatDate } from '../bot/format.js';
-import { texts } from '../bot/i18n.js';
+import { lessonTypeLabel, texts } from '../bot/i18n.js';
 import { dateFromKey, irkutskDateKey, irkutskMinutes } from '../lib/irkutsk.js';
 
 const SUMMARY_MINUTES = 20 * 60;
+const EXAM_REMINDER_DAYS = [3, 1];
 const CHANGES_WINDOW_DAYS = 7;
 const MINUTE = 60_000;
 
@@ -110,6 +111,7 @@ export class NotificationService {
       this.#timers.push(timer);
     };
     every(MINUTE, () => this.sendSummaries());
+    every(MINUTE, () => this.sendExamReminders());
     every(this.changesIntervalMs, () => this.checkChanges());
     const first = setTimeout(() => this.checkChanges().catch(console.error), 5 * MINUTE);
     first.unref();
@@ -203,6 +205,49 @@ export class NotificationService {
       }
     } finally {
       this.#summaryRunning = false;
+    }
+    return sent;
+  }
+
+  // Экзамены и зачёты: напоминание за 3 дня и накануне, в то же время, что и сводка.
+  async sendExamReminders() {
+    const now = this.now();
+    if (irkutskMinutes(now) < SUMMARY_MINUTES) return 0;
+    const schedules = new Map();
+    const scheduleFor = (groupId, subgroup, dateKey) => {
+      const key = `${groupId}:${subgroup ?? 0}:${dateKey}`;
+      if (!schedules.has(key)) schedules.set(key, this.service.groupSchedule(groupId, { week: dateFromKey(dateKey), subgroup }));
+      return schedules.get(key);
+    };
+    let sent = 0;
+    const users = (await this.preferences.entries())
+      .filter(([, prefs]) => prefs.selection?.kind === 'group' && notificationEnabled(prefs, 'exams'));
+    for (const [id, prefs] of users) {
+      const reminded = new Set(prefs.examReminders ?? []);
+      const fresh = [];
+      for (const days of EXAM_REMINDER_DAYS) {
+        const dateKey = irkutskDateKey(now, days);
+        try {
+          const lessons = (await scheduleFor(prefs.selection.id, prefs.subgroup ?? null, dateKey)).lessons
+            .filter((lesson) => lesson.date === dateKey && CONTROL_TYPES.includes(String(lesson.lessonType).toLowerCase()));
+          for (const lesson of lessons) {
+            const key = `${lessonKey(lesson)}:${days}`;
+            if (reminded.has(key)) continue;
+            const t = texts(prefs.lang);
+            const text = t.examReminder(t.examIn(days), lessonTypeLabel(prefs.lang, lesson.lessonType), lesson.subject,
+              `${shortDate(prefs.lang, lesson.date)}, ${lesson.time.slice(0, 5)}`, (lesson.auditories ?? []).join(', '));
+            await this.#send(Number(id), prefs.lang, text, appPayload(lesson), t.openLesson);
+            fresh.push(key);
+            sent += 1;
+          }
+        } catch (error) {
+          console.error(`Exam reminder failed for user ${id}:`, error.message);
+        }
+      }
+      if (fresh.length) {
+        const current = await this.preferences.get(id);
+        await this.preferences.set(id, { ...current, examReminders: [...(current.examReminders ?? []), ...fresh].slice(-50) });
+      }
     }
     return sent;
   }

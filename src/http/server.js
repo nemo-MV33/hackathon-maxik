@@ -4,7 +4,7 @@ import { serveStatic } from './static.js';
 import { InitDataError, validateInitData } from './auth.js';
 import { HttpError, getMe, updateMe } from './routes/me.js';
 import { getHomework, putHomework } from './routes/homework.js';
-import { postAbsence } from './routes/absence.js';
+import { getAbsences, postAbsence } from './routes/absence.js';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -109,6 +109,7 @@ const route = async (request, response, options) => {
   if (url.pathname === '/api/absence') {
     const user = authenticate(request, options);
     if (!user) return sendJson(response, 401, { error: 'unauthorized' });
+    if (request.method === 'GET') return sendJson(response, 200, await getAbsences({ user, preferences, community, url }));
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method_not_allowed' });
     const body = await readJson(request);
     return sendJson(response, 200, await postAbsence({ user, preferences, service, sendAbsence, body }));

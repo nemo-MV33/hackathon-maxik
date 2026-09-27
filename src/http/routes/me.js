@@ -6,7 +6,7 @@ export class HttpError extends Error {
   }
 }
 
-const NOTIFICATION_KINDS = ['summary', 'homework', 'changes'];
+const NOTIFICATION_KINDS = ['summary', 'homework', 'changes', 'exams'];
 
 const publicProfile = (saved) => ({
   group: saved.selection?.kind === 'group'
@@ -17,6 +17,7 @@ const publicProfile = (saved) => ({
   subgroup: saved.subgroup ?? null,
   remindersEnabled: saved.remindersEnabled !== false,
   lang: saved.lang ?? null,
+  onboarded: Boolean(saved.onboarded),
   notifications: Object.fromEntries(NOTIFICATION_KINDS.map((kind) => [kind, saved.notifications?.[kind] !== false])),
 });
 
@@ -66,6 +67,10 @@ export const updateMe = async ({ user, preferences, service, body }) => {
     patch.lang = body.lang;
   }
 
+  if ('onboarded' in body) {
+    if (typeof body.onboarded !== 'boolean') throw new HttpError(400, 'invalid_onboarded', 'onboarded должен быть true или false');
+    patch.onboarded = body.onboarded;
+  }
   if ('notifications' in body) {
     const value = body.notifications;
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
