@@ -3,7 +3,7 @@ import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
 import { homeworkKey, saveHomework, useRemoteHomework, type HomeworkData } from '../data/homework';
 import { hasNativeBackButton, haptic, openExternal } from '../bridge/max';
-import { formatDay, formatStamp, fromDateKey, timeToMinutes, toDateKey } from '../lib/date';
+import { formatDay, formatMoment, formatStamp, fromDateKey, timeToMinutes, toDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
 import { ErrorState, Loading } from '../components/Status';
@@ -13,6 +13,7 @@ import { useI18n } from '../lib/i18n';
 import { AbsenceSheet } from '../components/AbsenceSheet';
 import { loadAbsences, type AbsenceKind, type AbsenceNote } from '../lib/api';
 import { useNow } from '../lib/useNow';
+import { ReminderPicker } from '../components/ReminderPicker';
 
 type Props = {
   lesson: Lesson;
@@ -31,7 +32,7 @@ const LessonFacts = ({ lesson }: { lesson: Lesson }) => {
   const { t } = useI18n();
   return (
   <dl className="facts">
-    <div><dt>{t.when}</dt><dd className="first-letter">{formatDay(fromDateKey(lesson.date))}<br /><span className="mono">{lesson.time}</span> · {t.pair(lesson.lessonNumber)}</dd></div>
+    <div><dt>{t.when}</dt><dd className="first-letter">{formatDay(fromDateKey(lesson.date))}<br /><span className="mono">{lesson.time}</span></dd></div>
     {lesson.auditories.length > 0 && <div><dt>{t.where}</dt><dd>{lesson.auditories.join(', ')}</dd></div>}
     {lesson.teachers.length > 0 && <div><dt>{t.who}</dt><dd>{lesson.teachers.join(', ')}</dd></div>}
     {lesson.subgroup && <div><dt>{t.forWhom}</dt><dd>{t.forSubgroup(lesson.subgroup)}</dd></div>}
@@ -247,6 +248,18 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
               <Button stretched size="large" disabled={!text.trim()} loading={saving} onClick={save}>{t.save}</Button>
               <Button stretched variant="ghost" disabled={saving} onClick={() => setEditing(false)}>{t.cancel}</Button>
             </div>
+          </div>
+        )}
+
+        {homework.status === 'ready' && !editing && item?.text && !lessonOver && (
+          <div className="hw-block">
+            <p className="hw-block__label">{t.reminder}</p>
+            <ReminderPicker
+              value={item.remindAt}
+              dateKey={lesson.date}
+              now={now}
+              onChange={(value) => void run(() => saveHomework(lesson, null, 'reminder', value), value ? t.reminderSet(formatMoment(value)) : t.reminderOff)}
+            />
           </div>
         )}
 

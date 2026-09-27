@@ -15,16 +15,21 @@ type CardProps = {
   nowMinutes: number;
   homework?: HomeworkItem;
   onOpen: (lesson: Lesson) => void;
+  metaKind: MetaKind;
 };
 
-const LessonCard = ({ lesson, state, nowMinutes, homework, onOpen }: CardProps) => {
+// В расписании преподавателя важнее группы, в расписании группы — преподаватели.
+export type MetaKind = 'group' | 'teacher' | 'auditory';
+
+const LessonCard = ({ lesson, state, nowMinutes, homework, onOpen, metaKind }: CardProps) => {
   const { t } = useI18n();
   const start = timeToMinutes(lessonStart(lesson));
   const end = timeToMinutes(lessonEnd(lesson));
   const progress = state === 'live' ? Math.min(100, Math.max(0, ((nowMinutes - start) / (end - start)) * 100)) : 0;
   const kind = [lessonKindName(lesson.lessonType), lesson.auditories[0]].filter(Boolean).join(' · ');
   const meta = [
-    lesson.teachers.join(', '),
+    metaKind !== 'teacher' ? lesson.teachers.join(', ') : '',
+    metaKind !== 'group' ? (lesson.groups ?? []).join(', ') : '',
     lesson.subgroup ? t.subgroup(lesson.subgroup) : '',
     lesson.auditories.length > 1 ? lesson.auditories.slice(1).join(', ') : '',
   ].filter(Boolean).join(' · ');
@@ -79,9 +84,10 @@ type DayTimelineProps = {
   homework: Map<string, HomeworkItem> | null;
   onOpen: (lesson: Lesson) => void;
   onAbsence?: (kind: AbsenceKind, lesson: Lesson) => void;
+  metaKind?: MetaKind;
 };
 
-export const DayTimeline = ({ lessons, dateKey, todayKey, now, homework, onOpen, onAbsence }: DayTimelineProps) => {
+export const DayTimeline = ({ lessons, dateKey, todayKey, now, homework, onOpen, onAbsence, metaKind = 'group' }: DayTimelineProps) => {
   const { t } = useI18n();
   const isToday = dateKey === todayKey;
   const isPastDay = dateKey < todayKey;
@@ -127,6 +133,7 @@ export const DayTimeline = ({ lessons, dateKey, todayKey, now, homework, onOpen,
               nowMinutes={nowMinutes}
               homework={homework?.get(homeworkKey(lesson))}
               onOpen={onOpen}
+              metaKind={metaKind}
             />
             {lesson === absenceTarget && (
               <div className="absence-actions">

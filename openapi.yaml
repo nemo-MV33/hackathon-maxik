@@ -48,6 +48,14 @@ paths:
                 lang: { type: string, enum: [ru, en] }
                 notifications: { $ref: '#/components/schemas/NotificationsPatch' }
                 onboarded: { type: boolean, description: Пользователь прошёл знакомство }
+                muted: { type: boolean, description: Выключить все уведомления разом }
+                reminderMinutes: { type: integer, enum: [5, 10, 15, 30], description: За сколько минут до пары напоминать }
+                endMinutes: { type: integer, enum: [5, 10], description: За сколько минут до конца пары напоминать }
+                summaryTime: { type: string, pattern: '^(1[6-9]|2[0-3]):(00|30)$', description: Время сводки на завтра по Иркутску }
+                controls:
+                  type: object
+                  description: Формы контроля по дисциплинам; null удаляет отметку
+                  additionalProperties: { type: [string, 'null'], enum: [exam, credit, graded_credit, coursework, none, null] }
       responses:
         '200':
           description: Профиль сохранён
@@ -56,6 +64,133 @@ paths:
               schema: { $ref: '#/components/schemas/ProfileResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      summary: Удалить аккаунт
+      description: Стирает профиль, настройки, личное ДЗ и напоминания, снимает роли старосты и редактора. Сообщения об опозданиях остаются в журнале группы.
+      responses:
+        '200':
+          description: Аккаунт удалён
+          content:
+            application/json:
+              schema: { type: object, required: [deleted], properties: { deleted: { type: boolean } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/absence/history:
+    get:
+      summary: История опозданий
+      description: Студенту — только свои сообщения. Старосте — ещё и «досье» по каждому студенту группы (минуты опоздания, пропуск пары = 90 минут), а с параметром student — подробности по одному студенту.
+      parameters:
+        - { name: student, in: query, required: false, schema: { type: integer } }
+      responses:
+        '200':
+          description: История
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [role]
+                properties:
+                  role: { type: string, enum: [headman, student] }
+                  mine: { type: array, items: { type: object } }
+                  students:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, totalMinutes, late, absent]
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        totalMinutes: { type: integer }
+                        late: { type: integer }
+                        absent: { type: integer }
+                  student: { type: object }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: У студента нет сообщений }
+  /api/group/members:
+    get:
+      summary: Одногруппники, которые пользуются ботом (только старосте)
+      responses:
+        '200':
+          description: Список для выбора доверенного лица
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deputy: { type: [object, 'null'] }
+                  members: { type: array, items: { type: object, properties: { userId: { type: integer }, name: { type: string } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Доступно только старосте }
+  /api/deputy:
+    put:
+      summary: Кому уходят опоздания самого старосты
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [userId], properties: { userId: { type: [integer, 'null'] } } }
+      responses:
+        '200': { description: Сохранено }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Доступно только старосте }
+  /api/announcements:
+    get:
+      summary: Объявления старосты для группы пользователя
+      responses:
+        '200':
+          description: Актуальные объявления; myRemindAt — время напоминания с учётом личной настройки
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [canPublish, items]
+                properties:
+                  canPublish: { type: boolean }
+                  items: { type: array, items: { $ref: '#/components/schemas/Announcement' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      summary: Опубликовать объявление (староста)
+      description: Бот отправляет объявление в чат группы и каждому одногруппнику в личку.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, maxLength: 1500 }
+                remindAt: { type: [string, 'null'], format: date-time }
+      responses:
+        '200': { description: Опубликовано, postedToChat — удалось ли написать в чат группы }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Публикует только староста }
+  /api/announcements/{id}:
+    delete:
+      summary: Удалить объявление (староста)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Удалено }
+        '403': { description: Удаляет только староста }
+        '404': { description: Не найдено }
+  /api/announcements/{id}/reminder:
+    put:
+      summary: Своё время напоминания об объявлении
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - { type: object, required: [remindAt], properties: { remindAt: { type: [string, 'null'], format: date-time } } }
+                - { type: object, required: [reset], properties: { reset: { const: true } } }
+      responses:
+        '200': { description: Сохранено }
+        '404': { description: Не найдено }
   /api/absence:
     get:
       summary: Сообщения об опоздании за день
@@ -172,13 +307,14 @@ paths:
           application/json:
             schema:
               type: object
-              required: [date, lessonNumber, subgroup, text, scope]
+              required: [date, lessonNumber, subgroup, scope]
               properties:
                 date: { type: string, format: date }
                 lessonNumber: { type: integer, minimum: 1 }
                 subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
                 text: { type: [string, 'null'], maxLength: 2000, description: null удаляет версию }
-                scope: { type: string, enum: [shared, personal] }
+                scope: { type: string, enum: [shared, personal, reminder], description: reminder — только личное напоминание, text не нужен }
+                remindAt: { type: [string, 'null'], format: date-time, description: Личное напоминание о ДЗ; null снимает }
       responses:
         '200':
           description: ДЗ сохранено или удалено
@@ -222,10 +358,12 @@ components:
     Notifications:
       type: object
       description: Уведомления в личный чат с ботом
-      required: [summary, homework, changes, exams]
+      required: [summary, homework, changes, exams, announcements, lessonEnd]
       properties:
         exams: { type: boolean, description: Экзамены и зачёты за 3 дня и накануне }
-        summary: { type: boolean, description: Сводка на завтра в 20:00 }
+        announcements: { type: boolean, description: Объявления старосты и напоминания по ним }
+        lessonEnd: { type: boolean, description: Напоминание перед концом пары (по умолчанию выключено) }
+        summary: { type: boolean, description: Сводка на завтра во время summaryTime }
         homework: { type: boolean, description: Новое или изменённое ДЗ группы }
         changes: { type: boolean, description: Переносы, отмены и смена аудитории }
     NotificationsPatch:
@@ -236,6 +374,20 @@ components:
         homework: { type: boolean }
         changes: { type: boolean }
         exams: { type: boolean }
+        announcements: { type: boolean }
+        lessonEnd: { type: boolean }
+    Announcement:
+      type: object
+      required: [id, text, remindAt, myRemindAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        text: { type: string }
+        remindAt: { type: [string, 'null'], format: date-time, description: Время старосты }
+        myRemindAt: { type: [string, 'null'], format: date-time, description: Время с учётом личной настройки }
+        customized: { type: boolean }
+        authorName: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        mine: { type: boolean }
     ProfileResponse:
       type: object
       required: [profile]

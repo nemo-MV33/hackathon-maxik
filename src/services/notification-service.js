@@ -1,12 +1,14 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { Keyboard } from '@maxhub/max-bot-api';
-import { CONTROL_TYPES, notificationEnabled } from '../bot/create-bot.js';
+import { CONTROL_TYPES } from '../bot/create-bot.js';
 import { formatDate } from '../bot/format.js';
 import { lessonTypeLabel, texts } from '../bot/i18n.js';
-import { dateFromKey, irkutskDateKey, irkutskMinutes } from '../lib/irkutsk.js';
+import { dateFromKey, irkutskClock, irkutskDateKey, irkutskMinutes } from '../lib/irkutsk.js';
+import { notificationEnabled, summaryTime, timeToMinutes } from '../lib/settings.js';
 
-const SUMMARY_MINUTES = 20 * 60;
+// Сводка и напоминания о контрольных приходят во время, которое выбрал пользователь (по умолчанию 20:00).
+const summaryDue = (prefs, now) => irkutskMinutes(now) >= timeToMinutes(summaryTime(prefs));
 const EXAM_REMINDER_DAYS = [3, 1];
 const CHANGES_WINDOW_DAYS = 7;
 const MINUTE = 60_000;
@@ -112,6 +114,7 @@ export class NotificationService {
     };
     every(MINUTE, () => this.sendSummaries());
     every(MINUTE, () => this.sendExamReminders());
+    every(MINUTE, () => this.sendScheduled());
     every(this.changesIntervalMs, () => this.checkChanges());
     const first = setTimeout(() => this.checkChanges().catch(console.error), 5 * MINUTE);
     first.unref();
@@ -178,12 +181,11 @@ export class NotificationService {
     let sent = 0;
     try {
       const now = this.now();
-      if (irkutskMinutes(now) < SUMMARY_MINUTES) return 0;
       const tomorrow = irkutskDateKey(now, 1);
       const schedules = new Map();
       const users = (await this.preferences.entries())
         .filter(([, prefs]) => prefs.selection?.kind === 'group' && notificationEnabled(prefs, 'summary'))
-        .filter(([, prefs]) => prefs.summarySentFor !== tomorrow);
+        .filter(([, prefs]) => summaryDue(prefs, now) && prefs.summarySentFor !== tomorrow);
 
       for (const [id, prefs] of users) {
         const groupId = prefs.selection.id;
@@ -212,7 +214,6 @@ export class NotificationService {
   // Экзамены и зачёты: напоминание за 3 дня и накануне, в то же время, что и сводка.
   async sendExamReminders() {
     const now = this.now();
-    if (irkutskMinutes(now) < SUMMARY_MINUTES) return 0;
     const schedules = new Map();
     const scheduleFor = (groupId, subgroup, dateKey) => {
       const key = `${groupId}:${subgroup ?? 0}:${dateKey}`;
@@ -221,7 +222,8 @@ export class NotificationService {
     };
     let sent = 0;
     const users = (await this.preferences.entries())
-      .filter(([, prefs]) => prefs.selection?.kind === 'group' && notificationEnabled(prefs, 'exams'));
+      .filter(([, prefs]) => prefs.selection?.kind === 'group' && notificationEnabled(prefs, 'exams'))
+      .filter(([, prefs]) => summaryDue(prefs, now));
     for (const [id, prefs] of users) {
       const reminded = new Set(prefs.examReminders ?? []);
       const fresh = [];
@@ -247,6 +249,83 @@ export class NotificationService {
       if (fresh.length) {
         const current = await this.preferences.get(id);
         await this.preferences.set(id, { ...current, examReminders: [...(current.examReminders ?? []), ...fresh].slice(-50) });
+      }
+    }
+    return sent;
+  }
+
+  // Новое объявление старосты — каждому в личку, кроме автора.
+  async notifyAnnouncement(item) {
+    const recipients = (await this.#recipients(item.groupId, 'announcements'))
+      .filter(({ id }) => String(id) !== String(item.authorId));
+    for (const { id, prefs } of recipients) {
+      const t = texts(prefs.lang);
+      try {
+        await this.#send(id, prefs.lang, t.announcementNew(item, this.#when(prefs.lang, item.remindAt)), 'plan', t.openPlanner);
+      } catch (error) {
+        console.error(`Announcement notification failed for user ${id}:`, error.message);
+      }
+    }
+    return recipients.length;
+  }
+
+  #when(lang, iso) {
+    if (!iso) return null;
+    const date = new Date(iso);
+    return `${shortDate(lang, irkutskDateKey(date))}, ${irkutskClock(date)}`;
+  }
+
+  // Напоминания «на время»: об объявлениях старосты и о ДЗ из планера.
+  // У объявления время общее, но каждый может сдвинуть или выключить его у себя.
+  async sendScheduled() {
+    const now = this.now();
+    let sent = 0;
+    const announcements = await this.community.allAnnouncements();
+    for (const [id, prefs] of await this.preferences.entries()) {
+      if (prefs.selection?.kind !== 'group') continue;
+      const done = new Set(prefs.sentScheduled ?? []);
+      const fresh = [];
+      const t = texts(prefs.lang);
+      const due = [];
+      if (notificationEnabled(prefs, 'announcements')) {
+        for (const item of announcements) {
+          if (String(item.groupId) !== String(prefs.selection.id)) continue;
+          const own = prefs.announcementReminders?.[item.id];
+          const at = own === undefined ? item.remindAt : own;
+          if (!at || new Date(at) > now || now - new Date(at) > 6 * 60 * MINUTE) continue;
+          const key = `a:${item.id}:${at}`;
+          if (!done.has(key)) due.push({ key, text: t.announcementReminder(item), payload: 'plan', label: t.openPlanner });
+        }
+      }
+      if (notificationEnabled(prefs, 'homework')) {
+        for (const [lessonKey, reminder] of Object.entries(prefs.homeworkReminders ?? {})) {
+          if (!reminder?.at || new Date(reminder.at) > now || now - new Date(reminder.at) > 6 * 60 * MINUTE) continue;
+          const key = `h:${lessonKey}:${reminder.at}`;
+          if (done.has(key)) continue;
+          const [date, lessonNumber, subgroup] = lessonKey.split(':');
+          const lesson = { date, lessonNumber: Number(lessonNumber), subgroup: Number(subgroup) || null };
+          const homework = (await this.community.homeworkForUser(prefs.selection.id, id, { from: date, to: date, subgroup: prefs.subgroup }))
+            .find((item) => item.lessonNumber === lesson.lessonNumber);
+          due.push({
+            key,
+            text: t.homeworkReminder(reminder.subject ?? homework?.subject ?? '', `${shortDate(prefs.lang, date)}, ${reminder.time ?? ''}`.replace(/, $/, ''), homework?.text),
+            payload: appPayload(lesson),
+            label: t.openLesson,
+          });
+        }
+      }
+      for (const item of due) {
+        try {
+          await this.#send(Number(id), prefs.lang, item.text, item.payload, item.label);
+          fresh.push(item.key);
+          sent += 1;
+        } catch (error) {
+          console.error(`Scheduled reminder failed for user ${id}:`, error.message);
+        }
+      }
+      if (fresh.length) {
+        const current = await this.preferences.get(id);
+        await this.preferences.set(id, { ...current, sentScheduled: [...(current.sentScheduled ?? []), ...fresh].slice(-100) });
       }
     }
     return sent;
@@ -328,7 +407,7 @@ export class NotificationService {
   #changesText(lang, groupTitle, changes) {
     const t = texts(lang);
     const lines = changes.slice(0, 12).map(({ type, lesson, previous }) => {
-      const when = t.changeWhen(shortDate(lang, lesson.date), lesson.lessonNumber);
+      const when = t.changeWhen(shortDate(lang, lesson.date), String(lesson.time ?? '').slice(0, 5));
       if (type === 'cancelled') return `· ${t.changeCancelled(when, lesson.subject)}`;
       if (type === 'added') return `· ${t.changeAdded(when, lesson.subject)}`;
       if (type === 'subject') return `· ${t.changeSubject(when, previous.subject, lesson.subject)}`;

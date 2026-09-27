@@ -1,49 +1,54 @@
-import { useEffect, useState } from 'react';
-import { Switch } from '@maxhub/max-ui';
-import { currentUser, hasNativeBackButton, haptic, miniAppLink, shareText } from '../bridge/max';
-import { loadAbsences, loadMe, updateSettings, type AbsenceNote, type Notifications, type RemoteProfile } from '../lib/api';
+import { useState } from 'react';
+import { Button } from '@maxhub/max-ui';
+import { currentUser, haptic, miniAppLink, shareText } from '../bridge/max';
+import { deleteAccount } from '../lib/api';
 import type { LocalProfile } from '../lib/profile';
-import { useBackButton } from '../lib/useBackButton';
 import { useI18n } from '../lib/i18n';
+import { useMe } from '../lib/me';
+import { BackHeader } from '../components/BackHeader';
 import { LanguageSwitch } from '../components/LanguageSwitch';
-import { ChevronLeft, ChevronRight } from '../components/Icon';
-import { ErrorState, Loading } from '../components/Status';
+import { ThemeSwitch } from '../components/ThemeSwitch';
+import { Sheet } from '../components/Sheet';
+import {
+  BellIcon, BookIcon, ChevronRight, GlobeIcon, HelpIcon, IdIcon, PaletteIcon, RunIcon, SchoolIcon, ShareIcon, TrashIcon,
+} from '../components/Icon';
+
+export type ProfileSection = 'account' | 'university' | 'disciplines' | 'notifications' | 'absences' | 'faq';
 
 type Props = {
   profile: LocalProfile;
-  onChangeGroup: () => void;
   onBack: () => void;
+  onOpen: (section: ProfileSection) => void;
+  onAccountDeleted: () => void;
 };
 
-type Settings = Pick<RemoteProfile, 'remindersEnabled' | 'notifications'>;
-type SettingKey = 'reminders' | keyof Notifications;
+type RowProps = { icon: React.ReactNode; title: string; hint?: string; onClick: () => void };
+const Row = ({ icon, title, hint, onClick }: RowProps) => (
+  <button type="button" className="settings-row" onClick={onClick}>
+    <span className="settings-row__icon">{icon}</span>
+    <span className="settings-row__text">
+      <span className="settings-row__title">{title}</span>
+      {hint && <span className="settings-row__hint">{hint}</span>}
+    </span>
+    <ChevronRight size={18} />
+  </button>
+);
 
-const SETTINGS: SettingKey[] = ['reminders', 'summary', 'homework', 'changes', 'exams'];
-
-// Заготовка профиля: шапка и группа. Раздел «Уведомления» рабочий — настройки общие с ботом.
-export const ProfileScreen = ({ profile, onChangeGroup, onBack }: Props) => {
+// Профиль — оглавление: сначала учёба (самое частое), потом настройки, внизу справка и удаление аккаунта.
+export const ProfileScreen = ({ profile, onBack, onOpen, onAccountDeleted }: Props) => {
   const { t } = useI18n();
+  const { me } = useMe();
   const user = currentUser();
-  const [settings, setSettings] = useState<Settings | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState<SettingKey | null>(null);
-  const [attempt, setAttempt] = useState(0);
-  const [lateness, setLateness] = useState<AbsenceNote[] | null>(null);
   const [inviteNotice, setInviteNotice] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  useBackButton(onBack);
-
-  useEffect(() => {
-    let active = true;
-    setError(null);
-    loadMe()
-      .then(({ profile: remote }) => active && setSettings({ remindersEnabled: remote.remindersEnabled, notifications: remote.notifications }))
-      .catch((failure: Error) => active && setError(failure.message));
-    loadAbsences()
-      .then((data) => active && data.role === 'headman' && setLateness(data.items))
-      .catch(() => {});
-    return () => { active = false; };
-  }, [attempt]);
+  const name = [me?.user.firstName ?? user?.first_name, me?.user.lastName ?? user?.last_name].filter(Boolean).join(' ')
+    || me?.user.username || user?.username || t.profile;
+  const username = me?.user.username ?? user?.username;
+  const settings = me?.profile;
+  const notifyHint = !settings ? undefined : settings.muted ? t.notifyAllOff : t.notifyHintOn(settings.reminderMinutes, settings.summaryTime);
 
   const invite = async () => {
     const link = miniAppLink(`group_${profile.group.id}_${profile.subgroup ?? 0}`);
@@ -52,123 +57,85 @@ export const ProfileScreen = ({ profile, onChangeGroup, onBack }: Props) => {
     else if (result.status === 'manual') setInviteNotice(link);
   };
 
-  const labels: Record<SettingKey, [string, string]> = {
-    reminders: [t.notifyReminders, t.notifyRemindersHint],
-    summary: [t.notifySummary, t.notifySummaryHint],
-    homework: [t.notifyHomework, t.notifyHomeworkHint],
-    changes: [t.notifyChanges, t.notifyChangesHint],
-    exams: [t.notifyExams, t.notifyExamsHint],
-  };
-
-  const isOn = (key: SettingKey) => (key === 'reminders' ? settings!.remindersEnabled : settings!.notifications[key]);
-
-  const toggle = async (key: SettingKey) => {
-    if (!settings || saving) return;
-    const next = !isOn(key);
-    const previous = settings;
-    setSettings(key === 'reminders'
-      ? { ...settings, remindersEnabled: next }
-      : { ...settings, notifications: { ...settings.notifications, [key]: next } });
-    setSaving(key);
+  const remove = async () => {
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      const { profile: saved } = await updateSettings(key === 'reminders'
-        ? { remindersEnabled: next }
-        : { notifications: { [key]: next } });
-      setSettings({ remindersEnabled: saved.remindersEnabled, notifications: saved.notifications });
-      haptic.tap();
+      await deleteAccount();
+      haptic.success();
+      try { localStorage.clear(); } catch {}
+      onAccountDeleted();
     } catch (failure) {
-      setSettings(previous);
-      setError((failure as Error).message);
-    } finally {
-      setSaving(null);
+      setDeleteError((failure as Error).message);
+      setDeleting(false);
     }
   };
 
-  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.username || t.profile;
-
   return (
     <div className="screen screen--profile">
-      {!hasNativeBackButton() && (
-        <button type="button" className="back-link" onClick={onBack}><ChevronLeft size={18} />{t.scheduleBack}</button>
-      )}
+      <BackHeader label={t.back} onBack={onBack} />
 
       <header className="profile-head">
         <span className="profile-head__avatar" aria-hidden="true">{name.slice(0, 1).toUpperCase()}</span>
         <div className="profile-head__text">
           <h1 className="profile-head__name">{name}</h1>
-          {user?.username && <p className="profile-head__meta">@{user.username}</p>}
+          <p className="profile-head__meta">
+            {[username && `@${username}`, profile.group.title].filter(Boolean).join(' · ')}
+          </p>
+          {me && me.role !== 'student' && <span className="role-badge">{t.roleNames[me.role]}</span>}
         </div>
       </header>
 
-      <section className="settings-list" aria-label={t.profile}>
-        <button type="button" className="settings-row" onClick={onChangeGroup}>
-          <span className="settings-row__text">
-            <span className="settings-row__title">{t.profileGroup}</span>
-            <span className="settings-row__hint">
-              {profile.group.title} · {profile.subgroup ? t.subgroup(profile.subgroup) : t.wholeGroup}
-            </span>
-          </span>
-          <ChevronRight size={18} />
-        </button>
-        <div className="settings-row">
-          <span className="settings-row__text"><span className="settings-row__title">{t.profileLanguage}</span></span>
-          <LanguageSwitch />
+      <section className="settings" aria-label={t.studySection}>
+        <p className="settings__label">{t.studySection}</p>
+        <div className="settings-list">
+          <Row icon={<SchoolIcon />} title={t.university} hint={`${profile.group.title} · ${profile.subgroup ? t.subgroup(profile.subgroup) : t.wholeGroup}`} onClick={() => onOpen('university')} />
+          <Row icon={<BookIcon />} title={t.disciplines} hint={t.disciplinesHint} onClick={() => onOpen('disciplines')} />
+          <Row icon={<RunIcon />} title={t.absencesSection} hint={me?.role === 'headman' ? t.absencesHintHeadman : t.absencesHint} onClick={() => onOpen('absences')} />
         </div>
-        <button type="button" className="settings-row" onClick={invite}>
-          <span className="settings-row__text"><span className="settings-row__title">{t.invite}</span></span>
-          <ChevronRight size={18} />
-        </button>
       </section>
-      {inviteNotice && <p className="toast toast--ok" role="status">{inviteNotice}</p>}
 
-      {lateness && (
-        <section className="settings" aria-labelledby="lateness-title">
-          <div className="section-head">
-            <h2 id="lateness-title" className="section-title">{t.lateTodayTitle}</h2>
+      <section className="settings" aria-label={t.settingsSection}>
+        <p className="settings__label">{t.settingsSection}</p>
+        <div className="settings-list">
+          <Row icon={<BellIcon size={20} />} title={t.notificationsTitle} hint={notifyHint} onClick={() => onOpen('notifications')} />
+          <div className="settings-row settings-row--static">
+            <span className="settings-row__icon"><GlobeIcon /></span>
+            <span className="settings-row__text"><span className="settings-row__title">{t.profileLanguage}</span></span>
+            <LanguageSwitch />
           </div>
-          {lateness.length === 0
-            ? <p className="hw-block__empty">{t.lateTodayEmpty}</p>
-            : (
-              <div className="settings-list">
-                {lateness.map((note) => (
-                  <div key={note.id} className="settings-row">
-                    <span className="settings-row__text">
-                      <span className="settings-row__title">{note.senderName} · {t.lateKind(note.kind)}</span>
-                      <span className="settings-row__hint">
-                        {[note.lesson && `${t.pairShort(note.lesson.lessonNumber)} · ${note.lesson.subject}`,
-                          note.reason ? t.absenceReasons[note.reason] : note.text].filter(Boolean).join(' · ')}
-                      </span>
-                    </span>
-                    <span className={`status-pill${note.acceptedAt ? ' is-ok' : ''}`}>{note.acceptedAt ? t.accepted : t.waiting}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-        </section>
+          <div className="settings-row settings-row--static settings-row--wrap">
+            <span className="settings-row__icon"><PaletteIcon /></span>
+            <span className="settings-row__text"><span className="settings-row__title">{t.theme}</span></span>
+            <ThemeSwitch />
+          </div>
+        </div>
+      </section>
+
+      <section className="settings" aria-label={t.accountSection}>
+        <p className="settings__label">{t.accountSection}</p>
+        <div className="settings-list">
+          <Row icon={<IdIcon />} title={t.account} hint={t.accountHint} onClick={() => onOpen('account')} />
+          <Row icon={<ShareIcon />} title={t.invite} onClick={invite} />
+          <Row icon={<HelpIcon />} title={t.faq} hint={t.faqHint} onClick={() => onOpen('faq')} />
+        </div>
+        {inviteNotice && <p className="toast" role="status">{inviteNotice}</p>}
+      </section>
+
+      <button type="button" className="danger-button" onClick={() => setConfirmDelete(true)}>
+        <TrashIcon size={18} /> {t.deleteAccount}
+      </button>
+      <p className="footnote">{t.deleteFootnote}</p>
+
+      {confirmDelete && (
+        <Sheet title={t.deleteTitle} labelId="delete-title" onClose={() => setConfirmDelete(false)} busy={deleting} hint={me?.role === 'headman' ? t.deleteHintHeadman : t.deleteHint}>
+          {deleteError && <p className="toast toast--error" role="alert">{deleteError}</p>}
+          <div className="actions">
+            <Button stretched size="large" variant="destructive" loading={deleting} onClick={remove}>{t.deleteYes}</Button>
+            <Button stretched variant="ghost" disabled={deleting} onClick={() => setConfirmDelete(false)}>{t.cancel}</Button>
+          </div>
+        </Sheet>
       )}
-
-      <section className="settings" aria-labelledby="notifications-title">
-        <div className="section-head">
-          <h2 id="notifications-title" className="section-title">{t.notificationsTitle}</h2>
-          <p className="section-note">{t.notificationsHint}</p>
-        </div>
-        {!settings && !error && <Loading />}
-        {!settings && error && <ErrorState message={error} onRetry={() => setAttempt((value) => value + 1)} />}
-        {settings && (
-          <div className="settings-list">
-            {SETTINGS.map((key) => (
-              <label key={key} className="settings-row">
-                <span className="settings-row__text">
-                  <span className="settings-row__title">{labels[key][0]}</span>
-                  <span className="settings-row__hint">{labels[key][1]}</span>
-                </span>
-                <Switch checked={isOn(key)} disabled={saving === key} onChange={() => toggle(key)} />
-              </label>
-            ))}
-          </div>
-        )}
-        {settings && error && <p className="toast toast--error" role="alert">{error}</p>}
-      </section>
     </div>
   );
 };

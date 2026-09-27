@@ -10,12 +10,13 @@ import { useNow } from '../lib/useNow';
 import { haptic } from '../bridge/max';
 import { DayTimeline, lessonEnd, lessonStart } from '../components/Timeline';
 import { Empty, ErrorState, ScheduleSkeleton } from '../components/Status';
-import { ChevronLeft, ChevronRight, UserIcon } from '../components/Icon';
+import { ChevronLeft, ChevronRight, SearchIcon } from '../components/Icon';
+import { TopBar } from '../components/TopBar';
+import { ScheduleSearch } from '../components/ScheduleSearch';
+import type { EntityTarget } from './EntityScheduleScreen';
 import { AbsenceSheet } from '../components/AbsenceSheet';
 import type { AbsenceKind } from '../lib/api';
 import type { LaunchTarget } from '../App';
-import { daysBetween, useUpcomingExams } from '../lib/exams';
-import { lessonKindName } from '../lib/lessonKind';
 import { homeworkKey, useRemoteHomework } from '../data/homework';
 
 type Mode = 'day' | 'week';
@@ -40,20 +41,18 @@ const dayDiff = (key: string, todayKey: string) =>
 
 type DayHeadingProps = { dateKey: string; todayKey: string; lessons: Lesson[]; level?: 'h1' | 'h2'; loading?: boolean };
 
-const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1', loading = false }: DayHeadingProps) => {
+// Заголовок дня в одну строку: «Завтра · понедельник, 28 сентября», под ним — сколько пар и во сколько.
+export const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1', loading = false }: DayHeadingProps) => {
   const { t } = useI18n();
   const Tag = level;
   const diff = dayDiff(dateKey, todayKey);
-  const relative = { 0: t.today, 1: t.tomorrow, [-1]: t.yesterday }[diff];
-  // «суббота, 26 сентября» → две строки: день недели и дата.
-  const [weekday, date] = formatDay(fromDateKey(dateKey)).split(/,\s*/);
+  const relative = { 0: t.today, 1: t.tomorrow, 2: t.dayAfterTomorrow, [-1]: t.yesterday }[diff];
   return (
     <div className={`day-heading day-heading--${level}`}>
-      {relative && <span className={`day-heading__eyebrow${diff === 0 ? ' is-today' : ''}`}>{relative}</span>}
-      <Tag className="day-heading__title">
-        <span className="first-letter">{weekday}{date ? ',' : ''}</span>
-        {date && <>{level === 'h1' ? <br /> : ' '}{date}</>}
-      </Tag>
+      <div className="day-heading__row">
+        {relative && <span className={`day-heading__eyebrow${diff === 0 ? ' is-today' : ''}`}>{relative}</span>}
+        <Tag className="day-heading__title first-letter">{formatDay(fromDateKey(dateKey))}</Tag>
+      </div>
       {/* Пока неделя не загрузилась, строка пустая той же высоты: «Пар нет» до данных было бы неправдой. */}
       <span className="day-heading__summary">
         {loading ? '\u00a0' : lessons.length > 0
@@ -69,14 +68,13 @@ type ScheduleProps = {
   profileRevision: number;
   launch?: LaunchTarget;
   onLaunchHandled?: () => void;
-  onChangeGroup: () => void;
   onOpenLesson: (lesson: Lesson) => void;
   onOpenProfile: () => void;
-  onOpenExams: () => void;
+  onOpenEntity: (target: EntityTarget) => void;
 };
 
 export const Schedule = ({
-  profile, profileRevision, launch, onLaunchHandled, onChangeGroup, onOpenLesson, onOpenProfile, onOpenExams,
+  profile, profileRevision, launch, onLaunchHandled, onOpenLesson, onOpenProfile, onOpenEntity,
 }: ScheduleProps) => {
   const { t } = useI18n();
   const now = useNow();
@@ -84,7 +82,7 @@ export const Schedule = ({
   const [mode, setModeState] = useState<Mode>(readMode);
   const [selected, setSelected] = useState(launch?.date ?? todayKey);
   const [absence, setAbsence] = useState<{ kind: AbsenceKind; lesson: Lesson } | null>(null);
-  const exams = useUpcomingExams(profile.group.id, profile.subgroup, todayKey);
+  const [searching, setSearching] = useState(false);
   const openAbsence = (kind: AbsenceKind, lesson: Lesson) => setAbsence({ kind, lesson });
   const todayRef = useRef<HTMLElement>(null);
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -157,34 +155,27 @@ export const Schedule = ({
   const weekDays = days.filter((key) => lessonsOn(key).length > 0);
 
   return (
-    <div className="screen screen--schedule">
-      <header className="topbar">
-        <button type="button" className="chip chip--group" onClick={onChangeGroup} aria-label={t.groupLabel(profile.group.title)}>
-          <span className="chip__title">{profile.group.title}</span>
-          <span className="chip__sub">{profile.subgroup ? t.subgroupShort(profile.subgroup) : t.wholeGroup}</span>
-          <ChevronRight size={14} />
-        </button>
-        <button type="button" className="icon-button" aria-label={t.profile} onClick={onOpenProfile}>
-          <UserIcon size={18} />
-        </button>
-        <div className="segment" role="tablist" aria-label={t.scheduleView}>
-          {(['day', 'week'] as const).map((value) => (
-            <button key={value} type="button" role="tab" aria-selected={mode === value} onClick={() => setMode(value)}>
-              {value === 'day' ? t.day : t.week}
-            </button>
-          ))}
-        </div>
-      </header>
+    <div className="screen screen--tabbed screen--schedule">
+      <TopBar
+        onOpenProfile={onOpenProfile}
+        left={(
+          <div className="segment" role="tablist" aria-label={t.scheduleView}>
+            {(['day', 'week'] as const).map((value) => (
+              <button key={value} type="button" role="tab" aria-selected={mode === value} onClick={() => { setMode(value); setSearching(false); }}>
+                {value === 'day' ? t.day : t.week}
+              </button>
+            ))}
+          </div>
+        )}
+        extra={(
+          <button type="button" className={`icon-button icon-button--lg${searching ? ' is-active' : ''}`} aria-label={t.searchSchedule} aria-pressed={searching} onClick={() => setSearching((value) => !value)}>
+            <SearchIcon size={18} />
+          </button>
+        )}
+      />
 
-      {exams.length > 0 && (
-        <button type="button" className="exam-banner" onClick={onOpenExams}>
-          <span className="exam-banner__title">{t.examsSoon(exams.length)}</span>
-          <span className="exam-banner__next">
-            {t.examsNext(lessonKindName(exams[0].lessonType), exams[0].subject, t.daysLeft(daysBetween(todayKey, exams[0].date)))}
-          </span>
-          <ChevronRight size={18} />
-        </button>
-      )}
+      {searching && <ScheduleSearch onOpen={onOpenEntity} onClose={() => setSearching(false)} />}
+      {!searching && (<>
 
       {mode === 'day' && <DayHeading dateKey={selected} todayKey={todayKey} lessons={selectedLessons} loading={week.status !== 'ready'} />}
 
@@ -252,6 +243,7 @@ export const Schedule = ({
       {meta.status === 'ready' && (
         <p className="footnote">{t.footnote(formatUpdatedAt(meta.data.updatedAt))}</p>
       )}
+      </>)}
     </div>
   );
 };

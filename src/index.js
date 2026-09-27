@@ -25,6 +25,7 @@ const community = new CommunityStore(
 );
 let notifications;
 const onHomeworkSaved = (item) => notifications?.homeworkSaved(item);
+const onAnnouncement = (item) => notifications?.notifyAnnouncement(item);
 const bot = createBot({
   token: config.botToken,
   service,
@@ -33,6 +34,7 @@ const bot = createBot({
   preferences,
   community,
   onHomeworkSaved,
+  onAnnouncement,
 });
 notifications = new NotificationService({
   bot,
@@ -46,6 +48,7 @@ const server = createHttpServer({
   preferences,
   community,
   sendAbsence: bot.sendAbsence,
+  publishAnnouncement: bot.publishAnnouncement,
   onHomeworkSaved,
   apiAccessKey: config.apiAccessKey,
   botToken: config.botToken,

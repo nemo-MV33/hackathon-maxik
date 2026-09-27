@@ -16,6 +16,7 @@ export type Lesson = {
   comment?: string;
   link?: string;
   transferred?: boolean;
+  groups?: string[];
 };
 
 export type WeekSchedule = { weekStart: string; weekEven: boolean; lessons: Lesson[] };

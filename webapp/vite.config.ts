@@ -12,11 +12,14 @@ const versionFile = (): Plugin => ({
   },
 });
 
+// NORFLY_API=http://localhost:3001 — разработка с настоящим API и расписанием вместо демо-данных.
+const API = process.env.NORFLY_API;
+
 export default defineConfig({
   base: '/',
   define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
-  plugins: [react(), devData(), versionFile()],
+  plugins: [react(), ...(API ? [] : [devData()]), versionFile()],
   server: {
-    proxy: { '/api': 'http://localhost:3000' },
+    proxy: API ? { '/api': API, '/data': API } : { '/api': 'http://localhost:3000' },
   },
 });

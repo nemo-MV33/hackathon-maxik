@@ -20,6 +20,17 @@ const dateFrom = (value, fallback) => {
   return parsed;
 };
 
+// undefined — напоминание не трогаем, null — снять, строка ISO — поставить.
+const reminderInput = (body) => {
+  if (!('remindAt' in body)) return undefined;
+  if (body.remindAt === null) return null;
+  const date = new Date(body.remindAt);
+  if (typeof body.remindAt !== 'string' || Number.isNaN(date.getTime())) throw new HttpError(400, 'invalid_remind_at', 'Некорректное время напоминания');
+  return date.toISOString();
+};
+
+const reminderKey = (item) => `${item.lessonDate ?? item.date}:${item.lessonNumber}:${item.subgroup ?? 0}`;
+
 const lessonInput = (body) => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new HttpError(400, 'invalid_body', 'Ожидался JSON-объект');
@@ -31,8 +42,11 @@ const lessonInput = (body) => {
   if (![null, 1, 2].includes(body.subgroup ?? null)) {
     throw new HttpError(400, 'invalid_subgroup', 'Подгруппа должна быть 1, 2 или null');
   }
-  if (!['shared', 'personal'].includes(body.scope)) throw new HttpError(400, 'invalid_scope', 'Неизвестный тип ДЗ');
-  if (body.text !== null && (typeof body.text !== 'string' || !body.text.trim())) {
+  if (!['shared', 'personal', 'reminder'].includes(body.scope)) throw new HttpError(400, 'invalid_scope', 'Неизвестный тип ДЗ');
+  // scope: 'reminder' — только личное напоминание к паре, текст ДЗ не трогаем.
+  if (body.scope === 'reminder') {
+    if (!('remindAt' in body)) throw new HttpError(400, 'invalid_remind_at', 'Нужно время напоминания или null');
+  } else if (body.text !== null && (typeof body.text !== 'string' || !body.text.trim())) {
     throw new HttpError(400, 'invalid_text', 'ДЗ не может быть пустым');
   }
   if (body.text?.trim().length > MAX_TEXT_LENGTH) {
@@ -42,8 +56,9 @@ const lessonInput = (body) => {
     lessonDate: body.date,
     lessonNumber: body.lessonNumber,
     subgroup: body.subgroup ?? null,
-    text: body.text?.trim() ?? null,
+    text: body.scope === 'reminder' ? null : body.text?.trim() ?? null,
     scope: body.scope,
+    remindAt: reminderInput(body),
   };
 };
 
@@ -60,7 +75,7 @@ const findLesson = async (service, groupId, input) => {
   return lesson;
 };
 
-const serialize = (item) => ({
+const serialize = (item, reminders = {}) => ({
   groupId: Number(item.groupId),
   date: item.lessonDate,
   lessonNumber: item.lessonNumber,
@@ -74,6 +89,7 @@ const serialize = (item) => ({
   updatedAt: item.updatedAt,
   authorName: item.authorName ?? null,
   version: item.version ?? 1,
+  remindAt: reminders[reminderKey(item)]?.at ?? null,
 });
 
 export const getHomework = async ({ user, preferences, community, url }) => {
@@ -99,14 +115,29 @@ export const getHomework = async ({ user, preferences, community, url }) => {
     role,
     canEditShared: role !== 'student',
     period: { from: toDateKey(from), to: toDateKey(to) },
-    items: items.map(serialize),
+    items: items.map((item) => serialize(item, profile.homeworkReminders)),
   };
+};
+
+const saveReminder = async (preferences, userId, lesson, remindAt) => {
+  if (remindAt === undefined) return {};
+  const profile = await preferences.get(userId);
+  const reminders = { ...profile.homeworkReminders };
+  const key = reminderKey({ lessonDate: lesson.date, lessonNumber: lesson.lessonNumber, subgroup: lesson.subgroup });
+  if (remindAt) reminders[key] = { at: remindAt, subject: lesson.subject, time: lesson.time.slice(0, 5) };
+  else delete reminders[key];
+  await preferences.set(userId, { ...profile, homeworkReminders: reminders });
+  return reminders;
 };
 
 export const putHomework = async ({ user, preferences, community, service, body, onHomeworkSaved }) => {
   const { group } = await profileGroup(user, preferences);
   const input = lessonInput(body);
   const lesson = await findLesson(service, group.id, input);
+  const reminders = await saveReminder(preferences, user.id, lesson, input.remindAt);
+  if (input.scope === 'reminder') {
+    return { scope: 'reminder', remindAt: reminders[`${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`]?.at ?? null };
+  }
   const target = {
     groupId: group.id,
     groupTitle: group.title,
@@ -131,7 +162,7 @@ export const putHomework = async ({ user, preferences, community, service, body,
       authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `MAX ID ${user.id}`,
     });
     onHomeworkSaved?.(item);
-    return { item: serialize({ ...item, sharedText: item.text, personalText: null, source: 'shared' }) };
+    return { item: serialize({ ...item, sharedText: item.text, personalText: null, source: 'shared' }, reminders) };
   }
 
   if (input.text === null) {
@@ -139,5 +170,5 @@ export const putHomework = async ({ user, preferences, community, service, body,
     return { deleted: true, scope: input.scope };
   }
   const item = await community.setPersonalHomework(user.id, { ...target, text: input.text });
-  return { item: serialize({ ...item, sharedText: null, personalText: item.text, source: 'personal' }) };
+  return { item: serialize({ ...item, sharedText: null, personalText: item.text, source: 'personal' }, reminders) };
 };

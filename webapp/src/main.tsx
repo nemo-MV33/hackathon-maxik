@@ -12,17 +12,22 @@ import { App } from './App';
 import { webApp } from './bridge/max';
 import { watchForUpdates } from './lib/updates';
 import { I18nProvider } from './lib/i18n';
+import { ThemeProvider } from './lib/theme';
 
 webApp()?.ready?.();
 watchForUpdates();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {/* Светлая тема всегда: в тёмном режиме MAX карточки теряют обводку и цвета презентации. */}
-    <MaxUI colorScheme="light">
-      <I18nProvider>
-        <App />
-      </I18nProvider>
-    </MaxUI>
+    {/* Тему выбирает пользователь в профиле: светлая, тёмная или как на устройстве. */}
+    <ThemeProvider>
+      {(theme) => (
+        <MaxUI colorScheme={theme}>
+          <I18nProvider>
+            <App />
+          </I18nProvider>
+        </MaxUI>
+      )}
+    </ThemeProvider>
   </StrictMode>,
 );

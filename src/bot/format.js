@@ -16,23 +16,41 @@ export const formatDate = (language, dateKey, options = { weekday: 'long', day: 
     .format(new Date(Date.UTC(year, month - 1, day))));
 };
 
-const formatLesson = (language, lesson, scheduleKind) => {
+// Тип пары виден по значку ещё до того, как прочитан текст.
+const KIND_ICONS = {
+  лекция: '📖', практика: '✏️', лабораторная: '🧪', экзамен: '🎯', зачёт: '✅', консультация: '💬',
+};
+const DIGITS = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+const kindIcon = (type) => KIND_ICONS[String(type ?? '').toLowerCase()] ?? '📌';
+const numberIcon = (value) => (value < DIGITS.length ? DIGITS[value] : `${value}.`);
+
+// Номер пары для студента — порядковый в его дне, а не слот ИРНИТУ по времени:
+// если день начинается в 13:45, это «1 пара». Пары подгрупп в одно время делят номер.
+export const ordinalOf = (lessons) => {
+  const slots = [...new Set(lessons.map((lesson) => lesson.lessonNumber))].sort((a, b) => a - b);
+  return (lesson) => slots.indexOf(lesson.lessonNumber) + 1;
+};
+
+const DAY_DIVIDER = '┈┈┈┈┈┈┈┈┈┈┈┈';
+
+const formatLesson = (language, lesson, scheduleKind, ordinal) => {
   const t = texts(language);
   const details = [
     lessonTypeLabel(language, lesson.lessonType),
     lesson.subgroup ? t.subgroupShort(lesson.subgroup) : '',
     lesson.transferred ? t.transferred : '',
-  ].filter(Boolean).join(', ');
-  const where = [
-    lesson.auditories.join(', '),
-    scheduleKind !== 'teacher' ? lesson.teachers.map(shortName).join(', ') : '',
-    scheduleKind !== 'group' ? lesson.groups.join(', ') : '',
   ].filter(Boolean).join(' · ');
+  const where = [
+    lesson.auditories.length ? `📍 ${lesson.auditories.join(', ')}` : '',
+    scheduleKind !== 'teacher' && lesson.teachers.length ? `👤 ${lesson.teachers.map(shortName).join(', ')}` : '',
+    scheduleKind !== 'group' && lesson.groups.length ? `👥 ${lesson.groups.join(', ')}` : '',
+  ].filter(Boolean).join('   ');
   return [
-    t.lessonHeading(lesson.lessonNumber, lesson.time),
-    `${lesson.subject}${details ? ` _(${details})_` : ''}`,
+    `${numberIcon(ordinal)} **${lesson.time}**`,
+    `${kindIcon(lesson.lessonType)} **${lesson.subject}**`,
+    details ? `_${capitalize(details)}_` : '',
     where,
-    lesson.link ?? '',
+    lesson.link ? `🔗 ${lesson.link}` : '',
   ].filter(Boolean).join('\n');
 };
 
@@ -52,10 +70,12 @@ const formatDay = (language, dateKey, lessons, kind, today) => {
   const date = formatDate(language, dateKey, label
     ? { day: 'numeric', month: 'long' }
     : { weekday: 'long', day: 'numeric', month: 'long' });
+  const ordinal = ordinalOf(lessons);
+  const count = new Set(lessons.map((lesson) => lesson.lessonNumber)).size;
   return [
-    t.dayTitle(label, label ? inline(language, date) : date),
+    t.dayTitle(label, label ? inline(language, date) : date, count),
     lessons.length ? '' : t.noLessonsDay,
-    ...lessons.map((lesson) => `${formatLesson(language, lesson, kind)}\n`),
+    ...lessons.map((lesson) => `${formatLesson(language, lesson, kind, ordinal(lesson))}\n`),
   ].join('\n').trim();
 };
 
@@ -79,7 +99,7 @@ export const formatScheduleWeek = (language, schedule, { title, today = new Date
   const days = new Map();
   for (const lesson of schedule.lessons) days.set(lesson.date, [...(days.get(lesson.date) ?? []), lesson]);
   const body = days.size
-    ? [...days.entries()].map(([key, lessons]) => formatDay(language, key, lessons, schedule.kind, today)).join('\n\n')
+    ? [...days.entries()].map(([key, lessons]) => formatDay(language, key, lessons, schedule.kind, today)).join(`\n\n${DAY_DIVIDER}\n\n`)
     : t.noLessonsWeek;
   return [title, heading, body].filter(Boolean).join('\n\n');
 };

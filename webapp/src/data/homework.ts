@@ -16,6 +16,7 @@ export type HomeworkItem = {
   updatedAt: string;
   authorName: string | null;
   version: number;
+  remindAt: string | null;
 };
 
 export type HomeworkData = {
@@ -37,7 +38,10 @@ export const homeworkKey = (lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subg
 export const loadHomework = (groupId: number, from: string, to: string) =>
   apiRequest<HomeworkData>(`/api/homework?groupId=${groupId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
 
-export const saveHomework = (lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>, text: string | null, scope: 'shared' | 'personal') =>
+// remindAt: undefined — напоминание не трогаем, null — снять, ISO — поставить (напоминание личное).
+export const saveHomework = (
+  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null,
+) =>
   apiRequest('/api/homework', {
     method: 'PUT',
     body: JSON.stringify({
@@ -46,6 +50,7 @@ export const saveHomework = (lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'sub
       subgroup: lesson.subgroup,
       text,
       scope,
+      ...(remindAt !== undefined ? { remindAt } : {}),
     }),
   });
 

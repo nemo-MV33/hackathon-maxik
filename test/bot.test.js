@@ -151,7 +151,7 @@ test('первый запуск: язык, поиск группы, подгру
   assert.deepEqual(payloads(subgroup), ['sub:11:1', 'sub:11:2', 'sub:11:all']);
 
   const [onboarding] = await press(STUDENT, 'sub:11:1');
-  assert.match(onboarding.text, /Done! Group ИСТб-25-1 is saved/);
+  assert.match(onboarding.text, /Done, group ИСТб-25-1 is saved/);
   assert.deepEqual(payloads(onboarding), ['onb:all', 'onb:pick', 'onb:none']);
   const [enabled] = await press(STUDENT, 'onb:all');
   assert.match(enabled.text, /Notifications are on/);
@@ -160,7 +160,8 @@ test('первый запуск: язык, поиск группы, подгру
   assert.match(day.text, /Today/);
   assert.match(day.text, /Программирование/);
   assert.doesNotMatch(day.text, /Физика/, 'чужая подгруппа не показывается');
-  assert.match(day.text, /lab/, 'тип пары переведён');
+  assert.match(day.text, /Lab/, 'тип пары переведён');
+  assert.match(day.text, /2️⃣ \*\*11:45/, 'номер пары — порядковый в дне, а не слот ИРНИТУ');
 
   const saved = await preferences.get(STUDENT.user_id);
   assert.equal(saved.onboarded, true);
@@ -229,7 +230,7 @@ test('поиск преподавателя и аудитории, чужая г
   const [other] = await press(STUDENT, 's:group:21:d0');
   assert.ok(payloads(other).includes('mine:21'), 'чужую группу можно сделать своей');
   const [nothing] = await say(STUDENT, 'абракадабра');
-  assert.match(nothing.text, /ничего не нашёл/);
+  assert.match(nothing.text, /ничего не нашлось/);
 });
 
 test('чат группы: настройка, староста, редактор, ДЗ, доступ', async (t) => {
@@ -256,18 +257,19 @@ test('чат группы: настройка, староста, редакто�
   assert.match(forbidden.text, /староста и редакторы/);
 
   const [hint] = await say(ADMIN, '/headman', inGroup);
-  assert.match(hint.text, /Ответь командой \/headman/);
+  assert.match(hint.text, /Кого назначить старостой/, '/headman без ответа открывает список участников');
+  assert.ok(payloads(hint).includes('hs:3'));
   const assigned = await say(ADMIN, '/headman', { ...inGroup, reply: HEADMAN });
   assert.match(assigned.find((item) => item.to === 'chat').text, /Маша Староста/);
   const headmanWelcome = assigned.find((item) => item.to === 'user');
   assert.equal(headmanWelcome.userId, HEADMAN.user_id, 'старосте пришло приветствие в личку');
-  assert.match(headmanWelcome.text, /Ты — староста группы ИСТб-25-1/);
+  assert.match(headmanWelcome.text, /Теперь ты староста группы ИСТб-25-1/);
 
   const [notHeadman] = await say(ADMIN, '/editor', { ...inGroup, reply: STUDENT });
   assert.match(notHeadman.text, /только староста/);
   const editorReplies = await say(HEADMAN, '/editor', { ...inGroup, reply: STUDENT });
   assert.match(editorReplies.find((item) => item.to === 'chat').text, /Аня Петрова теперь может/);
-  assert.match(editorReplies.find((item) => item.to === 'user').text, /Ты можешь записывать ДЗ группы ИСТб-25-1/);
+  assert.match(editorReplies.find((item) => item.to === 'user').text, /Теперь ты можешь записывать ДЗ группы ИСТб-25-1/);
 
   const [picker] = await say(STUDENT, '/add', inGroup);
   const lessonPayload = payloads(picker).find((p) => p.startsWith('gh:'));
@@ -275,7 +277,7 @@ test('чат группы: настройка, староста, редакто�
   const [textPrompt] = await press(STUDENT, lessonPayload, inGroup);
   assert.match(textPrompt.text, /Отправь текст ДЗ/);
   const [tooLong] = await say(STUDENT, 'x'.repeat(2_001), inGroup);
-  assert.match(tooLong.text, /до 2000/);
+  assert.match(tooLong.text, /2000/);
   const [saved] = await say(STUDENT, 'Стр. 45, № 1–10', inGroup);
   assert.match(saved.text, /сохранено/);
 
@@ -313,7 +315,7 @@ test('личная версия ДЗ, сообщение старосте, на�
   assert.ok(lesson);
   await press(STUDENT, lesson);
   const [saved] = await say(STUDENT, 'Решить вариант 3');
-  assert.match(saved.text, /Твоя версия/);
+  assert.match(saved.text, /твою версию/);
   const [list] = await say(STUDENT, '/homework');
   assert.match(list.text, /Решить вариант 3/);
   assert.match(list.text, /твоя версия/);
@@ -326,42 +328,50 @@ test('личная версия ДЗ, сообщение старосте, на�
 
   const [absence] = await say(STUDENT, '/absence');
   assert.deepEqual(payloads(absence), ['abs:late', 'abs:absent', 'cancel']);
-  const [reasons] = await press(STUDENT, 'abs:late');
-  assert.deepEqual(payloads(reasons), ['abr:late:late10', 'abr:late:late20', 'abr:late:transport', 'abo:late', 'cancel']);
+  const [minutes] = await press(STUDENT, 'abs:late');
+  assert.deepEqual(payloads(minutes), ['abm:5', 'abm:10', 'abm:15', 'abm:20', 'abm:30', 'abm:45', 'cancel']);
+  const [reasons] = await press(STUDENT, 'abm:10');
+  assert.deepEqual(payloads(reasons), ['abr:late:late10:10', 'abr:late:late20:10', 'abr:late:transport:10', 'abo:late:10', 'cancel']);
 
   let before = sent.length;
-  const quick = await press(STUDENT, 'abr:late:transport');
-  assert.match(quick.find((item) => item.to === 'callback').text, /Отправил старосте/);
+  const quick = await press(STUDENT, 'abr:late:transport:10');
+  assert.match(quick.find((item) => item.to === 'callback').text, /Передал старосте/);
   let toHeadman = sent.slice(before).find((item) => item.to === 'user');
   assert.equal(toHeadman.userId, HEADMAN.user_id);
-  assert.match(toHeadman.text, /Опоздание · ИСТб-25-1/);
+  assert.match(toHeadman.text, /Опоздание · ~10 мин · ИСТб-25-1/);
   assert.match(toHeadman.text, /Аня Петрова/, 'староста видит, кто опаздывает');
-  assert.match(toHeadman.text, /Задерживается транспорт/);
+  assert.match(toHeadman.text, /Транспорт задерживается/);
 
   await press(STUDENT, 'abs:absent');
   await press(STUDENT, 'abo:absent');
   before = sent.length;
   const replies = await say(STUDENT, 'Температура, справку принесу');
-  assert.match(replies.find((item) => item.to === 'chat').text, /Отправил старосте/);
+  assert.match(replies.find((item) => item.to === 'chat').text, /Передал старосте/);
   toHeadman = sent.slice(before).find((item) => item.to === 'user');
-  assert.match(toHeadman.text, /Отсутствие · ИСТб-25-1/);
+  assert.match(toHeadman.text, /Не придёт · ИСТб-25-1/);
   assert.match(toHeadman.text, /Аня Петрова/);
   assert.match(toHeadman.text, /Температура, справку принесу/);
   assert.equal((await community.pendingNoticesForHeadman(HEADMAN.user_id)).length, 0);
 
   const [settings] = await say(STUDENT, '/settings');
-  assert.match(settings.text, /Уведомления: включено 5 из 5/);
-  assert.deepEqual(payloads(settings), ['set:study', 'set:notify', 'set:lang', 'menu']);
+  assert.match(settings.text, /Уведомления: включено 6 из 7/, '«перед концом пары» по умолчанию выключено');
+  assert.deepEqual(payloads(settings), ['set:study', 'set:notify', 'acct', 'set:lang', 'more']);
   const [notify] = await press(STUDENT, 'set:notify');
   const labels = buttons(notify).map((item) => item.text);
-  assert.ok(labels.includes('За 15 минут до пары: вкл'));
-  assert.ok(labels.includes('Переносы и замены: вкл'));
+  assert.ok(labels.includes('✅ За 15 минут до пары'));
+  assert.ok(labels.includes('✅ Переносы и замены'));
+  assert.ok(labels.includes('▫️ Перед концом пары'));
   const [changesOff] = await press(STUDENT, 'set:n:changes');
-  assert.ok(buttons(changesOff).some((item) => item.text === 'Переносы и замены: выкл'));
+  assert.ok(buttons(changesOff).some((item) => item.text === '▫️ Переносы и замены'));
   const [remindersOff] = await press(STUDENT, 'set:n:reminders');
-  assert.ok(buttons(remindersOff).some((item) => item.text === 'За 15 минут до пары: выкл'));
+  assert.ok(buttons(remindersOff).some((item) => item.text === '▫️ За 15 минут до пары'));
+  const [later] = await press(STUDENT, 'set:rm');
+  assert.ok(buttons(later).some((item) => item.text === '✅ За 30 минут до пары'), 'время напоминания меняется по кругу');
+  const [muted] = await press(STUDENT, 'set:mute');
+  assert.match(muted.text, /Уведомления выключены/);
+  await press(STUDENT, 'set:mute');
   const [summary] = await press(STUDENT, 'settings');
-  assert.match(summary.text, /Уведомления: включено 3 из 5/);
+  assert.match(summary.text, /Уведомления: включено 5 из 7/);
   const [english] = await press(STUDENT, 'set:lang');
   assert.match(english.text, /Language: English/);
   const [cancelled] = await say(STUDENT, '/absence');
@@ -390,9 +400,9 @@ test('сообщение старосте ждёт, пока староста н
   await run({ update_type: 'bot_started', chat_id: PRIVATE_CHAT(HEADMAN).chat_id, user: HEADMAN });
   const delivered = sent.slice(before).find((item) => item.to === 'user' && item.userId === HEADMAN.user_id);
   assert.ok(delivered, 'сообщение дошло после «Начать»');
-  assert.match(delivered.text, /Отсутствие · ИСТб-25-1/);
+  assert.match(delivered.text, /Не придёт · ИСТб-25-1/);
   assert.match(delivered.text, /Аня Петрова/);
-  assert.match(delivered.text, /Болею/);
+  assert.match(delivered.text, /Заболел\(а\)/);
   assert.equal((await community.pendingNoticesForHeadman(HEADMAN.user_id)).length, 0);
 });
 
@@ -417,14 +427,16 @@ test('всё управление кнопками: без единой кома
   assert.match(setupPrompt.text, /Напиши название группы/);
   await run({ update_type: 'message_created', message: { sender: ADMIN, recipient: GROUP_CHAT, body: { mid: 'x', text: 'ИСТб-25-1' } } });
   const [linked] = await press(ADMIN, 'lsub:11:all', inGroup);
-  assert.deepEqual(payloads(linked), ['g:d0', 'g:d1', 'g:w0', 'hw:list', 'gh:pick', 'team', 'manage']);
+  assert.deepEqual(payloads(linked), ['g:d0', 'g:d1', 'g:w0', 'hw:list', 'g:more']);
+  const [groupMore] = await press(ADMIN, 'g:more', inGroup);
+  assert.deepEqual(payloads(groupMore), ['gh:pick', 'team', 'manage', 'help']);
 
   const [managed] = await press(ADMIN, 'manage', inGroup);
   assert.deepEqual(payloads(managed), ['m:setup', 'm:head:0', 'm:ed:0', 'm:acc', 'invite', 'm:lang', 'help']);
   const [members] = await press(ADMIN, 'm:head:0', inGroup);
   assert.deepEqual(payloads(members), ['hs:2', 'hs:3', 'hs:1', 'manage'], 'бот в списке не показывается');
   const assigned = await press(ADMIN, 'hs:3', inGroup);
-  assert.match(assigned.find((item) => item.to === 'callback').text, /Староста — \*\*Маша Староста\*\*/);
+  assert.match(assigned.find((item) => item.to === 'callback').text, /Староста теперь \*\*Маша Староста\*\*/);
   assert.ok(assigned.some((item) => item.to === 'user' && item.userId === HEADMAN.user_id));
   assert.equal((await community.getChat(GROUP_CHAT.chat_id)).headman.userId, HEADMAN.user_id);
 
@@ -449,7 +461,10 @@ test('всё управление кнопками: без единой кома
   const [menu] = await press(STUDENT, 'sub:11:1');
   await press(STUDENT, 'onb:none');
   const [main] = await press(STUDENT, 'menu');
-  assert.ok(payloads(main).includes('absence'), 'опоздание есть в главном меню');
+  assert.deepEqual(payloads(main).filter((p) => !p.startsWith('s:')), ['hw:list', 'more'], 'в главном меню только частое');
+  const [more] = await press(STUDENT, 'more');
+  assert.ok(payloads(more).includes('absence'), 'опоздание в «Ещё»');
+  assert.ok(!payloads(more).includes('ann:new'), 'объявления публикует только староста');
   const [absence] = await press(STUDENT, 'absence');
   assert.deepEqual(payloads(absence), ['abs:late', 'abs:absent', 'cancel']);
   const [find] = await press(STUDENT, 'find');
@@ -489,23 +504,24 @@ test('староста: «Принято», сводка опозданий, Д�
 
   const accepted = await press(HEADMAN, accept.payload);
   const toStudent = accepted.find((item) => item.to === 'user' && item.userId === STUDENT.user_id);
-  assert.match(toStudent.text, /Староста принял твоё сообщение об опоздании/);
+  assert.match(toStudent.text, /Староста увидел твоё сообщение об опоздании/);
   const edited = accepted.find((item) => item.to === 'callback' && item.text);
   assert.match(edited.text, /Принято ✓/);
   assert.ok((await community.getNotice(accept.payload.slice(3))).acceptedAt);
   const again = await press(HEADMAN, accept.payload);
   assert.ok(!again.some((item) => item.to === 'user'), 'повторное нажатие не шлёт студенту второе сообщение');
 
-  const [headmanMenu] = await press(HEADMAN, 'menu');
+  const [headmanMenu] = await press(HEADMAN, 'more');
   assert.ok(payloads(headmanMenu).includes('late:0'));
   assert.ok(payloads(headmanMenu).includes('gp:pick'));
+  assert.ok(payloads(headmanMenu).includes('ann:new'));
   const [lateness] = await press(HEADMAN, 'late:0');
-  assert.match(lateness.text, /Опоздания \(1\)/);
+  assert.match(lateness.text, /Опоздают \(1\)/);
   assert.match(lateness.text, /Аня Петрова/);
-  assert.match(lateness.text, /Задерживается транспорт/);
+  assert.match(lateness.text, /Транспорт задерживается/);
   assert.match(lateness.text, /принято/);
   const [studentLate] = await press(STUDENT, 'late:0');
-  assert.match(studentLate.text, /Сводка доступна старосте/);
+  assert.match(studentLate.text, /доступно только старосте/);
 
   const [picker] = await press(HEADMAN, 'gp:pick');
   const lesson = payloads(picker).find((p) => p.startsWith('gh:'));
@@ -519,4 +535,94 @@ test('староста: «Принято», сводка опозданий, Д�
   const [exams] = await press(STUDENT, 'exams');
   assert.match(exams.text, /Контрольные до конца семестра/);
   assert.match(exams.text, /Экзаменов и зачётов в расписании пока нет/);
+});
+
+test('удаление аккаунта стирает профиль, но журнал опозданий остаётся у старосты', async (t) => {
+  const { say, press, payloads, preferences, community } = await setup(t);
+  const inGroup = { chat: GROUP_CHAT };
+  await say(ADMIN, '/setup ИСТб-25-1', inGroup);
+  await press(ADMIN, 'lsub:11:all', inGroup);
+  await press(ADMIN, 'hs:3', inGroup);
+  await press(STUDENT, 'lang:ru');
+  await press(STUDENT, 'sub:11:all');
+  await press(STUDENT, 'abr:absent:ill');
+
+  const [account] = await press(STUDENT, 'acct');
+  assert.match(account.text, /Мои данные/);
+  assert.match(account.text, /Группа: ИСТб-25-1/);
+  assert.ok(payloads(account).includes('acct:del'));
+  const [confirm] = await press(STUDENT, 'acct:del');
+  assert.deepEqual(payloads(confirm), ['acct:del:yes', 'acct']);
+  const [done] = await press(STUDENT, 'acct:del:yes');
+  assert.match(done.text, /я всё забыл/);
+  assert.deepEqual(await preferences.get(STUDENT.user_id), {});
+  assert.equal((await community.noticesForGroup(11)).length, 1, 'сообщение об отсутствии осталось у старосты');
+
+  // Староста удаляет аккаунт: роль освобождается, журнал группы остаётся для следующего старосты.
+  await press(HEADMAN, 'lang:ru');
+  await press(HEADMAN, 'acct:del:yes');
+  assert.equal((await community.getChat(GROUP_CHAT.chat_id)).headman, null);
+  assert.equal((await community.noticesForGroup(11)).length, 1);
+});
+
+test('староста не может предупредить сам себя: сообщение уходит доверенному одногруппнику', async (t) => {
+  const { say, press, payloads, community, sent } = await setup(t);
+  const inGroup = { chat: GROUP_CHAT };
+  await say(ADMIN, '/setup ИСТб-25-1', inGroup);
+  await press(ADMIN, 'lsub:11:all', inGroup);
+  await press(ADMIN, 'hs:3', inGroup);
+  await press(STUDENT, 'lang:ru');
+  await press(STUDENT, 'sub:11:all');
+  await press(HEADMAN, 'lang:ru');
+  await press(HEADMAN, 'sub:11:all');
+
+  const [pick] = await press(HEADMAN, 'absence');
+  assert.match(pick.text, /Кому передавать твои опоздания/);
+  assert.deepEqual(payloads(pick), ['dp:1', 'more']);
+  const [saved] = await press(HEADMAN, 'dp:1');
+  assert.match(saved.text, /Аня Петрова/);
+  assert.equal((await community.getChat(GROUP_CHAT.chat_id)).deputy.userId, STUDENT.user_id);
+
+  const before = sent.length;
+  const replies = await press(HEADMAN, 'abr:late:transport:15');
+  assert.match(replies.find((item) => item.to === 'callback').text, /Передал: Аня Петрова/);
+  const note = sent.slice(before).find((item) => item.to === 'user');
+  assert.equal(note.userId, STUDENT.user_id, 'не самому старосте');
+  assert.match(note.text, /староста группы/);
+
+  const [lateness] = await press(HEADMAN, 'late:0');
+  assert.match(lateness.text, /все на месте/, 'своё опоздание староста в сводке группы не видит как чужое');
+});
+
+test('объявление старосты: в чат группы, в личку и своё время напоминания', async (t) => {
+  const { say, press, payloads, community, sent, preferences } = await setup(t);
+  const inGroup = { chat: GROUP_CHAT };
+  await say(ADMIN, '/setup ИСТб-25-1', inGroup);
+  await press(ADMIN, 'lsub:11:all', inGroup);
+  await press(ADMIN, 'hs:3', inGroup);
+  await press(HEADMAN, 'lang:ru');
+  await press(STUDENT, 'lang:ru');
+  await press(STUDENT, 'sub:11:all');
+
+  const [notAllowed] = await press(STUDENT, 'ann:new');
+  assert.match(notAllowed.text, /публикует староста/);
+
+  await press(HEADMAN, 'ann:new');
+  const [when] = await say(HEADMAN, 'Завтра пар не будет, встречаемся в 10:00 у В-208');
+  assert.deepEqual(payloads(when), ['anw:none', 'anw:1h', 'anw:eve', 'anw:morning', 'anw:custom', 'cancel']);
+  await press(HEADMAN, 'anw:custom');
+  const [wrong] = await say(HEADMAN, 'когда-нибудь');
+  assert.match(wrong.text, /Не понял время/);
+  const before = sent.length;
+  const done = await say(HEADMAN, '23:59');
+  assert.match(done.find((item) => item.to === 'chat' && item.chatId !== GROUP_CHAT.chat_id)?.text ?? done.at(-1).text, /Объявление отправлено/);
+  assert.ok(sent.slice(before).some((item) => item.to === 'chat' && item.chatId === GROUP_CHAT.chat_id && /Объявление старосты/.test(item.text)), 'пост в чате группы');
+
+  const [item] = await community.announcementsForGroup(11);
+  assert.ok(item.remindAt);
+  const [list] = await press(STUDENT, 'ann:list');
+  assert.match(list.text, /встречаемся в 10:00/);
+  await press(STUDENT, `anm:${item.id}`);
+  await press(STUDENT, `ans:${item.id}:none`);
+  assert.equal((await preferences.get(STUDENT.user_id)).announcementReminders[item.id], null, 'студент выключил напоминание у себя');
 });

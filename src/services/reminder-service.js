@@ -1,83 +1,91 @@
+import { Keyboard } from '@maxhub/max-bot-api';
 import { texts } from '../bot/i18n.js';
+import { dateFromKey, irkutskDateKey, irkutskMinutes, lessonEndMinutes, timeToMinutes } from '../lib/irkutsk.js';
+import { endMinutes, notificationEnabled, reminderMinutes, remindersEnabled } from '../lib/settings.js';
 
 const CHECK_INTERVAL_MS = 30_000;
-const TIME_ZONE = 'Asia/Irkutsk';
+const SENT_LIMIT = 100;
 
-const localParts = (date = new Date()) => Object.fromEntries(
-  new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIME_ZONE,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(date).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]),
-);
-
-const currentIrkutskDate = () => {
-  const parts = localParts();
-  return new Date(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
-};
-
-const dateKey = (parts) => `${parts.year}-${parts.month}-${parts.day}`;
-const minutesNow = (parts) => Number(parts.hour) * 60 + Number(parts.minute);
-const startMinutes = (lesson) => {
-  const [hours, minutes] = lesson.time.split(/[–-]/)[0].split(':').map(Number);
-  return hours * 60 + minutes;
-};
-
+// Напоминания привязаны к парам: «за N минут до начала» и, по желанию, «за N минут до конца».
+// Время каждый выбирает сам в настройках бота или мини-приложения.
 export class ReminderService {
   #timer;
   #running = false;
 
-  constructor({ bot, service, preferences }) {
+  constructor({ bot, service, preferences, now = () => new Date() }) {
     this.bot = bot;
     this.service = service;
     this.preferences = preferences;
+    this.now = now;
   }
 
   start() {
-    this.#timer = setInterval(() => this.#check().catch(console.error), CHECK_INTERVAL_MS);
+    this.#timer = setInterval(() => this.check().catch(console.error), CHECK_INTERVAL_MS);
     this.#timer.unref();
-    this.#check().catch(console.error);
+    this.check().catch(console.error);
   }
 
   stop() {
     clearInterval(this.#timer);
   }
 
-  async #check() {
-    if (this.#running) return;
+  async check() {
+    if (this.#running) return 0;
     this.#running = true;
+    let sent = 0;
     try {
-      const now = localParts();
-      const today = dateKey(now);
-      const currentMinutes = minutesNow(now);
-      const users = await this.preferences.entries();
-
-      for (const [id, profile] of users) {
-        if (profile.remindersEnabled === false || profile.selection?.kind !== 'group') continue;
+      const now = this.now();
+      const today = irkutskDateKey(now);
+      const currentMinutes = irkutskMinutes(now);
+      const schedules = new Map();
+      for (const [id, profile] of await this.preferences.entries()) {
+        if (profile.selection?.kind !== 'group') continue;
+        const wantStart = remindersEnabled(profile);
+        const wantEnd = notificationEnabled(profile, 'lessonEnd');
+        if (!wantStart && !wantEnd) continue;
         try {
-          const schedule = await this.service.groupSchedule(profile.selection.id, {
-            week: currentIrkutskDate(), subgroup: profile.subgroup,
-          });
-          for (const lesson of schedule.lessons.filter((item) => item.date === today)) {
-            const beforeStart = startMinutes(lesson) - currentMinutes;
-            if (beforeStart < 14 || beforeStart > 15) continue;
-            const reminderKey = `${lesson.date}:${lesson.id}:${lesson.lessonNumber}`;
-            const sent = profile.sentReminders ?? [];
-            if (sent.includes(reminderKey)) continue;
-            await this.bot.api.sendMessageToUser(
-              Number(id),
-              texts(profile.lang).reminder(lesson.subject, lesson.time, lesson.auditories.join(', ')),
-              { format: 'markdown' },
-            );
-            profile.sentReminders = [...sent.slice(-99), reminderKey];
-            await this.preferences.set(id, profile);
+          const cacheKey = `${profile.selection.id}:${profile.subgroup ?? 0}`;
+          if (!schedules.has(cacheKey)) {
+            schedules.set(cacheKey, this.service.groupSchedule(profile.selection.id, {
+              week: dateFromKey(today), subgroup: profile.subgroup ?? null,
+            }));
+          }
+          const lessons = (await schedules.get(cacheKey)).lessons.filter((item) => item.date === today);
+          const due = [];
+          for (const lesson of lessons) {
+            const toStart = timeToMinutes(lesson.time) - currentMinutes;
+            const toEnd = lessonEndMinutes(lesson) - currentMinutes;
+            const before = reminderMinutes(profile);
+            const beforeEnd = endMinutes(profile);
+            if (wantStart && toStart <= before && toStart > before - 2) due.push({ lesson, kind: 'start', minutes: before });
+            if (wantEnd && toEnd <= beforeEnd && toEnd > beforeEnd - 2) due.push({ lesson, kind: 'end', minutes: beforeEnd });
+          }
+          for (const { lesson, kind, minutes } of due) {
+            const key = `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}:${kind}`;
+            const current = await this.preferences.get(id);
+            const already = current.sentReminders ?? [];
+            if (already.includes(key)) continue;
+            const t = texts(current.lang);
+            const place = (lesson.auditories ?? []).join(', ');
+            const text = kind === 'start'
+              ? t.reminder(lesson.subject, lesson.time, place, minutes)
+              : t.endReminder(lesson.subject, minutes);
+            const button = kind === 'start'
+              ? this.bot.appButton?.(t, `lesson_${lesson.date}_${lesson.lessonNumber}_${lesson.subgroup ?? 0}`, t.openLesson)
+              : null;
+            await this.bot.api.sendMessageToUser(Number(id), text, {
+              format: 'markdown', attachments: button ? [Keyboard.inlineKeyboard([[button]])] : [],
+            });
+            await this.preferences.set(id, { ...current, sentReminders: [...already.slice(-(SENT_LIMIT - 1)), key] });
+            sent += 1;
           }
         } catch (error) {
-          console.error(`Reminder check failed for user ${id}:`, error);
+          console.error(`Reminder check failed for user ${id}:`, error.message);
         }
       }
     } finally {
       this.#running = false;
     }
+    return sent;
   }
 }

@@ -1,7 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { Bot, Keyboard } from '@maxhub/max-bot-api';
 import { addDays, startOfWeek, toDateKey } from '../lib/date.js';
-import { dateFromKey, irkutskDateKey, irkutskMinutes, lessonEndMinutes } from '../lib/irkutsk.js';
+import {
+  dateFromKey, irkutskClock, irkutskDateKey, irkutskMinutes, irkutskMoment, lessonEndMinutes,
+} from '../lib/irkutsk.js';
+import {
+  NOTIFICATION_KINDS, REMINDER_MINUTES, isMuted, notificationEnabled, reminderMinutes, summaryTime,
+} from '../lib/settings.js';
 import { parseCommand } from './commands.js';
 import { formatDate, formatHomework, formatScheduleDay, formatScheduleWeek } from './format.js';
 import { DEFAULT_LANGUAGE, lessonTypeLabel, normalizeLanguage, texts } from './i18n.js';
@@ -13,18 +18,20 @@ const PAGE_SIZE = 8;
 const MAX_TEXT = 3_900;
 const HOMEWORK_LIMIT = 2_000;
 
+// Описания короткие и по-русски: в списке «/» MAX показывает их рядом с именем бота, длинные обрезаются.
 const COMMANDS = [
-  { name: 'start', description: 'Меню · Menu' },
-  { name: 'today', description: 'Пары на сегодня · Today' },
-  { name: 'tomorrow', description: 'Пары на завтра · Tomorrow' },
-  { name: 'week', description: 'Неделя · Week' },
-  { name: 'homework', description: 'Домашка · Homework' },
-  { name: 'add', description: 'Записать ДЗ · Add homework' },
-  { name: 'find', description: 'Найти расписание · Search' },
-  { name: 'absence', description: 'Предупредить старосту · Tell the representative' },
-  { name: 'settings', description: 'Настройки и язык · Settings' },
-  { name: 'setup', description: 'Привязать чат к группе · Link chat' },
-  { name: 'help', description: 'Все команды · Help' },
+  { name: 'start', description: 'Меню' },
+  { name: 'today', description: 'Пары сегодня' },
+  { name: 'tomorrow', description: 'Пары завтра' },
+  { name: 'week', description: 'Неделя' },
+  { name: 'homework', description: 'Домашка' },
+  { name: 'add', description: 'Записать ДЗ' },
+  { name: 'news', description: 'Объявления' },
+  { name: 'absence', description: 'Опоздаю / не приду' },
+  { name: 'find', description: 'Найти расписание' },
+  { name: 'settings', description: 'Настройки' },
+  { name: 'manage', description: 'Управление чатом' },
+  { name: 'help', description: 'Все команды' },
 ];
 
 const ALIASES = {
@@ -38,6 +45,8 @@ const ALIASES = {
   homework_personal: 'add',
   homework_team: 'team',
   homework_access: 'access',
+  announcements: 'news',
+  account: 'settings',
 };
 
 const buttonText = (value) => String(value).slice(0, 64);
@@ -54,11 +63,12 @@ const senderLabel = (user) => {
   return user?.username && !name.startsWith('@') ? `${name} (@${user.username})` : name;
 };
 
-export const NOTIFICATION_KINDS = ['summary', 'homework', 'changes', 'exams'];
+export { NOTIFICATION_KINDS, notificationEnabled };
 export const CONTROL_TYPES = ['экзамен', 'зачёт'];
 const EXAM_LIST_TYPES = [...CONTROL_TYPES, 'консультация'];
 const SEMESTER_WEEKS = 20;
-export const notificationEnabled = (prefs, kind) => prefs?.notifications?.[kind] !== false;
+export const LATE_MINUTES = [5, 10, 15, 20, 30, 45];
+const SUMMARY_TIMES = ['18:00', '19:00', '20:00', '21:00', '22:00'];
 export const ABSENCE_REASONS = {
   late: ['late10', 'late20', 'transport'],
   absent: ['ill', 'family', 'certificate'],
@@ -66,7 +76,7 @@ export const ABSENCE_REASONS = {
 const lessonKey = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 
 export const createBot = ({
-  token, service, miniAppUrl, miniAppButton = 'app', preferences, community, onHomeworkSaved,
+  token, service, miniAppUrl, miniAppButton = 'app', preferences, community, onHomeworkSaved, onAnnouncement,
 }) => {
   const bot = new Bot(token);
   const sessions = new Map();
@@ -79,7 +89,9 @@ export const createBot = ({
   };
 
   const savePrefs = async (ctx, patch) => {
-    const value = { ...await preferences.get(userId(ctx)), ...patch };
+    const sender = ctx.user ?? ctx.message?.sender;
+    const name = sender ? displayName(sender) : undefined;
+    const value = { ...await preferences.get(userId(ctx)), ...(name ? { name } : {}), ...patch };
     await preferences.set(userId(ctx), value);
     ctx.prefs = value;
     return value;
@@ -128,40 +140,56 @@ export const createBot = ({
     button('Русский', 'lang:ru'), button('English', 'lang:en'),
   ]]);
 
+  const roleOf = async (ctx) => {
+    const chats = await community.chatsWithRole(userId(ctx));
+    const headman = chats.find((chat) => String(chat.headman?.userId) === String(userId(ctx)));
+    return { chats, headman: headman ?? null, editor: chats.length > 0 };
+  };
+
+  // Главное меню — только самое частое: расписание, ДЗ и приложение. Остальное спрятано в «Ещё».
   const privateMenu = async (ctx) => {
     const { t, prefs } = ctx;
     const group = ownGroup(prefs);
     const app = appButton(t);
-    const roles = await community.chatsWithRole(userId(ctx));
-    const isHeadman = roles.some((chat) => String(chat.headman?.userId) === String(userId(ctx)));
-    const roleRow = roles.length
-      ? [button(t.addGroupHomework, 'gp:pick'), ...(isHeadman ? [button(t.lateToday, 'late:0')] : [])]
-      : null;
     if (!group) {
       setSession(ctx, { step: 'own-group' });
       const rows = [[button(t.chooseByInstitute, 'inst:0')]];
-      if (roleRow) rows.push(roleRow);
       if (app) rows.push([app]);
       return show(ctx, `${t.welcomeTitle}\n\n${t.welcomeNoGroup}`, rows);
     }
     setSession(ctx, null);
     const rows = [
       [button(t.today, `s:group:${group.id}:d0`, 'positive'), button(t.tomorrow, `s:group:${group.id}:d1`), button(t.week, `s:group:${group.id}:w0`)],
-      [button(t.homework, 'hw:list'), button(t.addPersonal, 'ph:pick')],
-      [button(t.absenceButton, 'absence'), button(t.exams, 'exams')],
+      [button(t.homework, 'hw:list'), button(t.more, 'more')],
     ];
-    if (roleRow) rows.push(roleRow);
-    rows.push([button(t.search, 'find'), button(t.settings, 'settings')]);
     if (app) rows.push([app]);
     return show(ctx, `${t.menuTitle({ group: group.title, subgroup: prefs.subgroup })}\n\n${t.menuHint}`, rows);
   };
 
+  const moreMenu = async (ctx) => {
+    const { t } = ctx;
+    if (isGroupChat(ctx)) return groupMore(ctx);
+    const { headman, editor } = await roleOf(ctx);
+    const rows = [
+      [button(t.absenceButton, 'absence'), button(t.exams, 'exams')],
+      [button(t.announcements, 'ann:list'), button(t.addPersonal, 'ph:pick')],
+    ];
+    if (headman) rows.push([button(t.lateToday, 'late:0'), button(t.newAnnouncement, 'ann:new')]);
+    if (editor) rows.push([button(t.addGroupHomework, 'gp:pick')]);
+    rows.push([button(t.search, 'find'), button(t.settings, 'settings')], [button(t.back, 'menu')]);
+    return show(ctx, headman ? t.moreTitleHeadman : t.moreTitle, rows);
+  };
+
   const groupMenuRows = (t) => [
     [button(t.today, 'g:d0', 'positive'), button(t.tomorrow, 'g:d1'), button(t.week, 'g:w0')],
-    [button(t.homework, 'hw:list'), button(t.addHomework, 'gh:pick')],
-    [button(t.teamButton, 'team')],
-    [button(t.manage, 'manage')],
+    [button(t.homework, 'hw:list'), button(t.more, 'g:more')],
   ];
+
+  const groupMore = (ctx) => show(ctx, ctx.t.groupMoreTitle, [
+    [button(ctx.t.addHomework, 'gh:pick'), button(ctx.t.teamButton, 'team')],
+    [button(ctx.t.manage, 'manage')],
+    [button(ctx.t.back, 'help')],
+  ]);
 
   const start = async (ctx) => {
     if (isGroupChat(ctx)) return groupHelp(ctx);
@@ -266,7 +294,6 @@ export const createBot = ({
       title: ctx.t.menuTitle({ group: config.group.title, subgroup }),
       mode, offset, prefix: 'g',
       extraRows: [
-        [button(ctx.t.homework, 'hw:list'), button(ctx.t.addHomework, 'gh:pick')],
         [...[appButton(ctx.t, `day_${appDayKey(mode, offset)}`, ctx.t.openInApp)].filter(Boolean), button(ctx.t.menu, 'help')],
       ],
     });
@@ -489,15 +516,19 @@ export const createBot = ({
 
   // Настройки
 
-  const NOTIFY_ITEMS = ['reminders', ...NOTIFICATION_KINDS];
-  const notifyOn = (prefs, kind) => (kind === 'reminders' ? prefs.remindersEnabled !== false : notificationEnabled(prefs, kind));
-  const notifyName = (t, kind) => (kind === 'reminders' ? t.notifyReminders : t.notifyNames[kind]);
+  const NOTIFY_ITEMS = ['reminders', 'lessonEnd', 'summary', 'homework', 'announcements', 'changes', 'exams'];
+  const notifyOn = (prefs, kind) => (kind === 'reminders' ? prefs.remindersEnabled !== false : notificationEnabled({ ...prefs, muted: false }, kind));
+  const notifyName = (t, kind, prefs) => {
+    if (kind === 'reminders') return t.notifyRemindersAt(reminderMinutes(prefs));
+    if (kind === 'summary') return t.notifySummaryAt(summaryTime(prefs));
+    return t.notifyNames[kind];
+  };
 
   const showSettings = async (ctx) => {
     const { t, prefs } = ctx;
     if (isGroupChat(ctx)) return groupHelp(ctx);
     const group = ownGroup(prefs);
-    const enabled = NOTIFY_ITEMS.filter((kind) => notifyOn(prefs, kind)).length;
+    const enabled = isMuted(prefs) ? 0 : NOTIFY_ITEMS.filter((kind) => notifyOn(prefs, kind)).length;
     const lines = [
       t.settingsGroup(group?.title),
       group ? t.settingsSubgroup(prefs.subgroup) : '',
@@ -505,10 +536,9 @@ export const createBot = ({
       t.settingsLanguage,
     ].filter(Boolean);
     return show(ctx, `${t.settingsTitle}\n\n${lines.join('\n')}`, [
-      [button(t.settingsStudy, 'set:study')],
-      [button(t.settingsNotifications, 'set:notify')],
-      [button(t.changeLanguage, 'set:lang')],
-      [button(t.menu, 'menu')],
+      [button(t.settingsStudy, 'set:study'), button(t.settingsNotifications, 'set:notify')],
+      [button(t.accountButton, 'acct'), button(t.changeLanguage, 'set:lang')],
+      [button(t.back, 'more')],
     ]);
   };
 
@@ -524,8 +554,32 @@ export const createBot = ({
 
   const showNotifySettings = async (ctx) => {
     const { t, prefs } = ctx;
-    return show(ctx, t.notifyTitle, [
-      ...NOTIFY_ITEMS.map((kind) => [button(t.notifyButton(notifyName(t, kind), notifyOn(prefs, kind)), `set:n:${kind}`)]),
+    if (isMuted(prefs)) {
+      return show(ctx, t.notifyMutedTitle, [[button(t.notifyUnmute, 'set:mute', 'positive')], [button(t.back, 'settings')]]);
+    }
+    const rows = NOTIFY_ITEMS.map((kind) => [button(t.notifyButton(notifyName(t, kind, prefs), notifyOn(prefs, kind)), `set:n:${kind}`)]);
+    rows.push([button(t.notifyReminderTime, 'set:rm'), button(t.notifySummaryTime, 'set:st')]);
+    rows.push([button(t.notifyMute, 'set:mute', 'negative')], [button(t.back, 'settings')]);
+    return show(ctx, t.notifyTitle, rows);
+  };
+
+  // Что бот знает о человеке — прямо и без канцелярита. Отсюда же удаление всех данных.
+  const showAccount = async (ctx) => {
+    const { t, prefs, lang } = ctx;
+    const group = ownGroup(prefs);
+    const { headman, editor } = await roleOf(ctx);
+    const personal = group ? (await community.homeworkForUser(group.id, userId(ctx), { from: '2000-01-01', subgroup: prefs.subgroup }))
+      .filter((item) => item.personalText).length : 0;
+    const role = headman ? t.roleHeadman : editor ? t.roleEditor : t.roleStudent;
+    return show(ctx, t.accountText({
+      name: displayName(ctx.user ?? ctx.message?.sender),
+      group: group ? `${group.title} · ${prefs.subgroup ? t.subgroupNumber(prefs.subgroup).toLowerCase() : t.subgroupAll.toLowerCase()}` : null,
+      role,
+      lang: lang === 'ru' ? 'русский' : 'English',
+      personal,
+      reminders: Object.keys(prefs.homeworkReminders ?? {}).length,
+    }), [
+      [button(t.deleteAccount, 'acct:del', 'negative')],
       [button(t.back, 'settings')],
     ]);
   };
@@ -553,7 +607,7 @@ export const createBot = ({
     (await community.chatsForGroup(groupId)).find((chat) => chat.headman?.userId) ?? null;
 
   const lessonLabel = (lang, lesson) => (lesson
-    ? `${texts(lang).changeWhen(formatDate(lang, lesson.date, { weekday: 'short', day: 'numeric', month: 'short' }), lesson.lessonNumber)} · ${lesson.subject}`
+    ? `${texts(lang).changeWhen(formatDate(lang, lesson.date, { weekday: 'short', day: 'numeric', month: 'short' }), String(lesson.time ?? '').slice(0, 5))} · ${lesson.subject}`
     : '');
 
   const absenceMessage = (notice, lang) => {
@@ -563,7 +617,9 @@ export const createBot = ({
       group: notice.groupTitle,
       sender: notice.senderName,
       lesson: lessonLabel(lang, notice.lesson),
-      reason: notice.reasonCode ? t.absenceReasons[notice.reasonCode] ?? notice.text : notice.text,
+      reason: [notice.reasonCode ? t.absenceReasons[notice.reasonCode] : null, notice.text].filter(Boolean).join(' — '),
+      minutes: notice.kind === 'late' ? notice.minutes ?? null : null,
+      forDeputy: notice.toDeputy === true,
     });
   };
 
@@ -590,11 +646,15 @@ export const createBot = ({
     await bot.api.sendMessageToUser(headmanId, text, { format: 'markdown', attachments });
   };
 
-  const deliverAbsence = async ({ user, prefs, kind, reasonCode, text, lesson, images = [] }) => {
+  // Если опаздывает сам староста, сообщение уходит одногруппнику, которому он это доверил.
+  const deliverAbsence = async ({ user, prefs, kind, reasonCode, text, minutes = null, lesson, images = [] }) => {
     const group = ownGroup(prefs);
     if (!group) return { status: 'no_group' };
     const chat = await headmanChatFor(group.id);
     if (!chat) return { status: 'no_headman' };
+    const fromHeadman = String(chat.headman.userId) === String(user.user_id);
+    if (fromHeadman && !chat.deputy?.userId) return { status: 'no_deputy' };
+    const recipientId = fromHeadman ? chat.deputy.userId : chat.headman.userId;
     const target = lesson === undefined ? await currentLesson(group.id, prefs.subgroup ?? null) : lesson;
     const notice = {
       id: randomUUID(),
@@ -607,13 +667,16 @@ export const createBot = ({
       kind,
       reasonCode: reasonCode ?? null,
       text: text ?? null,
+      minutes: kind === 'late' ? minutes : null,
+      toDeputy: fromHeadman,
+      recipientId,
       lesson: target ? { date: target.date, lessonNumber: target.lessonNumber, subject: target.subject, time: target.time } : null,
       images,
     };
     try {
-      await sendNotice(chat.headman.userId, notice);
+      await sendNotice(recipientId, notice);
       await community.addNotice(notice);
-      return { status: 'sent' };
+      return { status: 'sent', deputy: fromHeadman ? chat.deputy.name : null };
     } catch {
       await community.addNotice({ ...notice, status: 'pending' });
       return { status: 'pending' };
@@ -635,20 +698,46 @@ export const createBot = ({
     }
   };
 
-  const absenceReply = (t, status) => ({
-    sent: t.absenceSent, pending: t.absencePending, no_headman: t.absenceNoHeadman, no_group: t.noGroupYet,
+  const absenceReply = (t, { status, deputy }) => ({
+    sent: deputy ? t.absenceSentDeputy(deputy) : t.absenceSent,
+    pending: t.absencePending,
+    no_headman: t.absenceNoHeadman,
+    no_group: t.noGroupYet,
+    no_deputy: t.absenceNoDeputy,
   }[status]);
+
+  // Одногруппники, которые пользуются ботом: из них староста выбирает доверенное лицо.
+  const groupUsers = async (groupId, exceptId) => (await preferences.entries())
+    .filter(([id, prefs]) => String(id) !== String(exceptId) && String(prefs.selection?.id) === String(groupId) && prefs.name)
+    .map(([id, prefs]) => ({ userId: Number(id), name: prefs.name }));
+
+  const deputyPicker = async (ctx, page = 0) => {
+    const { t } = ctx;
+    const [chat] = await headmanChats(ctx);
+    if (!chat) return show(ctx, t.lateOnlyHeadman, [[button(t.menu, 'menu')]]);
+    const users = await groupUsers(chat.group.id, userId(ctx));
+    if (!users.length) return show(ctx, t.deputyNobody, [[button(t.back, 'more')]]);
+    const mark = (user) => (String(user.userId) === String(chat.deputy?.userId) ? `✓ ${user.name}` : user.name);
+    return show(ctx, t.deputyPrompt(chat.deputy?.name), pagedRows(
+      t, users, page, (user) => button(mark(user), `dp:${user.userId}`), 'dpp:', 'more',
+    ));
+  };
 
   const beginAbsence = async (ctx) => {
     const { t, prefs } = ctx;
     if (isGroupChat(ctx)) return show(ctx, t.absenceInGroup);
     const group = ownGroup(prefs);
     if (!group) return show(ctx, t.noGroupYet);
-    if (!await headmanChatFor(group.id)) return show(ctx, t.absenceNoHeadman, [[button(t.menu, 'menu')]]);
-    return show(ctx, t.absencePrompt, [
+    const chat = await headmanChatFor(group.id);
+    if (!chat) return show(ctx, t.absenceNoHeadman, [[button(t.menu, 'menu')]]);
+    const fromHeadman = String(chat.headman.userId) === String(userId(ctx));
+    if (fromHeadman && !chat.deputy?.userId) return deputyPicker(ctx);
+    const rows = [
       [button(t.absenceLate, 'abs:late'), button(t.absenceMissing, 'abs:absent')],
-      [button(t.cancel, 'cancel')],
-    ]);
+    ];
+    if (fromHeadman) rows.push([button(t.deputyChange, 'dpp:0')]);
+    rows.push([button(t.cancel, 'cancel')]);
+    return show(ctx, fromHeadman ? t.absencePromptHeadman(chat.deputy.name) : t.absencePrompt, rows);
   };
 
   const sendAbsence = async (ctx, state, text) => {
@@ -658,10 +747,10 @@ export const createBot = ({
       .map((image) => image.payload.token);
     if (!text) return ctx.reply(t.absenceNeedsText);
     setSession(ctx, null);
-    const { status } = await deliverAbsence({
-      user: ctx.message.sender, prefs: ctx.prefs, kind: state.kind, text, images,
+    const result = await deliverAbsence({
+      user: ctx.message.sender, prefs: ctx.prefs, kind: state.kind, text, images, minutes: state.minutes ?? null,
     });
-    return show(ctx, absenceReply(t, status), [[button(t.menu, 'menu')]]);
+    return show(ctx, absenceReply(t, result), [[button(t.menu, 'menu')]]);
   };
 
   // Роли: староста и редакторы получают в личку, что они теперь могут
@@ -697,7 +786,9 @@ export const createBot = ({
     const [chat] = await headmanChats(ctx);
     if (!chat) return show(ctx, t.lateOnlyHeadman, [[button(t.menu, 'menu')]]);
     const day = irkutskDateKey(new Date(), offset);
-    const notices = await community.noticesForDay(chat.group.id, day);
+    // Свои сообщения староста отправил доверенному одногруппнику: в сводке группы они лишние.
+    const notices = (await community.noticesForDay(chat.group.id, day))
+      .filter((item) => String(item.senderId) !== String(userId(ctx)));
     const label = offset === 0 ? t.todayLabel : offset === -1 ? t.yesterday : '';
     const date = formatDate(lang, day, label ? { day: 'numeric', month: 'long' } : undefined);
     const clock = (iso) => new Intl.DateTimeFormat(t.locale, { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Irkutsk' }).format(new Date(iso));
@@ -706,7 +797,7 @@ export const createBot = ({
       if (!items.length) return '';
       return [t.lateSection(kind, items.length), ...items.map((item) => t.lateItem(
         item.senderName ?? '—',
-        item.lesson ? `${t.changeWhen('', item.lesson.lessonNumber).replace(/^,\s*/, '')}` : '',
+        item.lesson ? `${String(item.lesson.time ?? '').slice(0, 5)} · ${item.lesson.subject}` : '',
         item.reasonCode ? t.absenceReasons[item.reasonCode] ?? item.text : item.text,
         clock(item.createdAt),
         Boolean(item.acceptedAt),
@@ -719,6 +810,106 @@ export const createBot = ({
     ]);
   };
 
+  // Объявления старосты: в чат группы и каждому в личку, с напоминанием, которое каждый может сдвинуть у себя
+
+  const announcementWhen = (lang, iso) => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    return `${formatDate(lang, irkutskDateKey(date), { weekday: 'short', day: 'numeric', month: 'short' })}, ${irkutskClock(date)}`;
+  };
+
+  const publishAnnouncement = async (item) => {
+    let chat = false;
+    const config = await community.getChat(item.chatId);
+    const t = texts(config?.lang);
+    try {
+      await bot.api.sendMessageToChat(item.chatId, t.announcementChat(item, announcementWhen(config?.lang, item.remindAt)), { format: 'markdown' });
+      chat = true;
+    } catch (error) {
+      console.error('Announcement to chat failed:', error.message);
+    }
+    await onAnnouncement?.(item);
+    return { chat };
+  };
+  bot.publishAnnouncement = publishAnnouncement;
+
+  // Варианты времени напоминания: без ввода даты руками для самых частых случаев.
+  const reminderChoices = (t) => [
+    ['none', t.remindNone], ['1h', t.remind1h], ['eve', t.remindEvening], ['morning', t.remindMorning], ['custom', t.remindCustom],
+  ];
+  const reminderFromChoice = (choice, now = new Date()) => {
+    const today = irkutskDateKey(now);
+    if (choice === '1h') return new Date(now.getTime() + 3_600_000).toISOString();
+    if (choice === 'eve') {
+      const evening = irkutskMoment(today, '19:00');
+      return (evening > now ? evening : irkutskMoment(irkutskDateKey(now, 1), '19:00')).toISOString();
+    }
+    if (choice === 'morning') return irkutskMoment(irkutskDateKey(now, 1), '08:00').toISOString();
+    return null;
+  };
+  // «28.09 13:30», «28.09.2026 13:30» или просто «13:30» (сегодня, а если уже прошло — завтра).
+  const parseReminder = (text, now = new Date()) => {
+    const match = /^(?:(\d{1,2})\.(\d{1,2})(?:\.(\d{4}))?\s+)?(\d{1,2})[:.](\d{2})$/.exec(text.trim());
+    if (!match) return null;
+    const [, day, month, year, hours, minutes] = match;
+    if (Number(hours) > 23 || Number(minutes) > 59) return null;
+    const time = `${hours.padStart(2, '0')}:${minutes}`;
+    let dateKey = irkutskDateKey(now);
+    if (day) dateKey = `${year ?? dateKey.slice(0, 4)}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    let moment = irkutskMoment(dateKey, time);
+    if (Number.isNaN(moment.getTime())) return null;
+    if (!day && moment <= now) moment = irkutskMoment(irkutskDateKey(now, 1), time);
+    return moment > now ? moment.toISOString() : null;
+  };
+
+  const beginAnnouncement = async (ctx) => {
+    const { t } = ctx;
+    const [chat] = await headmanChats(ctx);
+    if (!chat) return show(ctx, t.announceOnlyHeadman, [[button(t.back, 'more')]]);
+    setSession(ctx, { step: 'ann-text' });
+    return show(ctx, t.announcePrompt(chat.group.title), [[button(t.cancel, 'cancel')]]);
+  };
+
+  const askAnnouncementReminder = (ctx, text) => {
+    setSession(ctx, { step: 'ann-when', text });
+    return show(ctx, ctx.t.announceWhen, [
+      ...reminderChoices(ctx.t).map(([choice, label]) => [button(label, `anw:${choice}`)]),
+      [button(ctx.t.cancel, 'cancel')],
+    ]);
+  };
+
+  const finishAnnouncement = async (ctx, remindAt) => {
+    const { t } = ctx;
+    const state = session(ctx);
+    const [chat] = await headmanChats(ctx);
+    setSession(ctx, null);
+    if (!chat || !state.text) return show(ctx, t.selectionExpired, [[button(t.menu, 'menu')]]);
+    const sender = ctx.user ?? ctx.message?.sender;
+    const item = await community.addAnnouncement({
+      groupId: chat.group.id, chatId: chat.chatId, groupTitle: chat.group.title,
+      authorId: userId(ctx), authorName: displayName(sender), title: null, text: state.text, eventAt: null, remindAt,
+    });
+    const { chat: posted } = await publishAnnouncement(item);
+    return show(ctx, t.announceDone(posted, announcementWhen(ctx.lang, remindAt)), [[button(t.announcements, 'ann:list'), button(t.menu, 'menu')]]);
+  };
+
+  const showAnnouncements = async (ctx) => {
+    const { t, lang, prefs } = ctx;
+    const group = ownGroup(prefs);
+    if (!group) return show(ctx, t.noGroupYet);
+    const items = await community.announcementsForGroup(group.id);
+    const { headman } = await roleOf(ctx);
+    const rows = items.slice(0, 5).map((item, index) => [button(t.announceRemindButton(index + 1), `anm:${item.id}`)]);
+    if (headman) rows.push([button(t.newAnnouncement, 'ann:new')]);
+    rows.push([button(t.back, 'more')]);
+    const lines = items.slice(0, 5).map((item, index) => {
+      const own = prefs.announcementReminders?.[item.id];
+      const at = own === undefined ? item.remindAt : own;
+      return t.announceLine(index + 1, item, announcementWhen(lang, at));
+    });
+    return show(ctx, [t.announcementsTitle, '', lines.length ? lines.join('\n\n') : t.announcementsEmpty].join('\n'), rows);
+  };
+
   // Первое знакомство после выбора группы: коротко о возможностях и осознанный выбор уведомлений
 
   const showOnboarding = (ctx, group) => show(ctx, `${ctx.t.onboardingTitle(group.title)}\n\n${ctx.t.onboardingText}`, [
@@ -727,9 +918,12 @@ export const createBot = ({
   ]);
 
   const saveOwnGroup = async (ctx, group, subgroup) => {
+    // Смена группы — новый набор дисциплин: формы контроля и напоминания старой группы не нужны.
+    const changed = String(ctx.prefs.selection?.id) !== String(group.id);
     await savePrefs(ctx, {
       selection: { kind: 'group', id: group.id, title: group.title },
       institute: group.institute, course: group.course, subgroup,
+      ...(changed ? { controls: {}, homeworkReminders: {}, announcementReminders: {} } : {}),
     });
     setSession(ctx, null);
     if (!ctx.prefs.onboarded) return showOnboarding(ctx, group);
@@ -870,9 +1064,23 @@ export const createBot = ({
       return null;
     },
     absence: beginAbsence,
+    news: (ctx) => (isGroupChat(ctx) ? groupHelp(ctx) : showAnnouncements(ctx)),
     setup: beginSetup,
-    headman: assignHeadman,
-    editor: toggleEditor,
+    manage: (ctx) => (isGroupChat(ctx) ? showManage(ctx) : moreMenu(ctx)),
+    // Назначение — всегда выбором из списка участников; ответ командой на сообщение остался запасным путём.
+    headman: async (ctx) => {
+      if (!isGroupChat(ctx)) return show(ctx, ctx.t.helpGroup);
+      if (replyTarget(ctx)) return assignHeadman(ctx);
+      if (!await isChatManager(ctx)) return show(ctx, ctx.t.needChatAdmin);
+      return memberPicker(ctx, 'head', 0);
+    },
+    editor: async (ctx) => {
+      if (!isGroupChat(ctx)) return show(ctx, ctx.t.helpGroup);
+      if (replyTarget(ctx)) return toggleEditor(ctx);
+      const config = await community.getChat(ctx.chatId);
+      if (!config?.headman || userId(ctx) !== config.headman.userId) return show(ctx, ctx.t.editorOnlyHeadman);
+      return memberPicker(ctx, 'ed', 0);
+    },
     team: showTeam,
     access: accessPrompt,
   };
@@ -888,6 +1096,11 @@ export const createBot = ({
     ctx.lang = lang ?? DEFAULT_LANGUAGE;
     ctx.t = texts(ctx.lang);
     if (id && !isGroupChat(ctx)) await deliverPending(id).catch((error) => console.error('Pending check failed:', error.message));
+    // Имя нужно старосте, чтобы выбрать доверенного одногруппника из списка.
+    const sender = ctx.user ?? ctx.message?.sender;
+    if (id && !isGroupChat(ctx) && ctx.prefs.selection && sender && ctx.prefs.name !== displayName(sender)) {
+      ctx.prefs = await preferences.set(id, { ...ctx.prefs, name: displayName(sender) });
+    }
     return next();
   });
 
@@ -936,7 +1149,8 @@ export const createBot = ({
     await savePrefs(ctx, {
       onboarded: true,
       remindersEnabled: on,
-      notifications: Object.fromEntries(NOTIFICATION_KINDS.map((kind) => [kind, on])),
+      muted: false,
+      notifications: Object.fromEntries(NOTIFICATION_KINDS.map((kind) => [kind, kind === 'lessonEnd' ? false : on])),
     });
     const group = ownGroup(ctx.prefs);
     return show(ctx, on ? t.onboardingDone : t.onboardingOff, [
@@ -950,7 +1164,8 @@ export const createBot = ({
     const notice = await community.getNotice(ctx.match[1]);
     if (!notice) return toast(ctx, t.selectionExpired);
     const chat = await community.getChat(notice.chatId);
-    if (String(chat?.headman?.userId) !== String(userId(ctx))) return toast(ctx, t.onlyHeadmanToast);
+    const recipient = notice.recipientId ?? chat?.headman?.userId;
+    if (String(recipient) !== String(userId(ctx))) return toast(ctx, t.onlyHeadmanToast);
     const already = Boolean(notice.acceptedAt);
     await community.acceptNotice(notice.id);
     if (!already) {
@@ -998,6 +1213,89 @@ export const createBot = ({
   });
 
   bot.action('settings', showSettings);
+  bot.action('more', moreMenu);
+  bot.action('g:more', groupMore);
+  bot.action('acct', showAccount);
+  bot.action('acct:del', (ctx) => show(ctx, ctx.t.deleteConfirm, [
+    [button(ctx.t.deleteYes, 'acct:del:yes', 'negative')],
+    [button(ctx.t.cancel, 'acct')],
+  ]));
+  bot.action('acct:del:yes', async (ctx) => {
+    const { t } = ctx;
+    setSession(ctx, null);
+    await community.removeUser(userId(ctx));
+    await preferences.delete(userId(ctx));
+    return show(ctx, t.deleteDone, [[button(t.startAgain, 'restart')]]);
+  });
+  bot.action('restart', (ctx) => languagePrompt(ctx));
+  bot.action('set:mute', async (ctx) => {
+    await savePrefs(ctx, { muted: !isMuted(ctx.prefs) });
+    return showNotifySettings(ctx);
+  });
+  bot.action('set:rm', async (ctx) => {
+    const current = reminderMinutes(ctx.prefs);
+    const next = REMINDER_MINUTES[(REMINDER_MINUTES.indexOf(current) + 1) % REMINDER_MINUTES.length];
+    await savePrefs(ctx, { reminderMinutes: next, remindersEnabled: true });
+    return showNotifySettings(ctx);
+  });
+  bot.action('set:st', async (ctx) => {
+    const current = summaryTime(ctx.prefs);
+    const next = SUMMARY_TIMES[(SUMMARY_TIMES.indexOf(current) + 1) % SUMMARY_TIMES.length];
+    await savePrefs(ctx, { summaryTime: next, summarySentFor: null, notifications: { ...ctx.prefs.notifications, summary: true } });
+    return showNotifySettings(ctx);
+  });
+  bot.action('ann:list', showAnnouncements);
+  bot.action('ann:new', beginAnnouncement);
+  bot.action(/^anw:(none|1h|eve|morning|custom)$/, async (ctx) => {
+    const choice = ctx.match[1];
+    const state = session(ctx);
+    if (state.step !== 'ann-when') return toast(ctx, ctx.t.selectionExpired);
+    if (choice === 'custom') {
+      setSession(ctx, { ...state, step: 'ann-when-custom' });
+      return show(ctx, ctx.t.remindCustomPrompt, [[button(ctx.t.cancel, 'cancel')]]);
+    }
+    return finishAnnouncement(ctx, reminderFromChoice(choice));
+  });
+  bot.action(/^anm:([0-9a-f-]{36})$/, async (ctx) => {
+    const { t, lang } = ctx;
+    const item = await community.getAnnouncement(ctx.match[1]);
+    if (!item) return toast(ctx, t.selectionExpired);
+    const own = ctx.prefs.announcementReminders?.[item.id];
+    const at = own === undefined ? item.remindAt : own;
+    return show(ctx, t.announceRemindPrompt(item, announcementWhen(lang, at), own !== undefined), [
+      ...reminderChoices(t).map(([choice, label]) => [button(label, `ans:${item.id}:${choice}`)]),
+      ...(own !== undefined && item.remindAt ? [[button(t.remindReset, `ans:${item.id}:reset`)]] : []),
+      [button(t.back, 'ann:list')],
+    ]);
+  });
+  bot.action(/^ans:([0-9a-f-]{36}):(none|1h|eve|morning|custom|reset)$/, async (ctx) => {
+    const [, id, choice] = ctx.match;
+    const item = await community.getAnnouncement(id);
+    if (!item) return toast(ctx, ctx.t.selectionExpired);
+    if (choice === 'custom') {
+      setSession(ctx, { step: 'ann-remind-custom', id });
+      return show(ctx, ctx.t.remindCustomPrompt, [[button(ctx.t.cancel, 'cancel')]]);
+    }
+    const reminders = { ...ctx.prefs.announcementReminders };
+    if (choice === 'reset') delete reminders[id];
+    else reminders[id] = reminderFromChoice(choice);
+    await savePrefs(ctx, { announcementReminders: reminders });
+    await ctx.answerOnCallback({ notification: ctx.t.remindSaved }).catch(() => {});
+    return showAnnouncements(ctx);
+  });
+  bot.action(/^dpp:(\d+)$/, (ctx) => deputyPicker(ctx, Number(ctx.match[1])));
+  bot.action(/^dp:(\d+)$/, async (ctx) => {
+    const { t } = ctx;
+    const [chat] = await headmanChats(ctx);
+    if (!chat) return toast(ctx, t.lateOnlyHeadman);
+    const user = (await groupUsers(chat.group.id, userId(ctx))).find((item) => String(item.userId) === ctx.match[1]);
+    if (!user) return toast(ctx, t.selectionExpired);
+    await community.setChat(chat.chatId, { deputy: user });
+    return show(ctx, t.deputySaved(user.name), [
+      [button(t.absenceLate, 'abs:late'), button(t.absenceMissing, 'abs:absent')],
+      [button(t.menu, 'menu')],
+    ]);
+  });
   bot.action('set:group', (ctx) => {
     setSession(ctx, { step: 'own-group' });
     return show(ctx, ctx.t.changeGroupPrompt, [[button(ctx.t.chooseByInstitute, 'inst:0')], [button(ctx.t.back, 'set:study')]]);
@@ -1013,11 +1311,11 @@ export const createBot = ({
   });
   bot.action('set:study', showStudySettings);
   bot.action('set:notify', showNotifySettings);
-  bot.action(/^set:n:(reminders|summary|homework|changes|exams)$/, async (ctx) => {
+  bot.action(/^set:n:(reminders|lessonEnd|summary|homework|announcements|changes|exams)$/, async (ctx) => {
     const kind = ctx.match[1];
     await savePrefs(ctx, kind === 'reminders'
       ? { remindersEnabled: ctx.prefs.remindersEnabled === false }
-      : { notifications: { ...ctx.prefs.notifications, [kind]: !notificationEnabled(ctx.prefs, kind) } });
+      : { notifications: { ...ctx.prefs.notifications, [kind]: !notifyOn(ctx.prefs, kind) } });
     return showNotifySettings(ctx);
   });
   bot.action('set:lang', async (ctx) => {
@@ -1073,23 +1371,34 @@ export const createBot = ({
     return show(ctx, ctx.t.homeworkCancelled, [[button(ctx.t.menu, isGroupChat(ctx) ? 'help' : 'menu')]]);
   });
 
-  bot.action(/^abs:(late|absent)$/, (ctx) => {
-    const { t } = ctx;
-    const kind = ctx.match[1];
-    return show(ctx, t.absenceReasonPrompt(kind), [
-      ...ABSENCE_REASONS[kind].map((code) => [button(t.absenceReasons[code], `abr:${kind}:${code}`)]),
-      [button(t.absenceOwnReason, `abo:${kind}`)],
+  // Опоздание: сначала «на сколько», потом причина. Минуты попадают в «досье» у старосты.
+  const reasonRows = (t, kind, minutes) => {
+    const suffix = minutes ? `:${minutes}` : '';
+    return [
+      ...ABSENCE_REASONS[kind].map((code) => [button(t.absenceReasons[code], `abr:${kind}:${code}${suffix}`)]),
+      [button(t.absenceOwnReason, `abo:${kind}${suffix}`)],
       [button(t.cancel, 'cancel')],
-    ]);
+    ];
+  };
+  bot.action('abs:late', (ctx) => {
+    const { t } = ctx;
+    const buttons = LATE_MINUTES.map((minutes) => button(t.minutesShort(minutes), `abm:${minutes}`));
+    return show(ctx, t.absenceMinutesPrompt, [buttons.slice(0, 3), buttons.slice(3), [button(t.cancel, 'cancel')]]);
   });
-  bot.action(/^abr:(late|absent):([a-z0-9]+)$/, async (ctx) => {
-    const [, kind, reasonCode] = ctx.match;
+  bot.action(/^abm:(\d+)$/, (ctx) => {
+    const minutes = Number(ctx.match[1]);
+    if (!LATE_MINUTES.includes(minutes)) return toast(ctx, ctx.t.selectionExpired);
+    return show(ctx, ctx.t.absenceReasonPrompt('late'), reasonRows(ctx.t, 'late', minutes));
+  });
+  bot.action('abs:absent', (ctx) => show(ctx, ctx.t.absenceReasonPrompt('absent'), reasonRows(ctx.t, 'absent')));
+  bot.action(/^abr:(late|absent):([a-z0-9]+)(?::(\d+))?$/, async (ctx) => {
+    const [, kind, reasonCode, minutes] = ctx.match;
     if (!ABSENCE_REASONS[kind].includes(reasonCode)) return toast(ctx, ctx.t.selectionExpired);
-    const { status } = await deliverAbsence({ user: ctx.user, prefs: ctx.prefs, kind, reasonCode });
-    return show(ctx, absenceReply(ctx.t, status), [[button(ctx.t.menu, 'menu')]]);
+    const result = await deliverAbsence({ user: ctx.user, prefs: ctx.prefs, kind, reasonCode, minutes: minutes ? Number(minutes) : null });
+    return show(ctx, absenceReply(ctx.t, result), [[button(ctx.t.menu, 'menu')]]);
   });
-  bot.action(/^abo:(late|absent)$/, (ctx) => {
-    setSession(ctx, { step: 'absence-text', kind: ctx.match[1] });
+  bot.action(/^abo:(late|absent)(?::(\d+))?$/, (ctx) => {
+    setSession(ctx, { step: 'absence-text', kind: ctx.match[1], minutes: ctx.match[2] ? Number(ctx.match[2]) : null });
     return show(ctx, ctx.match[1] === 'late' ? ctx.t.absenceDetailsLate : ctx.t.absenceDetailsMissing, [[button(ctx.t.cancel, 'cancel')]]);
   });
 
@@ -1246,6 +1555,23 @@ export const createBot = ({
       return state.step === 'group-text' ? saveGroupHomework(ctx, state, text) : savePersonalHomework(ctx, state, text);
     }
     if (state.step === 'absence-text') return sendAbsence(ctx, state, text);
+    if (state.step === 'ann-text') {
+      if (!text) return ctx.reply(ctx.t.announceNeedsText);
+      if (text.length > 1_500) return ctx.reply(ctx.t.announceTooLong);
+      return askAnnouncementReminder(ctx, text);
+    }
+    if (state.step === 'ann-when-custom') {
+      const remindAt = parseReminder(text);
+      if (!remindAt) return ctx.reply(ctx.t.remindCustomInvalid);
+      return finishAnnouncement(ctx, remindAt);
+    }
+    if (state.step === 'ann-remind-custom') {
+      const remindAt = parseReminder(text);
+      if (!remindAt) return ctx.reply(ctx.t.remindCustomInvalid);
+      setSession(ctx, null);
+      await savePrefs(ctx, { announcementReminders: { ...ctx.prefs.announcementReminders, [state.id]: remindAt } });
+      return show(ctx, `${ctx.t.remindSaved} · ${announcementWhen(ctx.lang, remindAt)}`, [[button(ctx.t.announcements, 'ann:list'), button(ctx.t.menu, 'menu')]]);
+    }
     if (state.step === 'setup') {
       if (!text) return undefined;
       return handleSearch(ctx, text, { mode: 'link' });

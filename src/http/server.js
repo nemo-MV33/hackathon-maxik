@@ -2,9 +2,12 @@ import { createServer } from 'node:http';
 import { parseDateKey, toDateKey } from '../lib/date.js';
 import { serveStatic } from './static.js';
 import { InitDataError, validateInitData } from './auth.js';
-import { HttpError, getMe, updateMe } from './routes/me.js';
+import { HttpError, deleteMe, getMe, updateMe } from './routes/me.js';
 import { getHomework, putHomework } from './routes/homework.js';
-import { getAbsences, postAbsence } from './routes/absence.js';
+import { getAbsenceHistory, getAbsences, getGroupMembers, postAbsence, putDeputy } from './routes/absence.js';
+import {
+  deleteAnnouncement, getAnnouncements, postAnnouncement, putAnnouncementReminder,
+} from './routes/announcements.js';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -15,7 +18,7 @@ const sendJson = (response, status, body) => {
     'Content-Length': Buffer.byteLength(data),
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, PUT, POST, DELETE, OPTIONS',
   });
   response.end(data);
 };
@@ -72,7 +75,9 @@ const serializeSchedule = (schedule) => ({
 });
 
 const route = async (request, response, options) => {
-  const { service, preferences, community, apiAccessKey, webappDir, sendAbsence, onHomeworkSaved } = options;
+  const {
+    service, preferences, community, apiAccessKey, webappDir, sendAbsence, onHomeworkSaved, publishAnnouncement,
+  } = options;
   if (request.method === 'OPTIONS') return sendJson(response, 204, null);
 
   const url = new URL(request.url, 'http://localhost');
@@ -85,10 +90,43 @@ const route = async (request, response, options) => {
   if (url.pathname === '/api/me') {
     const user = authenticate(request, options);
     if (!user) return sendJson(response, 401, { error: 'unauthorized' });
-    if (request.method === 'GET') return sendJson(response, 200, await getMe({ user, preferences }));
+    if (request.method === 'GET') return sendJson(response, 200, await getMe({ user, preferences, community }));
     if (request.method === 'PUT') {
       const body = await readJson(request);
       return sendJson(response, 200, await updateMe({ user, preferences, service, body }));
+    }
+    if (request.method === 'DELETE') return sendJson(response, 200, await deleteMe({ user, preferences, community }));
+    return sendJson(response, 405, { error: 'method_not_allowed' });
+  }
+
+  if (url.pathname === '/api/absence/history' || url.pathname === '/api/group/members' || url.pathname === '/api/deputy') {
+    const user = authenticate(request, options);
+    if (!user) return sendJson(response, 401, { error: 'unauthorized' });
+    if (url.pathname === '/api/absence/history' && request.method === 'GET') {
+      return sendJson(response, 200, await getAbsenceHistory({ user, preferences, community, url }));
+    }
+    if (url.pathname === '/api/group/members' && request.method === 'GET') {
+      return sendJson(response, 200, await getGroupMembers({ user, preferences, community }));
+    }
+    if (url.pathname === '/api/deputy' && request.method === 'PUT') {
+      return sendJson(response, 200, await putDeputy({ user, preferences, community, body: await readJson(request) }));
+    }
+    return sendJson(response, 405, { error: 'method_not_allowed' });
+  }
+
+  if (parts[0] === 'api' && parts[1] === 'announcements') {
+    const user = authenticate(request, options);
+    if (!user) return sendJson(response, 401, { error: 'unauthorized' });
+    const id = parts[2];
+    if (!id && request.method === 'GET') return sendJson(response, 200, await getAnnouncements({ user, preferences, community }));
+    if (!id && request.method === 'POST') {
+      const body = await readJson(request);
+      return sendJson(response, 200, await postAnnouncement({ user, preferences, community, body, publishAnnouncement }));
+    }
+    if (id && parts.length === 3 && request.method === 'DELETE') return sendJson(response, 200, await deleteAnnouncement({ user, community, id }));
+    if (id && parts[3] === 'reminder' && request.method === 'PUT') {
+      const body = await readJson(request);
+      return sendJson(response, 200, await putAnnouncementReminder({ user, preferences, community, id, body }));
     }
     return sendJson(response, 405, { error: 'method_not_allowed' });
   }

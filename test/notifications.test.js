@@ -67,7 +67,7 @@ test('новое ДЗ приходит группе, кроме автора, о
   assert.equal(buttonPayload(sent[0]), `lesson_${TOMORROW}_2_1`);
 
   await notifications.notifyHomework({ groupId: 11, lessonDate: TOMORROW, lessonNumber: 2, subject: 'Физика', text: 'Задачи 1–6', authorId: 2 }, { isUpdate: true });
-  assert.match(sent.at(-1).text, /ДЗ изменено/);
+  assert.match(sent.at(-1).text, /ДЗ изменили/);
 });
 
 test('сводка на завтра уходит один раз после 20:00', async (t) => {
@@ -118,7 +118,7 @@ test('переносы и замены: первый снимок молча, д
   assert.match(first.text, /Изменения в расписании\*\* · ИСТб-25-1/);
   assert.match(first.text, /аудитория Ж-115 → В-208/);
   assert.doesNotMatch(first.text, /Английский/, 'чужая подгруппа не приходит');
-  assert.match(second.text, /Английский — отменена/);
+  assert.match(second.text, /Английский: отменена/);
   assert.ok(!sent.some((item) => item.userId === 3));
 
   sent.length = 0;
@@ -188,10 +188,10 @@ test('POST /api/absence и настройки уведомлений в /api/me'
   assert.equal(calls[1].lesson, undefined, 'пару определит бот');
 
   const me = await (await call('/api/me', 'GET')).json();
-  assert.deepEqual(me.profile.notifications, { summary: true, homework: true, changes: true, exams: true });
+  assert.deepEqual(me.profile.notifications, { summary: true, homework: true, changes: true, exams: true, announcements: true, lessonEnd: false });
   assert.equal(me.profile.onboarded, false);
   const updated = await (await call('/api/me', 'PUT', { notifications: { changes: false } })).json();
-  assert.deepEqual(updated.profile.notifications, { summary: true, homework: true, changes: false, exams: true });
+  assert.deepEqual(updated.profile.notifications, { summary: true, homework: true, changes: false, exams: true, announcements: true, lessonEnd: false });
   assert.equal((await preferences.get(7)).notifications.changes, false);
   assert.equal((await call('/api/me', 'PUT', { notifications: { spam: true } })).status, 400);
 });

@@ -23,6 +23,15 @@ export class PreferencesStore {
     return value;
   }
 
+  // Удаление аккаунта: профиль, настройки и отметки об отправленных уведомлениях исчезают целиком.
+  async delete(userId) {
+    await this.#load();
+    const existed = this.#items.delete(String(userId));
+    this.#writeQueue = this.#writeQueue.then(() => this.#save());
+    await this.#writeQueue;
+    return existed;
+  }
+
   async entries() {
     await this.#load();
     return [...this.#items.entries()];

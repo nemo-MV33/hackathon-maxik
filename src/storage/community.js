@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 export class CommunityStore {
-  #data = { chats: {}, homework: [], personalHomework: [], notices: [] };
+  #data = { chats: {}, homework: [], personalHomework: [], notices: [], announcements: [] };
   #loaded = false;
   #writeQueue = Promise.resolve();
 
@@ -197,6 +197,75 @@ export class CommunityStore {
     ));
   }
 
+  // Вся история сообщений группы — для «досье» старосты; с senderId — только свои.
+  async noticesForGroup(groupId, { senderId } = {}) {
+    await this.#load();
+    return this.#data.notices
+      .filter((item) => String(item.groupId) === String(groupId))
+      .filter((item) => senderId === undefined || String(item.senderId) === String(senderId))
+      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+  }
+
+  // Объявления старосты: живут, пока не прошла дата события (или 14 дней без даты).
+  async addAnnouncement(value) {
+    await this.#load();
+    const item = { id: randomUUID(), createdAt: new Date().toISOString(), ...value };
+    this.#data.announcements.push(item);
+    await this.#queueSave();
+    return item;
+  }
+
+  async getAnnouncement(id) {
+    await this.#load();
+    return this.#data.announcements.find((item) => item.id === id) ?? null;
+  }
+
+  async updateAnnouncement(id, patch) {
+    await this.#load();
+    const item = this.#data.announcements.find((candidate) => candidate.id === id);
+    if (!item) return null;
+    Object.assign(item, patch);
+    await this.#queueSave();
+    return item;
+  }
+
+  async removeAnnouncement(id) {
+    await this.#load();
+    const before = this.#data.announcements.length;
+    this.#data.announcements = this.#data.announcements.filter((item) => item.id !== id);
+    if (before !== this.#data.announcements.length) await this.#queueSave();
+    return before !== this.#data.announcements.length;
+  }
+
+  async announcementsForGroup(groupId, { now = new Date() } = {}) {
+    await this.#load();
+    const keepUntil = (item) => new Date(item.remindAt ?? item.createdAt).getTime() + (item.remindAt ? 86_400_000 : 14 * 86_400_000);
+    return this.#data.announcements
+      .filter((item) => String(item.groupId) === String(groupId) && keepUntil(item) > now.getTime())
+      .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+  }
+
+  async allAnnouncements() {
+    await this.#load();
+    return [...this.#data.announcements];
+  }
+
+  // Удаление аккаунта студента. Сообщения об опозданиях остаются у старосты (это журнал группы),
+  // а роль старосты освобождается: история группы перейдёт новому старосте, потому что хранится по группе.
+  async removeUser(userId) {
+    await this.#load();
+    const id = String(userId);
+    this.#data.personalHomework = this.#data.personalHomework.filter((item) => String(item.userId) !== id);
+    for (const chat of Object.values(this.#data.chats)) {
+      if (String(chat.headman?.userId) === id) chat.headman = null;
+      if (String(chat.deputy?.userId) === id) chat.deputy = null;
+      if (chat.editors?.some((editor) => String(editor.userId) === id)) {
+        chat.editors = chat.editors.filter((editor) => String(editor.userId) !== id);
+      }
+    }
+    await this.#queueSave();
+  }
+
   async markNoticeSent(id) {
     await this.#load();
     const item = this.#data.notices.find((candidate) => candidate.id === id);
@@ -218,6 +287,7 @@ export class CommunityStore {
         homework: parsed.homework ?? [],
         personalHomework: parsed.personalHomework ?? [],
         notices: parsed.notices ?? [],
+        announcements: parsed.announcements ?? [],
       };
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;

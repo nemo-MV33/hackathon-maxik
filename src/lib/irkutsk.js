@@ -31,3 +31,15 @@ export const timeToMinutes = (time) => {
 };
 
 export const lessonEndMinutes = (lesson) => timeToMinutes(String(lesson.time).split(/[–-]/)[1] ?? lesson.time);
+
+// «2026-09-28» + «13:30» по Иркутску → момент времени (Иркутск — UTC+8 без перехода на летнее время).
+export const irkutskMoment = (dateKey, time) => {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const [hours, minutes] = time.split(':').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, hours - 8, minutes));
+};
+
+export const irkutskClock = (date) => {
+  const { hour, minute } = parts(date);
+  return `${hour}:${minute}`;
+};

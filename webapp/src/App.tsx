@@ -7,26 +7,45 @@ import { Onboarding } from './screens/Onboarding';
 import { Schedule } from './screens/Schedule';
 import { LessonScreen } from './screens/LessonScreen';
 import { ImportScreen } from './screens/ImportScreen';
-import { ProfileScreen } from './screens/ProfileScreen';
+import { ProfileScreen, type ProfileSection } from './screens/ProfileScreen';
 import { WelcomeScreen } from './screens/WelcomeScreen';
 import { InviteScreen } from './screens/InviteScreen';
 import { ExamsScreen } from './screens/ExamsScreen';
+import { HomeScreen } from './screens/HomeScreen';
+import { PlannerScreen } from './screens/PlannerScreen';
+import { HeadmanScreen } from './screens/HeadmanScreen';
+import { EntityScheduleScreen, type EntityTarget } from './screens/EntityScheduleScreen';
+import { AccountScreen } from './screens/AccountScreen';
+import { UniversityScreen } from './screens/UniversityScreen';
+import { DisciplinesScreen, DisciplineScreen } from './screens/DisciplinesScreen';
+import { NotificationsScreen } from './screens/NotificationsScreen';
+import { AbsencesScreen, StudentScreen } from './screens/AbsencesScreen';
+import { FaqScreen } from './screens/FaqScreen';
+import { TabBar, type Tab } from './components/TabBar';
 import { Loading } from './components/Status';
 import { loadMe, syncProfile } from './lib/api';
 import { isLang, useI18n } from './lib/i18n';
+import { MeProvider, useMe } from './lib/me';
+
+// Экраны поверх вкладок: открываются стопкой, «Назад» возвращает к предыдущему.
+type Screen =
+  | { name: 'lesson'; lesson: Lesson }
+  | { name: 'profile' }
+  | { name: 'section'; section: ProfileSection }
+  | { name: 'discipline'; subject: string }
+  | { name: 'student'; id: number }
+  | { name: 'exams' }
+  | { name: 'entity'; target: EntityTarget };
 
 type Route =
-  | { name: 'schedule' }
+  | { name: 'main' }
   | { name: 'onboarding' }
-  | { name: 'lesson'; lesson: Lesson }
   | { name: 'import'; shared: SharedHomework | null }
   | { name: 'decoding' }
-  | { name: 'profile' }
   | { name: 'welcome' }
-  | { name: 'exams' }
   | { name: 'invite'; groupId: number; subgroup: 1 | 2 | null };
 
-// Кнопки в уведомлениях бота открывают приложение с start_param: day_2026-10-02 или lesson_2026-10-02_2_0.
+// Кнопки в уведомлениях бота открывают приложение с start_param: day_2026-10-02, lesson_2026-10-02_2_0 или plan.
 export type LaunchTarget = { date: string; lessonNumber?: number; subgroup?: number | null };
 
 const launchTarget = (): LaunchTarget | undefined => {
@@ -38,21 +57,26 @@ const launchTarget = (): LaunchTarget | undefined => {
   return undefined;
 };
 
+const initialTab = (): Tab => {
+  const value = startParam() ?? '';
+  if (value === 'plan') return 'planner';
+  if (launchTarget()) return 'schedule';
+  return 'home';
+};
+
 // Приглашение одногруппника: startapp=group_478237_1 — новичок сразу видит свою группу.
 const initialRoute = (): Route => {
   const value = startParam() ?? '';
   if (value.startsWith('hw')) return { name: 'decoding' };
   const invite = value.match(/^group_(\d+)_([012])$/);
   if (invite) return { name: 'invite', groupId: Number(invite[1]), subgroup: invite[2] === '0' ? null : (Number(invite[2]) as 1 | 2) };
-  return { name: 'schedule' };
+  return { name: 'main' };
 };
 
 export const App = () => {
   const [profile, saveProfile] = useProfile();
   const [route, setRoute] = useState<Route>(initialRoute);
-  const [launch, setLaunch] = useState(launchTarget);
   const [profileRevision, setProfileRevision] = useState(0);
-  const scheduleScroll = useRef(0);
   const { lang, setLang } = useI18n();
   // В MAX профиль общий с ботом: сначала узнаём, что выбрано там, и только потом показываем экраны.
   const [ready, setReady] = useState(() => !webApp()?.initData);
@@ -73,17 +97,12 @@ export const App = () => {
             group: { id: remote.group.id, title: remote.group.title, institute: remote.institute ?? '', course: remote.course },
             subgroup: remote.subgroup,
           });
-        }
+        } else saveProfile(null);
       })
       .catch(() => {})
       .finally(() => { if (active) setReady(true); });
     return () => { active = false; window.clearTimeout(timer); };
   }, []);
-
-  // Карточка пары открывается сверху, а расписание возвращается туда, где его листали.
-  useLayoutEffect(() => {
-    window.scrollTo(0, route.name === 'schedule' ? scheduleScroll.current : 0);
-  }, [route]);
 
   useEffect(() => {
     if (!profile || !ready) return;
@@ -99,9 +118,9 @@ export const App = () => {
     decodeHomework(startParam() ?? '').then((shared) => setRoute({ name: 'import', shared }));
   }, [route.name]);
 
-  const toSchedule = () => {
+  const toMain = () => {
     if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
-    setRoute({ name: 'schedule' });
+    setRoute({ name: 'main' });
   };
 
   if (route.name === 'decoding' || !ready) return <Loading />;
@@ -113,7 +132,7 @@ export const App = () => {
         profile={profile}
         onDone={(group) => {
           if (group && route.shared) saveProfile({ group, subgroup: route.shared.subgroup });
-          toSchedule();
+          toMain();
         }}
       />
     );
@@ -121,7 +140,7 @@ export const App = () => {
 
   const afterGroupChosen = () => {
     if (onboarded === false) setRoute({ name: 'welcome' });
-    else toSchedule();
+    else toMain();
   };
 
   if (route.name === 'invite') {
@@ -143,9 +162,9 @@ export const App = () => {
     return (
       <WelcomeScreen
         groupTitle={profile.group.title}
-        onDone={(next) => {
+        onDone={() => {
           setOnboarded(true);
-          setRoute(next === 'profile' ? { name: 'profile' } : { name: 'schedule' });
+          toMain();
         }}
       />
     );
@@ -156,57 +175,128 @@ export const App = () => {
       <Onboarding
         current={profile}
         onDone={(value) => { saveProfile(value); afterGroupChosen(); }}
-        onCancel={profile ? toSchedule : undefined}
+        onCancel={profile ? toMain : undefined}
       />
     );
-  }
-
-  if (route.name === 'exams') {
-    return (
-      <ExamsScreen
-        profile={profile}
-        onBack={toSchedule}
-        onOpenLesson={(lesson) => setRoute({ name: 'lesson', lesson })}
-      />
-    );
-  }
-
-  if (route.name === 'profile') {
-    return (
-      <ProfileScreen
-        profile={profile}
-        onBack={toSchedule}
-        onChangeGroup={() => setRoute({ name: 'onboarding' })}
-      />
-    );
-  }
-
-  if (route.name === 'lesson') {
-    return <LessonScreen lesson={route.lesson} profile={profile} profileRevision={profileRevision} onBack={toSchedule} />;
   }
 
   return (
-    <Schedule
-      profile={profile}
-      profileRevision={profileRevision}
-      launch={launch}
-      onLaunchHandled={() => setLaunch(undefined)}
-      onOpenExams={() => {
-        scheduleScroll.current = window.scrollY;
-        setRoute({ name: 'exams' });
-      }}
-      onOpenProfile={() => {
-        scheduleScroll.current = window.scrollY;
-        setRoute({ name: 'profile' });
-      }}
-      onChangeGroup={() => {
-        scheduleScroll.current = window.scrollY;
-        setRoute({ name: 'onboarding' });
-      }}
-      onOpenLesson={(lesson) => {
-        scheduleScroll.current = window.scrollY;
-        setRoute({ name: 'lesson', lesson });
-      }}
-    />
+    <MeProvider revision={profileRevision}>
+      <Main
+        profile={profile}
+        profileRevision={profileRevision}
+        onChangeGroup={() => setRoute({ name: 'onboarding' })}
+        onAccountDeleted={() => {
+          saveProfile(null);
+          setOnboarded(false);
+          setRoute({ name: 'onboarding' });
+        }}
+      />
+    </MeProvider>
+  );
+};
+
+type MainProps = {
+  profile: NonNullable<ReturnType<typeof useProfile>[0]>;
+  profileRevision: number;
+  onChangeGroup: () => void;
+  onAccountDeleted: () => void;
+};
+
+const Main = ({ profile, profileRevision, onChangeGroup, onAccountDeleted }: MainProps) => {
+  const { me } = useMe();
+  const [tab, setTabState] = useState<Tab>(initialTab);
+  const [stack, setStack] = useState<Screen[]>([]);
+  const [launch, setLaunch] = useState(launchTarget);
+  const scroll = useRef(new Map<string, number>());
+  const top = stack.at(-1);
+  const isHeadman = me?.role === 'headman';
+  const key = top ? `${stack.length}:${top.name}` : `tab:${tab}`;
+
+  // Каждая вкладка и экран помнит, где его листали.
+  useLayoutEffect(() => {
+    window.scrollTo(0, scroll.current.get(key) ?? 0);
+  }, [key]);
+
+  const remember = () => scroll.current.set(key, window.scrollY);
+  const push = (screen: Screen) => { remember(); setStack((current) => [...current, screen]); };
+  const pop = () => {
+    scroll.current.delete(key);
+    setStack((current) => current.slice(0, -1));
+  };
+  const setTab = (next: Tab) => {
+    remember();
+    setStack([]);
+    if (next === tab) scroll.current.set(`tab:${next}`, 0);
+    setTabState(next);
+  };
+  const openLesson = (lesson: Lesson) => push({ name: 'lesson', lesson });
+  const openProfile = () => push({ name: 'profile' });
+
+  useEffect(() => {
+    if (tab === 'headman' && me && !isHeadman) setTabState('home');
+  }, [tab, me, isHeadman]);
+
+  if (top?.name === 'lesson') {
+    return <LessonScreen lesson={top.lesson} profile={profile} profileRevision={profileRevision} onBack={pop} />;
+  }
+  if (top?.name === 'exams') return <ExamsScreen profile={profile} onBack={pop} onOpenLesson={openLesson} />;
+  if (top?.name === 'entity') return <EntityScheduleScreen target={top.target} onBack={pop} />;
+  if (top?.name === 'profile') {
+    return (
+      <ProfileScreen
+        profile={profile}
+        onBack={pop}
+        onOpen={(section) => push({ name: 'section', section })}
+        onAccountDeleted={onAccountDeleted}
+      />
+    );
+  }
+  if (top?.name === 'section') {
+    const back = pop;
+    switch (top.section) {
+      case 'account': return <AccountScreen profile={profile} onBack={back} />;
+      case 'university': return <UniversityScreen profile={profile} onBack={back} onChangeGroup={onChangeGroup} />;
+      case 'disciplines': return <DisciplinesScreen profile={profile} onBack={back} onOpen={(subject) => push({ name: 'discipline', subject })} />;
+      case 'notifications': return <NotificationsScreen onBack={back} />;
+      case 'absences': return <AbsencesScreen profile={profile} onBack={back} onOpenStudent={(id) => push({ name: 'student', id })} />;
+      case 'faq': return <FaqScreen onBack={back} />;
+      default: return null;
+    }
+  }
+  if (top?.name === 'discipline') return <DisciplineScreen profile={profile} subject={top.subject} onBack={pop} />;
+  if (top?.name === 'student') return <StudentScreen id={top.id} onBack={pop} />;
+
+  return (
+    <>
+      {tab === 'home' && (
+        <HomeScreen
+          profile={profile}
+          profileRevision={profileRevision}
+          onOpenLesson={openLesson}
+          onOpenProfile={openProfile}
+          onOpenExams={() => push({ name: 'exams' })}
+          onOpenPlanner={() => setTab('planner')}
+        />
+      )}
+      {tab === 'schedule' && (
+        <Schedule
+          profile={profile}
+          profileRevision={profileRevision}
+          launch={launch}
+          onLaunchHandled={() => setLaunch(undefined)}
+          onOpenLesson={openLesson}
+          onOpenProfile={openProfile}
+          onOpenEntity={(target) => push({ name: 'entity', target })}
+        />
+      )}
+      {tab === 'planner' && (
+        <PlannerScreen profile={profile} profileRevision={profileRevision} onOpenLesson={openLesson} onOpenProfile={openProfile} />
+      )}
+      {tab === 'headman' && isHeadman && (
+        <HeadmanScreen onOpenProfile={openProfile} onOpenStudent={(id) => push({ name: 'student', id })} />
+      )}
+      <TabBar tab={tab} onChange={setTab} headman={isHeadman} />
+    </>
   );
 };

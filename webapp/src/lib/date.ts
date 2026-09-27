@@ -53,3 +53,19 @@ export const formatRange = (from: Date, to: Date) => {
 
 export const formatStamp = (iso: string) =>
   format({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Irkutsk' }, new Date(iso)).replace('.', '');
+
+// Время в интерфейсе — иркутское (UTC+8), а на сервер уходит момент в ISO.
+export const irkutskMoment = (dateKey: string, time: string) =>
+  new Date(`${dateKey}T${time}:00+08:00`).toISOString();
+
+// Для <input type="datetime-local">: «2026-09-28T19:00» по Иркутску и обратно.
+export const toIrkutskInput = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3_600_000).toISOString().slice(0, 16);
+export const fromIrkutskInput = (value: string) => (value ? new Date(`${value}:00+08:00`).toISOString() : null);
+
+export const formatMoment = (iso: string) =>
+  new Intl.DateTimeFormat(t().locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Irkutsk' })
+    .format(new Date(iso)).replace('.', '');
+
+export const formatShortDay = (key: string) =>
+  new Intl.DateTimeFormat(t().locale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+    .format(fromDateKey(key)).replace('.', '');
