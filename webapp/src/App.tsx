@@ -7,6 +7,7 @@ import { Onboarding } from './screens/Onboarding';
 import { Schedule } from './screens/Schedule';
 import { LessonScreen } from './screens/LessonScreen';
 import { ImportScreen } from './screens/ImportScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
 import { Loading } from './components/Status';
 import { loadMe, syncProfile } from './lib/api';
 import { isLang, useI18n } from './lib/i18n';
@@ -16,13 +17,27 @@ type Route =
   | { name: 'onboarding' }
   | { name: 'lesson'; lesson: Lesson }
   | { name: 'import'; shared: SharedHomework | null }
-  | { name: 'decoding' };
+  | { name: 'decoding' }
+  | { name: 'profile' };
+
+// Кнопки в уведомлениях бота открывают приложение с start_param: day_2026-10-02 или lesson_2026-10-02_2_0.
+export type LaunchTarget = { date: string; lessonNumber?: number; subgroup?: number | null };
+
+const launchTarget = (): LaunchTarget | undefined => {
+  const value = startParam() ?? '';
+  const day = value.match(/^day_(\d{4}-\d{2}-\d{2})$/);
+  if (day) return { date: day[1] };
+  const lesson = value.match(/^lesson_(\d{4}-\d{2}-\d{2})_(\d{1,2})_([012])$/);
+  if (lesson) return { date: lesson[1], lessonNumber: Number(lesson[2]), subgroup: Number(lesson[3]) || null };
+  return undefined;
+};
 
 const initialRoute = (): Route => (startParam()?.startsWith('hw') ? { name: 'decoding' } : { name: 'schedule' });
 
 export const App = () => {
   const [profile, saveProfile] = useProfile();
   const [route, setRoute] = useState<Route>(initialRoute);
+  const [launch, setLaunch] = useState(launchTarget);
   const [profileRevision, setProfileRevision] = useState(0);
   const scheduleScroll = useRef(0);
   const { lang, setLang } = useI18n();
@@ -98,6 +113,16 @@ export const App = () => {
     );
   }
 
+  if (route.name === 'profile') {
+    return (
+      <ProfileScreen
+        profile={profile}
+        onBack={toSchedule}
+        onChangeGroup={() => setRoute({ name: 'onboarding' })}
+      />
+    );
+  }
+
   if (route.name === 'lesson') {
     return <LessonScreen lesson={route.lesson} profile={profile} profileRevision={profileRevision} onBack={toSchedule} />;
   }
@@ -106,6 +131,12 @@ export const App = () => {
     <Schedule
       profile={profile}
       profileRevision={profileRevision}
+      launch={launch}
+      onLaunchHandled={() => setLaunch(undefined)}
+      onOpenProfile={() => {
+        scheduleScroll.current = window.scrollY;
+        setRoute({ name: 'profile' });
+      }}
       onChangeGroup={() => {
         scheduleScroll.current = window.scrollY;
         setRoute({ name: 'onboarding' });

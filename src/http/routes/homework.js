@@ -103,7 +103,7 @@ export const getHomework = async ({ user, preferences, community, url }) => {
   };
 };
 
-export const putHomework = async ({ user, preferences, community, service, body }) => {
+export const putHomework = async ({ user, preferences, community, service, body, onHomeworkSaved }) => {
   const { group } = await profileGroup(user, preferences);
   const input = lessonInput(body);
   const lesson = await findLesson(service, group.id, input);
@@ -130,6 +130,7 @@ export const putHomework = async ({ user, preferences, community, service, body 
       authorId: user.id,
       authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `MAX ID ${user.id}`,
     });
+    onHomeworkSaved?.(item);
     return { item: serialize({ ...item, sharedText: item.text, personalText: null, source: 'shared' }) };
   }
 

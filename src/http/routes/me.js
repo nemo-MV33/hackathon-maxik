@@ -6,6 +6,8 @@ export class HttpError extends Error {
   }
 }
 
+const NOTIFICATION_KINDS = ['summary', 'homework', 'changes'];
+
 const publicProfile = (saved) => ({
   group: saved.selection?.kind === 'group'
     ? { id: saved.selection.id, title: saved.selection.title }
@@ -15,6 +17,7 @@ const publicProfile = (saved) => ({
   subgroup: saved.subgroup ?? null,
   remindersEnabled: saved.remindersEnabled !== false,
   lang: saved.lang ?? null,
+  notifications: Object.fromEntries(NOTIFICATION_KINDS.map((kind) => [kind, saved.notifications?.[kind] !== false])),
 });
 
 const parseSubgroup = (value) => {
@@ -61,6 +64,21 @@ export const updateMe = async ({ user, preferences, service, body }) => {
   if ('lang' in body) {
     if (!['ru', 'en'].includes(body.lang)) throw new HttpError(400, 'invalid_lang', 'lang должен быть ru или en');
     patch.lang = body.lang;
+  }
+
+  if ('notifications' in body) {
+    const value = body.notifications;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new HttpError(400, 'invalid_notifications', 'notifications должен быть объектом');
+    }
+    const next = { ...saved.notifications };
+    for (const [kind, enabled] of Object.entries(value)) {
+      if (!NOTIFICATION_KINDS.includes(kind) || typeof enabled !== 'boolean') {
+        throw new HttpError(400, 'invalid_notifications', `Неизвестная настройка уведомлений: ${kind}`);
+      }
+      next[kind] = enabled;
+    }
+    patch.notifications = next;
   }
 
   const value = await preferences.set(user.id, { ...saved, ...patch });

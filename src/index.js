@@ -6,6 +6,7 @@ import { createHttpServer } from './http/server.js';
 import { IrnituClient } from './irnitu/client.js';
 import { ScheduleService } from './services/schedule-service.js';
 import { ReminderService } from './services/reminder-service.js';
+import { NotificationService } from './services/notification-service.js';
 import { PreferencesStore } from './storage/preferences.js';
 import { CommunityStore } from './storage/community.js';
 
@@ -22,6 +23,8 @@ const preferences = new PreferencesStore(
 const community = new CommunityStore(
   fileURLToPath(new URL('../data/community.json', import.meta.url)),
 );
+let notifications;
+const onHomeworkSaved = (item) => notifications?.homeworkSaved(item);
 const bot = createBot({
   token: config.botToken,
   service,
@@ -29,11 +32,21 @@ const bot = createBot({
   miniAppButton: config.miniAppButton,
   preferences,
   community,
+  onHomeworkSaved,
+});
+notifications = new NotificationService({
+  bot,
+  service,
+  preferences,
+  community,
+  snapshotsPath: fileURLToPath(new URL('../data/schedule-snapshots.json', import.meta.url)),
 });
 const server = createHttpServer({
   service,
   preferences,
   community,
+  sendAbsence: bot.sendAbsence,
+  onHomeworkSaved,
   apiAccessKey: config.apiAccessKey,
   botToken: config.botToken,
   initDataMaxAgeSec: config.initDataMaxAgeSec,
@@ -47,6 +60,7 @@ server.listen(config.port, () => {
   console.log(`HTTP API is listening on port ${config.port}`);
 });
 reminders.start();
+notifications.start();
 
 const syncCommands = () => bot.syncCommands().catch((error) => {
   console.error('Failed to update bot commands, retrying:', error.message);
@@ -59,6 +73,7 @@ const stop = async (signal) => {
   console.log(`Received ${signal}, shutting down`);
   bot.stop();
   reminders.stop();
+  notifications.stop();
   server.close(() => process.exit(0));
 };
 

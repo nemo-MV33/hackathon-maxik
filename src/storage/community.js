@@ -155,6 +155,24 @@ export class CommunityStore {
     return item;
   }
 
+  async pendingNoticesForHeadman(userId) {
+    await this.#load();
+    const chatIds = new Set(Object.values(this.#data.chats)
+      .filter((chat) => String(chat.headman?.userId) === String(userId))
+      .map((chat) => String(chat.chatId)));
+    return this.#data.notices.filter((item) => item.status === 'pending' && chatIds.has(String(item.chatId)));
+  }
+
+  async markNoticeSent(id) {
+    await this.#load();
+    const item = this.#data.notices.find((candidate) => candidate.id === id);
+    if (!item) return null;
+    item.status = 'sent';
+    item.deliveredAt = new Date().toISOString();
+    await this.#queueSave();
+    return item;
+  }
+
   async #load() {
     if (this.#loaded) return;
     this.#loaded = true;

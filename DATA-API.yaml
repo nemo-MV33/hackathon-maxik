@@ -58,3 +58,30 @@ checks:
       statusCodes: [200]
       contentType: application/json
       requiredFields: [item]
+  - name: notification-settings
+    role: student
+    request:
+      method: PUT
+      path: /api/me
+      headers:
+        Authorization: "tma <MAX_INIT_DATA>"
+      body:
+        notifications:
+          changes: false
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [profile]
+  - name: absence-note
+    role: student
+    request:
+      method: POST
+      path: /api/absence
+      headers:
+        Authorization: "tma <MAX_INIT_DATA>"
+      body:
+        kind: late
+        reason: transport
+    expected:
+      statusCodes: [200, 409]
+      contentType: application/json

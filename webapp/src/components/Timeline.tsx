@@ -4,6 +4,7 @@ import { homeworkKey, type HomeworkItem } from '../data/homework';
 import { clockLabel, formatDuration, timeToMinutes } from '../lib/date';
 import { isControlLesson, lessonKindClass, lessonKindName } from '../lib/lessonKind';
 import { useI18n } from '../lib/i18n';
+import type { AbsenceKind } from '../lib/api';
 
 export const lessonStart = (lesson: Lesson) => lesson.time.slice(0, 5);
 export const lessonEnd = (lesson: Lesson) => lesson.time.slice(6, 11);
@@ -77,9 +78,10 @@ type DayTimelineProps = {
   now: Date;
   homework: Map<string, HomeworkItem> | null;
   onOpen: (lesson: Lesson) => void;
+  onAbsence?: (kind: AbsenceKind, lesson: Lesson) => void;
 };
 
-export const DayTimeline = ({ lessons, dateKey, todayKey, now, homework, onOpen }: DayTimelineProps) => {
+export const DayTimeline = ({ lessons, dateKey, todayKey, now, homework, onOpen, onAbsence }: DayTimelineProps) => {
   const { t } = useI18n();
   const isToday = dateKey === todayKey;
   const isPastDay = dateKey < todayKey;
@@ -96,6 +98,11 @@ export const DayTimeline = ({ lessons, dateKey, todayKey, now, homework, onOpen 
     if (timeToMinutes(lessonStart(lesson)) <= nowMinutes) return 'live';
     return 'idle';
   };
+
+  // «Опоздаю» имеет смысл только для пары, которая идёт или начнётся следующей.
+  const absenceTarget = isToday && onAbsence
+    ? lessons.find((lesson) => timeToMinutes(lessonEnd(lesson)) > nowMinutes)
+    : undefined;
 
   const markerNote = (index: number) => {
     const left = formatDuration(timeToMinutes(lessonStart(lessons[index])) - nowMinutes);
@@ -121,6 +128,12 @@ export const DayTimeline = ({ lessons, dateKey, todayKey, now, homework, onOpen 
               homework={homework?.get(homeworkKey(lesson))}
               onOpen={onOpen}
             />
+            {lesson === absenceTarget && (
+              <div className="absence-actions">
+                <button type="button" className="pill-button" onClick={() => onAbsence!('late', lesson)}>{t.late}</button>
+                <button type="button" className="pill-button" onClick={() => onAbsence!('absent', lesson)}>{t.absent}</button>
+              </div>
+            )}
           </Fragment>
         );
       })}

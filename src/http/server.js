@@ -4,6 +4,7 @@ import { serveStatic } from './static.js';
 import { InitDataError, validateInitData } from './auth.js';
 import { HttpError, getMe, updateMe } from './routes/me.js';
 import { getHomework, putHomework } from './routes/homework.js';
+import { postAbsence } from './routes/absence.js';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -14,7 +15,7 @@ const sendJson = (response, status, body) => {
     'Content-Length': Buffer.byteLength(data),
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, PUT, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, PUT, POST, OPTIONS',
   });
   response.end(data);
 };
@@ -71,7 +72,7 @@ const serializeSchedule = (schedule) => ({
 });
 
 const route = async (request, response, options) => {
-  const { service, preferences, community, apiAccessKey, webappDir } = options;
+  const { service, preferences, community, apiAccessKey, webappDir, sendAbsence, onHomeworkSaved } = options;
   if (request.method === 'OPTIONS') return sendJson(response, 204, null);
 
   const url = new URL(request.url, 'http://localhost');
@@ -100,9 +101,17 @@ const route = async (request, response, options) => {
     }
     if (request.method === 'PUT') {
       const body = await readJson(request);
-      return sendJson(response, 200, await putHomework({ user, preferences, community, service, body }));
+      return sendJson(response, 200, await putHomework({ user, preferences, community, service, body, onHomeworkSaved }));
     }
     return sendJson(response, 405, { error: 'method_not_allowed' });
+  }
+
+  if (url.pathname === '/api/absence') {
+    const user = authenticate(request, options);
+    if (!user) return sendJson(response, 401, { error: 'unauthorized' });
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'method_not_allowed' });
+    const body = await readJson(request);
+    return sendJson(response, 200, await postAbsence({ user, preferences, service, sendAbsence, body }));
   }
 
   if (request.method !== 'GET') return sendJson(response, 405, { error: 'method_not_allowed' });

@@ -3,13 +3,16 @@ import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
 import { homeworkKey, saveHomework, useRemoteHomework, type HomeworkData } from '../data/homework';
 import { hasNativeBackButton, haptic, openExternal } from '../bridge/max';
-import { formatDay, formatStamp, fromDateKey } from '../lib/date';
+import { formatDay, formatStamp, fromDateKey, timeToMinutes, toDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
 import { ErrorState, Loading } from '../components/Status';
 import { ChevronLeft } from '../components/Icon';
 import { isControlLesson, lessonKindClass, lessonKindCode, lessonKindName } from '../lib/lessonKind';
 import { useI18n } from '../lib/i18n';
+import { AbsenceSheet } from '../components/AbsenceSheet';
+import type { AbsenceKind } from '../lib/api';
+import { useNow } from '../lib/useNow';
 
 type Props = {
   lesson: Lesson;
@@ -72,6 +75,11 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null);
+  const [absence, setAbsence] = useState<AbsenceKind | null>(null);
+  const now = useNow();
+  const todayKey = toDateKey(now);
+  const lessonOver = lesson.date < todayKey || (lesson.date === todayKey
+    && timeToMinutes(lesson.time.slice(6, 11)) <= now.getUTCHours() * 60 + now.getUTCMinutes());
 
   // Во время редактирования системная «Назад» закрывает редактор, а не экран пары.
   useBackButton(editing && !saving ? () => setEditing(false) : onBack);
@@ -133,6 +141,13 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
       )}
       <LessonHeading lesson={lesson} />
       <LessonFacts lesson={lesson} />
+      {!lessonOver && (
+        <div className="absence-actions absence-actions--wide">
+          <button type="button" className="pill-button" onClick={() => setAbsence('late')}>{t.late}</button>
+          <button type="button" className="pill-button" onClick={() => setAbsence('absent')}>{t.absent}</button>
+        </div>
+      )}
+      {absence && <AbsenceSheet kind={absence} lesson={lesson} onClose={() => setAbsence(null)} />}
 
       <section className="homework" aria-labelledby="homework-title">
         <div className="section-head">

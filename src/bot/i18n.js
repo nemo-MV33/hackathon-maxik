@@ -79,6 +79,13 @@ const ru = {
   settingsGroup: (value) => `Группа: ${value ?? 'не выбрана'}`,
   settingsSubgroup: (value) => `Подгруппа: ${value ? value : 'вся группа'}`,
   settingsReminders: (on) => `Напоминания за 15 минут до пары: ${on ? 'включены' : 'выключены'}`,
+  settingsNotify: (name, on) => `${name}: ${on ? 'включено' : 'выключено'}`,
+  notifyNames: {
+    summary: 'Сводка на завтра в 20:00',
+    homework: 'Уведомления о новом ДЗ',
+    changes: 'Переносы и замены',
+  },
+  notifyToggle: (name, on) => `${on ? 'Выключить' : 'Включить'}: ${name.toLowerCase()}`,
   settingsLanguage: 'Язык: русский',
   changeGroup: 'Сменить группу',
   changeSubgroup: 'Сменить подгруппу',
@@ -142,17 +149,31 @@ const ru = {
   absencePrompt: 'Что передать старосте?',
   absenceLate: 'Опоздаю',
   absenceMissing: 'Не приду',
+  absenceReasonPrompt: (kind) => (kind === 'late' ? 'Почему опоздаешь?' : 'Почему не придёшь?'),
+  absenceReasons: {
+    late10: 'Опоздаю на 5–10 минут',
+    late20: 'Опоздаю на 15–20 минут',
+    transport: 'Задерживается транспорт',
+    ill: 'Болею',
+    family: 'Семейные обстоятельства',
+    certificate: 'Справку принесу позже',
+  },
+  absenceOwnReason: 'Своя причина…',
   absenceDetailsLate: 'Напиши причину и примерное время. Можно прикрепить фото.',
   absenceDetailsMissing: 'Напиши причину. Можно прикрепить фото, например справку.',
   absenceNeedsText: 'Добавь к фото пару слов о причине.',
   absenceNoHeadman: 'У твоей группы пока нет старосты в боте. Попроси его написать /headman в чате группы.',
   absenceInGroup: 'Это лучше писать в личке с ботом — так причина не попадёт в общий чат.',
-  absenceSent: 'Отправил старосте. Твоё имя в сообщении не указано.',
-  absencePending: 'Сохранил, но староста ещё не открывал бота в личке — сообщение не дошло. Напомни ему нажать «Начать».',
-  absenceToHeadman: (kind, group, text) => [
-    `**${kind === 'late' ? 'Опоздание' : 'Отсутствие'} · ${group}**`, '', text, '',
-    '_Анонимное сообщение через norfly_',
-  ].join('\n'),
+  absenceSent: 'Отправил старосте.',
+  absencePending: 'Сохранил. Староста ещё не открывал бота в личке — перешлю, как только он нажмёт «Начать».',
+  absenceToHeadman: ({ kind, group, sender, lesson, reason }) => [
+    `**${kind === 'late' ? 'Опоздание' : 'Отсутствие'} · ${group}**`,
+    sender,
+    lesson ? `Пара: ${lesson}` : '',
+    '',
+    reason,
+  ].filter((line, index) => line || index === 3).join('\n'),
+  absenceDelayed: (date) => `_Сообщение отправлено ${date}, пока бот не мог до тебя достучаться._`,
 
   unknownCommand: 'Такой команды нет. Вот что я умею:',
   help: [
@@ -164,7 +185,7 @@ const ru = {
     '/add — записать ДЗ',
     '/find — найти группу, преподавателя, аудиторию',
     '/absence — предупредить старосту',
-    '/settings — группа, напоминания, язык',
+    '/settings — группа, уведомления, язык',
     '',
     'Или просто напиши группу, фамилию преподавателя или аудиторию.',
   ].join('\n'),
@@ -186,6 +207,24 @@ const ru = {
   reminder: (subject, time, place) => `Через 15 минут: **${subject}**\n${time}${place ? ` · ${place}` : ''}`,
 
   lessonsCount: (count) => `${count} ${plural(count, 'пара', 'пары', 'пар')}`,
+
+  summaryTitle: (day) => `**Завтра, ${day}**`,
+  summaryLessons: (count, start) => `${count} ${plural(count, 'пара', 'пары', 'пар')}, первая в ${start}`,
+  summaryHomework: (count, total) => (count
+    ? `📚 ДЗ задано к ${count} из ${total}:`
+    : '📚 ДЗ к завтрашним парам не записано'),
+  newHomework: (subject, when) => `📚 **Новое ДЗ** · ${subject}\n${when}`,
+  updatedHomework: (subject, when) => `✏️ **ДЗ изменено** · ${subject}\n${when}`,
+  changesTitle: (group) => `🔄 **Изменения в расписании** · ${group}`,
+  changeCancelled: (when, subject) => `${when} · ${subject} — отменена`,
+  changeAdded: (when, subject) => `${when} · ${subject} — новая пара`,
+  changeRoom: (when, subject, from, to) => `${when} · ${subject}: аудитория ${from || '—'} → ${to || '—'}`,
+  changeTeacher: (when, subject, to) => `${when} · ${subject}: ведёт ${to || '—'}`,
+  changeSubject: (when, from, to) => `${when} · ${from} → ${to}`,
+  changeWhen: (date, number) => `${date}, ${number} пара`,
+  notifyFooter: 'Отключить: /settings',
+  openDay: 'Открыть день',
+  openLesson: 'Открыть пару',
 };
 
 const en = {
@@ -264,6 +303,13 @@ const en = {
   settingsGroup: (value) => `Group: ${value ?? 'not chosen'}`,
   settingsSubgroup: (value) => `Subgroup: ${value ? value : 'whole group'}`,
   settingsReminders: (on) => `Reminders 15 minutes before class: ${on ? 'on' : 'off'}`,
+  settingsNotify: (name, on) => `${name}: ${on ? 'on' : 'off'}`,
+  notifyNames: {
+    summary: 'Tomorrow summary at 20:00',
+    homework: 'New homework alerts',
+    changes: 'Timetable changes',
+  },
+  notifyToggle: (name, on) => `Turn ${on ? 'off' : 'on'}: ${name.toLowerCase()}`,
   settingsLanguage: 'Language: English',
   changeGroup: 'Change group',
   changeSubgroup: 'Change subgroup',
@@ -327,17 +373,31 @@ const en = {
   absencePrompt: 'What should I tell the class representative?',
   absenceLate: 'I’ll be late',
   absenceMissing: 'I won’t come',
+  absenceReasonPrompt: (kind) => (kind === 'late' ? 'Why will you be late?' : 'Why won’t you come?'),
+  absenceReasons: {
+    late10: 'Late by 5–10 minutes',
+    late20: 'Late by 15–20 minutes',
+    transport: 'Transport is delayed',
+    ill: 'I’m ill',
+    family: 'Family reasons',
+    certificate: 'I’ll bring a certificate later',
+  },
+  absenceOwnReason: 'Other reason…',
   absenceDetailsLate: 'Write the reason and roughly when you’ll arrive. You can attach a photo.',
   absenceDetailsMissing: 'Write the reason. You can attach a photo, for example a certificate.',
   absenceNeedsText: 'Add a few words about the reason to the photo.',
   absenceNoHeadman: 'Your group has no class representative in the bot yet. Ask them to send /headman in the group chat.',
   absenceInGroup: 'Better send this in a private chat with the bot so the reason stays out of the group chat.',
-  absenceSent: 'Sent to the class representative. Your name is not included.',
-  absencePending: 'Saved, but the representative has not opened the bot yet, so it was not delivered. Ask them to tap “Start”.',
-  absenceToHeadman: (kind, group, text) => [
-    `**${kind === 'late' ? 'Late' : 'Absent'} · ${group}**`, '', text, '',
-    '_Anonymous note via norfly_',
-  ].join('\n'),
+  absenceSent: 'Sent to the class representative.',
+  absencePending: 'Saved. The representative has not opened the bot yet — I will forward it as soon as they tap “Start”.',
+  absenceToHeadman: ({ kind, group, sender, lesson, reason }) => [
+    `**${kind === 'late' ? 'Late' : 'Absent'} · ${group}**`,
+    sender,
+    lesson ? `Class: ${lesson}` : '',
+    '',
+    reason,
+  ].filter((line, index) => line || index === 3).join('\n'),
+  absenceDelayed: (date) => `_Sent on ${date}, while the bot could not reach you._`,
 
   unknownCommand: 'There is no such command. Here is what I can do:',
   help: [
@@ -349,7 +409,7 @@ const en = {
     '/add — add homework',
     '/find — find a group, teacher or room',
     '/absence — tell the class representative',
-    '/settings — group, reminders, language',
+    '/settings — group, notifications, language',
     '',
     'Or just send a group, a teacher’s surname or a room.',
   ].join('\n'),
@@ -371,6 +431,24 @@ const en = {
   reminder: (subject, time, place) => `In 15 minutes: **${subject}**\n${time}${place ? ` · ${place}` : ''}`,
 
   lessonsCount: (count) => `${count} ${count === 1 ? 'class' : 'classes'}`,
+
+  summaryTitle: (day) => `**Tomorrow, ${day}**`,
+  summaryLessons: (count, start) => `${count} ${count === 1 ? 'class' : 'classes'}, the first at ${start}`,
+  summaryHomework: (count, total) => (count
+    ? `📚 Homework for ${count} of ${total}:`
+    : '📚 No homework recorded for tomorrow'),
+  newHomework: (subject, when) => `📚 **New homework** · ${subject}\n${when}`,
+  updatedHomework: (subject, when) => `✏️ **Homework changed** · ${subject}\n${when}`,
+  changesTitle: (group) => `🔄 **Timetable changes** · ${group}`,
+  changeCancelled: (when, subject) => `${when} · ${subject} — cancelled`,
+  changeAdded: (when, subject) => `${when} · ${subject} — new class`,
+  changeRoom: (when, subject, from, to) => `${when} · ${subject}: room ${from || '—'} → ${to || '—'}`,
+  changeTeacher: (when, subject, to) => `${when} · ${subject}: taught by ${to || '—'}`,
+  changeSubject: (when, from, to) => `${when} · ${from} → ${to}`,
+  changeWhen: (date, number) => `${date}, class ${number}`,
+  notifyFooter: 'Turn off: /settings',
+  openDay: 'Open day',
+  openLesson: 'Open class',
 };
 
 const dictionaries = { ru, en };

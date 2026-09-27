@@ -1,5 +1,6 @@
 import { Bot, Keyboard } from '@maxhub/max-bot-api';
 import { addDays, toDateKey } from '../lib/date.js';
+import { dateFromKey, irkutskDateKey, irkutskMinutes, lessonEndMinutes } from '../lib/irkutsk.js';
 import { parseCommand } from './commands.js';
 import { formatDate, formatHomework, formatScheduleDay, formatScheduleWeek } from './format.js';
 import { DEFAULT_LANGUAGE, normalizeLanguage, texts } from './i18n.js';
@@ -47,10 +48,21 @@ const displayName = (user) => user?.name
   || [user?.first_name, user?.last_name].filter(Boolean).join(' ')
   || (user?.username ? `@${user.username}` : `MAX ID ${user?.user_id}`);
 const subgroupFromCode = (code) => (code === '1' ? 1 : code === '2' ? 2 : null);
+const senderLabel = (user) => {
+  const name = displayName(user);
+  return user?.username && !name.startsWith('@') ? `${name} (@${user.username})` : name;
+};
+
+export const NOTIFICATION_KINDS = ['summary', 'homework', 'changes'];
+export const notificationEnabled = (prefs, kind) => prefs?.notifications?.[kind] !== false;
+export const ABSENCE_REASONS = {
+  late: ['late10', 'late20', 'transport'],
+  absent: ['ill', 'family', 'certificate'],
+};
 const lessonKey = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 
 export const createBot = ({
-  token, service, miniAppUrl, miniAppButton = 'app', preferences, community,
+  token, service, miniAppUrl, miniAppButton = 'app', preferences, community, onHomeworkSaved,
 }) => {
   const bot = new Bot(token);
   const sessions = new Map();
@@ -81,11 +93,19 @@ export const createBot = ({
     ? ctx.answerOnCallback({ notification: text })
     : ctx.reply(text));
 
-  const appButton = (t) => {
-    if (miniAppButton === 'link') return miniAppUrl ? Keyboard.button.link(t.openApp, miniAppUrl) : null;
+  // payload приходит в мини-приложение как start_param: так кнопка открывает нужный день или пару.
+  const appButton = (t, payload, text = t.openApp) => {
+    if (miniAppButton === 'link') {
+      if (!miniAppUrl) return null;
+      return Keyboard.button.link(text, payload ? `${miniAppUrl}?startapp=${payload}` : miniAppUrl);
+    }
     if (!bot.botInfo?.username) return null;
-    return { type: 'open_app', text: t.openApp, web_app: bot.botInfo.username, contact_id: bot.botInfo.user_id };
+    return {
+      type: 'open_app', text, web_app: bot.botInfo.username, contact_id: bot.botInfo.user_id,
+      ...(payload ? { payload } : {}),
+    };
   };
+  bot.appButton = appButton;
 
   const isChatManager = async (ctx) => {
     try {
@@ -439,12 +459,16 @@ export const createBot = ({
     const rows = [[button(t.changeGroup, 'set:group')]];
     if (group) rows.push([button(t.changeSubgroup, `set:sub:${group.id}`)]);
     rows.push([button(reminders ? t.remindersOff : t.remindersOn, 'set:rem')]);
+    for (const kind of NOTIFICATION_KINDS) {
+      rows.push([button(t.notifyToggle(t.notifyNames[kind], notificationEnabled(prefs, kind)), `set:n:${kind}`)]);
+    }
     rows.push([button(t.changeLanguage, 'set:lang')]);
     rows.push([button(t.menu, 'menu')]);
     const lines = [
       t.settingsGroup(group?.title),
       group ? t.settingsSubgroup(prefs.subgroup) : '',
       t.settingsReminders(reminders),
+      ...NOTIFICATION_KINDS.map((kind) => t.settingsNotify(t.notifyNames[kind], notificationEnabled(prefs, kind))),
       t.settingsLanguage,
     ].filter(Boolean);
     return show(ctx, `${t.settingsTitle}\n\n${lines.join('\n')}`, rows);
@@ -467,15 +491,99 @@ export const createBot = ({
     return null;
   };
 
-  // Сообщение старосте
+  // Сообщение старосте: с именем студента, чтобы староста мог отметить его в журнале
+
+  const headmanChatFor = async (groupId) =>
+    (await community.chatsForGroup(groupId)).find((chat) => chat.headman?.userId) ?? null;
+
+  const lessonLabel = (lang, lesson) => (lesson
+    ? `${texts(lang).changeWhen(formatDate(lang, lesson.date, { weekday: 'short', day: 'numeric', month: 'short' }), lesson.lessonNumber)} · ${lesson.subject}`
+    : '');
+
+  const absenceMessage = (notice, lang) => {
+    const t = texts(lang);
+    return t.absenceToHeadman({
+      kind: notice.kind,
+      group: notice.groupTitle,
+      sender: notice.senderName,
+      lesson: lessonLabel(lang, notice.lesson),
+      reason: notice.reasonCode ? t.absenceReasons[notice.reasonCode] ?? notice.text : notice.text,
+    });
+  };
+
+  // Ближайшая пара сегодня: к ней и относится «опоздаю» или «не приду».
+  const currentLesson = async (groupId, subgroup) => {
+    const today = irkutskDateKey();
+    const now = irkutskMinutes();
+    try {
+      const schedule = await service.groupSchedule(groupId, { week: dateFromKey(today), subgroup });
+      return schedule.lessons.find((lesson) => lesson.date === today && lessonEndMinutes(lesson) > now) ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  const sendNotice = async (headmanId, notice) => {
+    const lang = (await preferences.get(headmanId)).lang;
+    const attachments = (notice.images ?? []).map((token) => ({ type: 'image', payload: { token } }));
+    let text = absenceMessage(notice, lang);
+    if (notice.status === 'pending') text += `\n\n${texts(lang).absenceDelayed(formatDate(lang, notice.createdAt.slice(0, 10), { day: 'numeric', month: 'long' }))}`;
+    await bot.api.sendMessageToUser(headmanId, text, { format: 'markdown', attachments });
+  };
+
+  const deliverAbsence = async ({ user, prefs, kind, reasonCode, text, lesson, images = [] }) => {
+    const group = ownGroup(prefs);
+    if (!group) return { status: 'no_group' };
+    const chat = await headmanChatFor(group.id);
+    if (!chat) return { status: 'no_headman' };
+    const target = lesson === undefined ? await currentLesson(group.id, prefs.subgroup ?? null) : lesson;
+    const notice = {
+      chatId: chat.chatId,
+      groupId: group.id,
+      groupTitle: chat.group.title,
+      senderId: user.user_id,
+      senderName: senderLabel(user),
+      kind,
+      reasonCode: reasonCode ?? null,
+      text: text ?? null,
+      lesson: target ? { date: target.date, lessonNumber: target.lessonNumber, subject: target.subject, time: target.time } : null,
+      images,
+    };
+    try {
+      await sendNotice(chat.headman.userId, notice);
+      await community.addNotice(notice);
+      return { status: 'sent' };
+    } catch {
+      await community.addNotice({ ...notice, status: 'pending' });
+      return { status: 'pending' };
+    }
+  };
+  bot.sendAbsence = deliverAbsence;
+
+  // Староста не открывал бота — сообщения ждут, пока он нажмёт «Начать» или напишет боту.
+  const deliverPending = async (headmanId) => {
+    const pending = await community.pendingNoticesForHeadman(headmanId);
+    for (const notice of pending) {
+      try {
+        await sendNotice(headmanId, notice);
+        await community.markNoticeSent(notice.id);
+      } catch (error) {
+        console.error('Pending absence delivery failed:', error.message);
+        return;
+      }
+    }
+  };
+
+  const absenceReply = (t, status) => ({
+    sent: t.absenceSent, pending: t.absencePending, no_headman: t.absenceNoHeadman, no_group: t.noGroupYet,
+  }[status]);
 
   const beginAbsence = async (ctx) => {
     const { t, prefs } = ctx;
     if (isGroupChat(ctx)) return show(ctx, t.absenceInGroup);
     const group = ownGroup(prefs);
     if (!group) return show(ctx, t.noGroupYet);
-    const chats = (await community.chatsForGroup(group.id)).filter((chat) => chat.headman?.userId);
-    if (!chats.length) return show(ctx, t.absenceNoHeadman, [[button(t.menu, 'menu')]]);
+    if (!await headmanChatFor(group.id)) return show(ctx, t.absenceNoHeadman, [[button(t.menu, 'menu')]]);
     return show(ctx, t.absencePrompt, [
       [button(t.absenceLate, 'abs:late'), button(t.absenceMissing, 'abs:absent')],
       [button(t.cancel, 'cancel')],
@@ -483,25 +591,16 @@ export const createBot = ({
   };
 
   const sendAbsence = async (ctx, state, text) => {
-    const { t, prefs } = ctx;
-    const images = (ctx.message?.body?.attachments ?? []).filter((attachment) => attachment.type === 'image');
+    const { t } = ctx;
+    const images = (ctx.message?.body?.attachments ?? [])
+      .filter((attachment) => attachment.type === 'image')
+      .map((image) => image.payload.token);
     if (!text) return ctx.reply(t.absenceNeedsText);
-    const group = ownGroup(prefs);
-    const chat = group && (await community.chatsForGroup(group.id)).find((item) => item.headman?.userId);
     setSession(ctx, null);
-    if (!chat) return ctx.reply(t.absenceNoHeadman);
-    const headmanLang = (await preferences.get(chat.headman.userId)).lang;
-    const message = texts(headmanLang).absenceToHeadman(state.kind, chat.group.title, text);
-    const attachments = images.map((image) => ({ type: 'image', payload: { token: image.payload.token } }));
-    const notice = { chatId: chat.chatId, groupId: chat.group.id, senderId: userId(ctx), type: state.kind, text, imageCount: images.length };
-    try {
-      await bot.api.sendMessageToUser(chat.headman.userId, message, { format: 'markdown', attachments });
-      await community.addNotice(notice);
-      return ctx.reply(t.absenceSent);
-    } catch {
-      await community.addNotice({ ...notice, status: 'pending' });
-      return ctx.reply(t.absencePending);
-    }
+    const { status } = await deliverAbsence({
+      user: ctx.message.sender, prefs: ctx.prefs, kind: state.kind, text, images,
+    });
+    return ctx.reply(absenceReply(t, status));
   };
 
   // Команды
@@ -545,6 +644,7 @@ export const createBot = ({
     if (ctx.chatId && isGroupChat(ctx)) lang = normalizeLanguage((await community.getChat(ctx.chatId))?.lang) ?? lang;
     ctx.lang = lang ?? DEFAULT_LANGUAGE;
     ctx.t = texts(ctx.lang);
+    if (id && !isGroupChat(ctx)) await deliverPending(id).catch((error) => console.error('Pending check failed:', error.message));
     return next();
   });
 
@@ -625,6 +725,13 @@ export const createBot = ({
     await savePrefs(ctx, { remindersEnabled: ctx.prefs.remindersEnabled === false });
     return showSettings(ctx);
   });
+  bot.action(/^set:n:(summary|homework|changes)$/, async (ctx) => {
+    const kind = ctx.match[1];
+    await savePrefs(ctx, {
+      notifications: { ...ctx.prefs.notifications, [kind]: !notificationEnabled(ctx.prefs, kind) },
+    });
+    return showSettings(ctx);
+  });
   bot.action('set:lang', async (ctx) => {
     await switchLanguage(ctx);
     return showSettings(ctx);
@@ -672,6 +779,21 @@ export const createBot = ({
   });
 
   bot.action(/^abs:(late|absent)$/, (ctx) => {
+    const { t } = ctx;
+    const kind = ctx.match[1];
+    return show(ctx, t.absenceReasonPrompt(kind), [
+      ...ABSENCE_REASONS[kind].map((code) => [button(t.absenceReasons[code], `abr:${kind}:${code}`)]),
+      [button(t.absenceOwnReason, `abo:${kind}`)],
+      [button(t.cancel, 'cancel')],
+    ]);
+  });
+  bot.action(/^abr:(late|absent):([a-z0-9]+)$/, async (ctx) => {
+    const [, kind, reasonCode] = ctx.match;
+    if (!ABSENCE_REASONS[kind].includes(reasonCode)) return toast(ctx, ctx.t.selectionExpired);
+    const { status } = await deliverAbsence({ user: ctx.user, prefs: ctx.prefs, kind, reasonCode });
+    return show(ctx, absenceReply(ctx.t, status), [[button(ctx.t.menu, 'menu')]]);
+  });
+  bot.action(/^abo:(late|absent)$/, (ctx) => {
     setSession(ctx, { step: 'absence-text', kind: ctx.match[1] });
     return show(ctx, ctx.match[1] === 'late' ? ctx.t.absenceDetailsLate : ctx.t.absenceDetailsMissing, [[button(ctx.t.cancel, 'cancel')]]);
   });
@@ -719,7 +841,7 @@ export const createBot = ({
     setSession(ctx, null);
     if (!config?.group || !canEditHomework(ctx, config)) return ctx.reply(t.homeworkRightsChanged);
     const { lesson } = state;
-    await community.upsertHomework({
+    const item = await community.upsertHomework({
       chatId: ctx.chatId,
       groupId: config.group.id,
       groupTitle: config.group.title,
@@ -732,6 +854,7 @@ export const createBot = ({
       authorId: userId(ctx),
       authorName: displayName(ctx.message.sender),
     });
+    onHomeworkSaved?.(item);
     return show(ctx, t.homeworkSaved(lesson.subject), [[button(t.homework, 'hw:list')]]);
   };
 

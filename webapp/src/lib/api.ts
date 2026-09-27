@@ -35,9 +35,31 @@ export type RemoteProfile = {
   course: number | null;
   subgroup: 1 | 2 | null;
   lang: 'ru' | 'en' | null;
+  remindersEnabled: boolean;
+  notifications: Notifications;
 };
 
-export const loadMe = () => apiRequest<{ profile: RemoteProfile }>('/api/me');
+export type Notifications = { summary: boolean; homework: boolean; changes: boolean };
+export type SettingsPatch = { remindersEnabled?: boolean; notifications?: Partial<Notifications> };
+
+export type RemoteUser = { id: number; firstName: string | null; lastName: string | null; username: string | null };
+
+export const loadMe = () => apiRequest<{ user: RemoteUser; profile: RemoteProfile }>('/api/me');
+
+export const updateSettings = (patch: SettingsPatch) =>
+  apiRequest<{ profile: RemoteProfile }>('/api/me', { method: 'PUT', body: JSON.stringify(patch) });
+
+export type AbsenceKind = 'late' | 'absent';
+export type AbsenceInput = {
+  kind: AbsenceKind;
+  reason?: string;
+  text?: string;
+  lessonDate?: string;
+  lessonNumber?: number;
+};
+
+export const sendAbsence = (input: AbsenceInput) =>
+  apiRequest<{ status: 'sent' | 'pending' }>('/api/absence', { method: 'POST', body: JSON.stringify(input) });
 
 export const syncProfile = (groupId: number, subgroup: 1 | 2 | null) => apiRequest('/api/me', {
   method: 'PUT', body: JSON.stringify({ groupId, subgroup }),

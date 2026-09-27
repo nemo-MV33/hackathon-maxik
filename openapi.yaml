@@ -34,7 +34,7 @@ paths:
               schema: { $ref: '#/components/schemas/MeResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     put:
-      summary: Изменение группы, подгруппы и напоминаний
+      summary: Изменение группы, подгруппы, языка и уведомлений
       requestBody:
         required: true
         content:
@@ -46,6 +46,7 @@ paths:
                 subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
                 remindersEnabled: { type: boolean }
                 lang: { type: string, enum: [ru, en] }
+                notifications: { $ref: '#/components/schemas/NotificationsPatch' }
       responses:
         '200':
           description: Профиль сохранён
@@ -54,6 +55,40 @@ paths:
               schema: { $ref: '#/components/schemas/ProfileResponse' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/absence:
+    post:
+      summary: Сообщить старосте об опоздании или отсутствии
+      description: Бот отправляет старосте группы личное сообщение с именем студента, парой и причиной.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: { type: string, enum: [late, absent] }
+                reason:
+                  type: string
+                  enum: [late10, late20, transport, ill, family, certificate]
+                  description: Готовая причина. late10, late20, transport — для late; ill, family, certificate — для absent
+                text: { type: string, maxLength: 500, description: Своя причина, если reason не указан }
+                lessonDate: { type: string, format: date }
+                lessonNumber: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Сообщение отправлено или ждёт, пока староста откроет бота
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [sent, pending] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { description: Пара не найдена в расписании ИРНИТУ }
+        '409': { description: Группа не выбрана или у группы нет старосты в боте }
   /api/homework:
     get:
       summary: Общие и личные ДЗ текущего студента
@@ -147,6 +182,22 @@ components:
         subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
         remindersEnabled: { type: boolean }
         lang: { type: [string, 'null'], enum: [ru, en, null], description: Язык, выбранный в боте или приложении }
+        notifications: { $ref: '#/components/schemas/Notifications' }
+    Notifications:
+      type: object
+      description: Уведомления в личный чат с ботом
+      required: [summary, homework, changes]
+      properties:
+        summary: { type: boolean, description: Сводка на завтра в 20:00 }
+        homework: { type: boolean, description: Новое или изменённое ДЗ группы }
+        changes: { type: boolean, description: Переносы, отмены и смена аудитории }
+    NotificationsPatch:
+      type: object
+      additionalProperties: false
+      properties:
+        summary: { type: boolean }
+        homework: { type: boolean }
+        changes: { type: boolean }
     ProfileResponse:
       type: object
       required: [profile]

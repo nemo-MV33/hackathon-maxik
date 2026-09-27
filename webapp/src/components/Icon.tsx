@@ -21,3 +21,5 @@ export const ChevronLeft = ({ size = 20, className }: IconProps) => svg(size, cl
 export const ChevronRight = ({ size = 20, className }: IconProps) => svg(size, className, <path d="m9.5 6 6 6-6 6" />);
 export const SearchIcon = ({ size = 20, className }: IconProps) =>
   svg(size, className, <><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></>);
+export const UserIcon = ({ size = 20, className }: IconProps) =>
+  svg(size, className, <><circle cx="12" cy="8.5" r="3.5" /><path d="M5 19.5c1.2-3.2 3.8-4.8 7-4.8s5.8 1.6 7 4.8" /></>);

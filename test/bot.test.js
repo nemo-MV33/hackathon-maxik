@@ -26,7 +26,7 @@ const AUDITORIES = [{ id: 41, title: 'Ж-301' }];
 
 const lessonsFor = (week) => {
   const monday = startOfWeek(week);
-  return Array.from({ length: 6 }, (_, day) => toDateKey(addDays(monday, day))).flatMap((date) => [
+  return Array.from({ length: 7 }, (_, day) => toDateKey(addDays(monday, day))).flatMap((date) => [
     { date, lessonNumber: 1, time: '08:15–09:45', subject: 'Математический анализ', lessonType: 'лекция', subgroup: null, teachers: ['Иванова Анна Петровна'], auditories: ['Ж-301'], groups: ['ИСТб-25-1'] },
     { date, lessonNumber: 3, time: '11:45–13:15', subject: 'Программирование', lessonType: 'лабораторная', subgroup: 1, teachers: ['Петров С. В.'], auditories: ['В-204'], groups: ['ИСТб-25-1'] },
     { date, lessonNumber: 3, time: '11:45–13:15', subject: 'Физика', lessonType: 'лабораторная', subgroup: 2, teachers: ['Сидоров К. Л.'], auditories: ['Ж-115'], groups: ['ИСТб-25-1'] },
@@ -64,13 +64,18 @@ const setup = async (t) => {
   const preferences = new PreferencesStore(join(directory, 'preferences.json'));
   const community = new CommunityStore(join(directory, 'community.json'));
   const sent = [];
+  const unreachable = new Set();
   const make = () => {
     const bot = createBot({ token: 'test', service, preferences, community });
     bot.botInfo = BOT;
     bot.catch((error) => { throw error; });
     Object.assign(bot.api, {
       sendMessageToChat: async (chatId, text, extra = {}) => { sent.push({ to: 'chat', chatId, text, extra }); return {}; },
-      sendMessageToUser: async (id, text, extra = {}) => { sent.push({ to: 'user', userId: id, text, extra }); return {}; },
+      sendMessageToUser: async (id, text, extra = {}) => {
+        if (unreachable.has(id)) throw new Error('chat.denied');
+        sent.push({ to: 'user', userId: id, text, extra });
+        return {};
+      },
       answerOnCallback: async (callbackId, extra = {}) => {
         sent.push({ to: 'callback', text: extra.message?.text ?? extra.notification, extra: extra.message ?? {}, notification: extra.notification });
         return {};
@@ -112,7 +117,7 @@ const setup = async (t) => {
   const payloads = (reply) => buttons(reply).map((item) => item.payload).filter(Boolean);
   const restart = () => { bot = make(); };
 
-  return { run, say, press, payloads, buttons, restart, preferences, community, sent };
+  return { run, say, press, payloads, buttons, restart, preferences, community, sent, unreachable };
 };
 
 test('parseCommand понимает упоминание бота, регистр и аргументы', () => {
@@ -309,17 +314,36 @@ test('личная версия ДЗ, сообщение старосте, на�
 
   const [absence] = await say(STUDENT, '/absence');
   assert.deepEqual(payloads(absence), ['abs:late', 'abs:absent', 'cancel']);
-  await press(STUDENT, 'abs:late');
-  const before = sent.length;
-  const replies = await say(STUDENT, 'Автобус сломался, буду к 9:00');
-  assert.match(replies.find((item) => item.to === 'chat').text, /Отправил старосте/);
-  const toHeadman = sent.slice(before).find((item) => item.to === 'user');
+  const [reasons] = await press(STUDENT, 'abs:late');
+  assert.deepEqual(payloads(reasons), ['abr:late:late10', 'abr:late:late20', 'abr:late:transport', 'abo:late', 'cancel']);
+
+  let before = sent.length;
+  const quick = await press(STUDENT, 'abr:late:transport');
+  assert.match(quick.find((item) => item.to === 'callback').text, /Отправил старосте/);
+  let toHeadman = sent.slice(before).find((item) => item.to === 'user');
   assert.equal(toHeadman.userId, HEADMAN.user_id);
   assert.match(toHeadman.text, /Опоздание · ИСТб-25-1/);
-  assert.doesNotMatch(toHeadman.text, /Аня/, 'сообщение анонимное');
+  assert.match(toHeadman.text, /Аня Петрова/, 'староста видит, кто опаздывает');
+  assert.match(toHeadman.text, /Задерживается транспорт/);
+
+  await press(STUDENT, 'abs:absent');
+  await press(STUDENT, 'abo:absent');
+  before = sent.length;
+  const replies = await say(STUDENT, 'Температура, справку принесу');
+  assert.match(replies.find((item) => item.to === 'chat').text, /Отправил старосте/);
+  toHeadman = sent.slice(before).find((item) => item.to === 'user');
+  assert.match(toHeadman.text, /Отсутствие · ИСТб-25-1/);
+  assert.match(toHeadman.text, /Аня Петрова/);
+  assert.match(toHeadman.text, /Температура, справку принесу/);
+  assert.equal((await community.pendingNoticesForHeadman(HEADMAN.user_id)).length, 0);
 
   const [settings] = await say(STUDENT, '/settings');
   assert.match(settings.text, /Напоминания за 15 минут до пары: включены/);
+  assert.match(settings.text, /Сводка на завтра в 20:00: включено/);
+  assert.ok(payloads(settings).includes('set:n:changes'));
+  const [changesOff] = await press(STUDENT, 'set:n:changes');
+  assert.match(changesOff.text, /Переносы и замены: выключено/);
+  assert.match(changesOff.text, /Уведомления о новом ДЗ: включено/);
   const [off] = await press(STUDENT, 'set:rem');
   assert.match(off.text, /выключены/);
   const [english] = await press(STUDENT, 'set:lang');
@@ -328,4 +352,30 @@ test('личная версия ДЗ, сообщение старосте, на�
   assert.ok(cancelled.text);
   const [cancel] = await press(STUDENT, 'cancel');
   assert.match(cancel.text, /Cancelled/);
+});
+
+test('сообщение старосте ждёт, пока староста не откроет бота', async (t) => {
+  const { say, press, run, community, sent, unreachable } = await setup(t);
+  const inGroup = { chat: GROUP_CHAT };
+  await say(ADMIN, '/setup ИСТб-25-1', inGroup);
+  await press(ADMIN, 'lsub:11:all', inGroup);
+  await say(ADMIN, '/headman', { ...inGroup, reply: HEADMAN });
+  await press(STUDENT, 'lang:ru');
+  await press(STUDENT, 'sub:11:all');
+
+  unreachable.add(HEADMAN.user_id);
+  await press(STUDENT, 'abs:absent');
+  const pending = (await press(STUDENT, 'abr:absent:ill')).find((item) => item.to === 'callback');
+  assert.match(pending.text, /перешлю, как только он нажмёт «Начать»/);
+  assert.equal((await community.pendingNoticesForHeadman(HEADMAN.user_id)).length, 1);
+
+  unreachable.delete(HEADMAN.user_id);
+  const before = sent.length;
+  await run({ update_type: 'bot_started', chat_id: PRIVATE_CHAT(HEADMAN).chat_id, user: HEADMAN });
+  const delivered = sent.slice(before).find((item) => item.to === 'user' && item.userId === HEADMAN.user_id);
+  assert.ok(delivered, 'сообщение дошло после «Начать»');
+  assert.match(delivered.text, /Отсутствие · ИСТб-25-1/);
+  assert.match(delivered.text, /Аня Петрова/);
+  assert.match(delivered.text, /Болею/);
+  assert.equal((await community.pendingNoticesForHeadman(HEADMAN.user_id)).length, 0);
 });

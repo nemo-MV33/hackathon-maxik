@@ -10,7 +10,10 @@ import { useNow } from '../lib/useNow';
 import { haptic } from '../bridge/max';
 import { DayTimeline, lessonEnd, lessonStart } from '../components/Timeline';
 import { Empty, ErrorState, ScheduleSkeleton } from '../components/Status';
-import { ChevronLeft, ChevronRight } from '../components/Icon';
+import { ChevronLeft, ChevronRight, UserIcon } from '../components/Icon';
+import { AbsenceSheet } from '../components/AbsenceSheet';
+import type { AbsenceKind } from '../lib/api';
+import type { LaunchTarget } from '../App';
 import { homeworkKey, useRemoteHomework } from '../data/homework';
 
 type Mode = 'day' | 'week';
@@ -62,16 +65,23 @@ const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1', loading = false 
 type ScheduleProps = {
   profile: LocalProfile;
   profileRevision: number;
+  launch?: LaunchTarget;
+  onLaunchHandled?: () => void;
   onChangeGroup: () => void;
   onOpenLesson: (lesson: Lesson) => void;
+  onOpenProfile: () => void;
 };
 
-export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson }: ScheduleProps) => {
+export const Schedule = ({
+  profile, profileRevision, launch, onLaunchHandled, onChangeGroup, onOpenLesson, onOpenProfile,
+}: ScheduleProps) => {
   const { t } = useI18n();
   const now = useNow();
   const todayKey = toDateKey(now);
   const [mode, setModeState] = useState<Mode>(readMode);
-  const [selected, setSelected] = useState(todayKey);
+  const [selected, setSelected] = useState(launch?.date ?? todayKey);
+  const [absence, setAbsence] = useState<{ kind: AbsenceKind; lesson: Lesson } | null>(null);
+  const openAbsence = (kind: AbsenceKind, lesson: Lesson) => setAbsence({ kind, lesson });
   const todayRef = useRef<HTMLElement>(null);
   const swipe = useRef<{ x: number; y: number } | null>(null);
 
@@ -114,6 +124,17 @@ export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson
     if (mode === 'week' && week.status === 'ready') todayRef.current?.scrollIntoView({ block: 'start' });
   }, [mode, week.status]);
 
+  useEffect(() => {
+    if (!launch || week.status !== 'ready') return;
+    if (mode !== 'day') setMode('day');
+    const target = launch.lessonNumber
+      ? week.data.lessons.find((lesson) => lesson.date === launch.date
+        && lesson.lessonNumber === launch.lessonNumber && (lesson.subgroup ?? null) === (launch.subgroup ?? null))
+      : undefined;
+    onLaunchHandled?.();
+    if (target) onOpenLesson(target);
+  }, [launch, week.status]);
+
   const onTouchStart = (event: React.TouchEvent) => {
     const touch = event.touches[0];
     swipe.current = { x: touch.clientX, y: touch.clientY };
@@ -138,6 +159,9 @@ export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson
           <span className="chip__title">{profile.group.title}</span>
           <span className="chip__sub">{profile.subgroup ? t.subgroupShort(profile.subgroup) : t.wholeGroup}</span>
           <ChevronRight size={14} />
+        </button>
+        <button type="button" className="icon-button" aria-label={t.profile} onClick={onOpenProfile}>
+          <UserIcon size={18} />
         </button>
         <div className="segment" role="tablist" aria-label={t.scheduleView}>
           {(['day', 'week'] as const).map((value) => (
@@ -195,7 +219,7 @@ export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson
           {week.status === 'loading' && <ScheduleSkeleton />}
           {week.status === 'ready' && (selectedLessons.length === 0
             ? <Empty title={t.noLessonsTitle}>{selected < todayKey ? t.noLessonsPast : t.noLessonsFree}</Empty>
-            : <DayTimeline lessons={selectedLessons} dateKey={selected} todayKey={todayKey} now={now} homework={remoteHomework} onOpen={onOpenLesson} />)}
+            : <DayTimeline lessons={selectedLessons} dateKey={selected} todayKey={todayKey} now={now} homework={remoteHomework} onOpen={onOpenLesson} onAbsence={openAbsence} />)}
         </section>
       )}
 
@@ -205,9 +229,11 @@ export const Schedule = ({ profile, profileRevision, onChangeGroup, onOpenLesson
         : weekDays.map((key) => (
           <section key={key} className="week-day" ref={key === todayKey ? todayRef : undefined}>
             <DayHeading dateKey={key} todayKey={todayKey} lessons={lessonsOn(key)} level="h2" />
-            <DayTimeline lessons={lessonsOn(key)} dateKey={key} todayKey={todayKey} now={now} homework={remoteHomework} onOpen={onOpenLesson} />
+            <DayTimeline lessons={lessonsOn(key)} dateKey={key} todayKey={todayKey} now={now} homework={remoteHomework} onOpen={onOpenLesson} onAbsence={openAbsence} />
           </section>
         )))}
+
+      {absence && <AbsenceSheet kind={absence.kind} lesson={absence.lesson} onClose={() => setAbsence(null)} />}
 
       {meta.status === 'ready' && (
         <p className="footnote">{t.footnote(formatUpdatedAt(meta.data.updatedAt))}</p>

@@ -39,6 +39,7 @@ export const devData = (): Plugin => ({
   name: 'norfly-dev-data',
   apply: 'serve',
   configureServer(server) {
+    const settings = { remindersEnabled: true, notifications: { summary: true, homework: true, changes: true } };
     const homework = new Map<string, {
       sharedText: string | null;
       personalText: string | null;
@@ -59,11 +60,23 @@ export const devData = (): Plugin => ({
     server.middlewares.use(async (request, response, next) => {
       const url = new URL(request.url ?? '/', 'http://localhost');
       if (url.pathname === '/api/me') {
-        if (request.method === 'PUT') await readBody(request);
+        if (request.method === 'PUT') {
+          const body = await readBody(request);
+          if (typeof body.remindersEnabled === 'boolean') settings.remindersEnabled = body.remindersEnabled;
+          Object.assign(settings.notifications, body.notifications ?? {});
+        }
         return send(response, {
           user: { id: 1, firstName: 'Тест' },
-          profile: { group: { id: 1, title: 'ДЕМО-25-1' }, institute: 'Демо-институт', course: 1, subgroup: 1 },
+          profile: {
+            group: { id: 1, title: 'ДЕМО-25-1' }, institute: 'Демо-институт', course: 1, subgroup: 1,
+            remindersEnabled: settings.remindersEnabled, notifications: settings.notifications,
+          },
         });
+      }
+      if (url.pathname === '/api/absence' && request.method === 'POST') {
+        const body = await readBody(request);
+        if (!body.reason && !body.text?.trim()) return send(response, { error: 'invalid_text', message: 'Укажи причину' }, 400);
+        return send(response, { status: 'sent' });
       }
       if (url.pathname !== '/api/homework') return next();
       if (request.method === 'PUT') {
