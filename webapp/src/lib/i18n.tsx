@@ -75,7 +75,7 @@ const ru = {
   language: 'Язык',
   previewLecture: 'Лекция, Ж-301',
   previewPractice: 'Практика, Е-412',
-  previewLab: 'Лаба, В-204',
+  previewLab: 'Лабораторная, В-204',
   previewSubjectOne: 'Математический анализ',
   previewSubjectTwo: 'Английский язык',
   previewSubjectThree: 'Программирование',
