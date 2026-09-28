@@ -2,7 +2,7 @@ import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { devData } from './dev-data.js';
 
-const BUILD_ID = process.env.GITHUB_SHA?.slice(0, 12) ?? `local-${Date.now()}`;
+const BUILD_ID = process.env.GITHUB_SHA?.slice(0, 12) || `local-${Date.now()}`;
 
 const versionFile = (): Plugin => ({
   name: 'norfly-version',

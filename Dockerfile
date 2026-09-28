@@ -3,6 +3,7 @@ WORKDIR /build
 COPY webapp/package.json webapp/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY webapp/ ./
+ARG GITHUB_SHA=
 RUN npm run build
 
 FROM node:22-alpine

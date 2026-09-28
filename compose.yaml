@@ -1,6 +1,9 @@
 services:
   norfly:
-    build: .
+    build:
+      context: .
+      args:
+        GITHUB_SHA: ${GITHUB_SHA:-}
     env_file: .env
     environment:
       NODE_ENV: production
