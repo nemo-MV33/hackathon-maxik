@@ -86,7 +86,7 @@ test('сводка на завтра уходит один раз после 20:
   assert.match(sent[0].text, /Завтра/);
   assert.match(sent[0].text, /2 пары, первая в 08:15/);
   assert.match(sent[0].text, /ДЗ задано к 1 из 2/);
-  assert.match(sent[0].text, /· Физика/);
+  assert.match(sent[0].text, /— Физика/);
   assert.equal(buttonPayload(sent[0]), `day_${TOMORROW}`);
   assert.equal((await preferences.get(1)).summarySentFor, TOMORROW);
 
@@ -115,7 +115,7 @@ test('переносы и замены: первый снимок молча, д
   assert.equal(await notifications.checkChanges(), 2);
   const first = sent.find((item) => item.userId === 1);
   const second = sent.find((item) => item.userId === 2);
-  assert.match(first.text, /Изменения в расписании\*\* · ИСТб-25-1/);
+  assert.match(first.text, /Изменения в расписании\*\*, ИСТб-25-1/);
   assert.match(first.text, /аудитория Ж-115 → В-208/);
   assert.doesNotMatch(first.text, /Английский/, 'чужая подгруппа не приходит');
   assert.match(second.text, /Английский: отменена/);

@@ -165,7 +165,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
           <p className="hw-block__label">{t.yourNotes}</p>
           {myNotes.map((note) => (
             <p key={note.id} className="note-status">
-              <span>{t.lateKind(note.kind)} · {note.reason ? t.absenceReasons[note.reason] : note.text}</span>
+              <span>{t.lateKind(note.kind)}, {note.reason ? t.absenceReasons[note.reason] : note.text}</span>
               <span className={`status-pill${note.acceptedAt ? ' is-ok' : ''}`}>{note.acceptedAt ? t.accepted : t.waiting}</span>
             </p>
           ))}
@@ -191,7 +191,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
                 : <p className="hw-block__empty">{t.nobodyWrote}</p>}
               {item?.sharedText && (
                 <p className="hw-block__meta">
-                  {[item.authorName, formatStamp(item.updatedAt), item.version > 1 && t.edit(item.version)].filter(Boolean).join(' · ')}
+                  {[item.authorName, formatStamp(item.updatedAt), item.version > 1 && t.edit(item.version)].filter(Boolean).join(', ')}
                 </p>
               )}
             </div>

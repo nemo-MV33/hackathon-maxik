@@ -265,7 +265,7 @@ export const createBot = ({
     const own = ownGroup(prefs);
     const isOwn = kind === 'group' && own?.id === Number(id);
     const name = isOwn ? own.title : await entityTitle(kind, id);
-    const suffix = isOwn ? ` · ${t.menuTitle({ group: '', subgroup: prefs.subgroup }).split(' · ')[1]}` : '';
+    const suffix = isOwn ? `, ${t.menuTitle({ group: '', subgroup: prefs.subgroup }).split(', ')[1]}` : '';
     const extraRows = [];
     if (kind === 'group' && !isOwn) extraRows.push([button(t.makeMine, `mine:${id}`)]);
     const app = isOwn ? appButton(t, `day_${appDayKey(mode, offset)}`, t.openInApp) : null;
@@ -343,14 +343,14 @@ export const createBot = ({
       return `s:${item.kind}:${item.id}:d0`;
     };
     const rows = results.slice(0, PAGE_SIZE).map((item) => [button(
-      mode === 'any' ? `${item.title} · ${kindLabel(t, item.kind)}` : item.title,
+      mode === 'any' ? `${item.title}, ${kindLabel(t, item.kind)}` : item.title,
       payload(item),
     )]);
     rows.push(mode === 'link' ? [button(t.cancel, 'cancel')] : [button(t.menu, 'menu')]);
     return show(ctx, t.searchResults(query), rows);
   };
 
-  const subgroupPrompt = (ctx, group, prefix) => show(ctx, ctx.t.subgroupPrompt(group.title), [[
+  const subgroupPrompt = (ctx, group, prefix) => show(ctx, prefix === 'lsub' ? ctx.t.subgroupPromptChat(group.title) : ctx.t.subgroupPrompt(group.title), [[
     button(ctx.t.subgroupNumber(1), `${prefix}:${group.id}:1`),
     button(ctx.t.subgroupNumber(2), `${prefix}:${group.id}:2`),
   ], [button(ctx.t.subgroupAll, `${prefix}:${group.id}:all`)]]);
@@ -390,7 +390,7 @@ export const createBot = ({
   const findLesson = async (groupId, subgroup, key) =>
     (await upcomingLessons(groupId, subgroup)).find((lesson) => lessonKey(lesson) === key);
 
-  const lessonWhen = (lang, lesson) => `${formatDate(lang, lesson.date)} · ${lesson.time}`;
+  const lessonWhen = (lang, lesson) => `${formatDate(lang, lesson.date)}, ${lesson.time}`;
 
   const lessonPicker = async (ctx, groupId, subgroup, prefix, prompt) => {
     const { t, lang } = ctx;
@@ -402,7 +402,7 @@ export const createBot = ({
     }
     if (!lessons.length) return show(ctx, t.noUpcomingLessons, [[button(t.menu, isGroupChat(ctx) ? 'help' : 'menu')]]);
     const rows = lessons.map((lesson) => [button(
-      `${formatDate(lang, lesson.date, { weekday: 'short', day: 'numeric' })} · ${lesson.time.slice(0, 5)} · ${lesson.subject}`,
+      `${formatDate(lang, lesson.date, { weekday: 'short', day: 'numeric' })}, ${lesson.time.slice(0, 5)}, ${lesson.subject}`,
       `${prefix}:${lessonKey(lesson)}`,
     )]);
     rows.push([button(t.cancel, 'cancel')]);
@@ -573,7 +573,7 @@ export const createBot = ({
     const role = headman ? t.roleHeadman : editor ? t.roleEditor : t.roleStudent;
     return show(ctx, t.accountText({
       name: displayName(ctx.user ?? ctx.message?.sender),
-      group: group ? `${group.title} · ${prefs.subgroup ? t.subgroupNumber(prefs.subgroup).toLowerCase() : t.subgroupAll.toLowerCase()}` : null,
+      group: group ? `${group.title}, ${prefs.subgroup ? t.subgroupNumber(prefs.subgroup).toLowerCase() : t.subgroupAll.toLowerCase()}` : null,
       role,
       lang: lang === 'ru' ? 'русский' : 'English',
       personal,
@@ -607,7 +607,7 @@ export const createBot = ({
     (await community.chatsForGroup(groupId)).find((chat) => chat.headman?.userId) ?? null;
 
   const lessonLabel = (lang, lesson) => (lesson
-    ? `${texts(lang).changeWhen(formatDate(lang, lesson.date, { weekday: 'short', day: 'numeric', month: 'short' }), String(lesson.time ?? '').slice(0, 5))} · ${lesson.subject}`
+    ? `${texts(lang).changeWhen(formatDate(lang, lesson.date, { weekday: 'short', day: 'numeric', month: 'short' }), String(lesson.time ?? '').slice(0, 5))}, ${lesson.subject}`
     : '');
 
   const absenceMessage = (notice, lang) => {
@@ -797,7 +797,7 @@ export const createBot = ({
       if (!items.length) return '';
       return [t.lateSection(kind, items.length), ...items.map((item) => t.lateItem(
         item.senderName ?? '—',
-        item.lesson ? `${String(item.lesson.time ?? '').slice(0, 5)} · ${item.lesson.subject}` : '',
+        item.lesson ? `${String(item.lesson.time ?? '').slice(0, 5)}, ${item.lesson.subject}` : '',
         item.reasonCode ? t.absenceReasons[item.reasonCode] ?? item.text : item.text,
         clock(item.createdAt),
         Boolean(item.acceptedAt),
@@ -1207,7 +1207,7 @@ export const createBot = ({
     const institute = (await service.institutes())[Number(instituteIndex)];
     if (!institute) return toast(ctx, ctx.t.selectionExpired);
     const groups = await service.searchGroups('', { institute, course: Number(course), limit: 5_000 });
-    return show(ctx, `**${institute}** · ${ctx.t.courseLabel(course)}\n\n${ctx.t.pickGroup}`,
+    return show(ctx, `**${institute}**, ${ctx.t.courseLabel(course)}\n\n${ctx.t.pickGroup}`,
       pagedRows(ctx.t, groups, Number(page), (group) => button(group.title, `mine:${group.id}`),
         `grp:${instituteIndex}:${course}:`, `crs:${instituteIndex}`));
   });
@@ -1570,7 +1570,7 @@ export const createBot = ({
       if (!remindAt) return ctx.reply(ctx.t.remindCustomInvalid);
       setSession(ctx, null);
       await savePrefs(ctx, { announcementReminders: { ...ctx.prefs.announcementReminders, [state.id]: remindAt } });
-      return show(ctx, `${ctx.t.remindSaved} · ${announcementWhen(ctx.lang, remindAt)}`, [[button(ctx.t.announcements, 'ann:list'), button(ctx.t.menu, 'menu')]]);
+      return show(ctx, `${ctx.t.remindSaved}, ${announcementWhen(ctx.lang, remindAt)}`, [[button(ctx.t.announcements, 'ann:list'), button(ctx.t.menu, 'menu')]]);
     }
     if (state.step === 'setup') {
       if (!text) return undefined;

@@ -8,11 +8,14 @@ import type { LocalProfile } from '../lib/profile';
 import { useAsync } from '../lib/useAsync';
 import { useNow } from '../lib/useNow';
 import { loadSemesterLessons } from '../lib/lessons';
-import { lessonKindClass, lessonKindName } from '../lib/lessonKind';
+import { lessonKindName } from '../lib/lessonKind';
 import { haptic } from '../bridge/max';
 import { BackHeader } from '../components/BackHeader';
 import { Empty, ErrorState, ScheduleSkeleton } from '../components/Status';
 import { ChevronDown, ChevronRight } from '../components/Icon';
+
+// Цвет закреплён за предметом: шесть пастелей по порядку в алфавитном списке, соседи не совпадают.
+const subjectClass = (index: number) => `subject-${index % 6}`;
 
 const FORMS: ControlForm[] = ['exam', 'credit', 'graded_credit', 'coursework', 'none'];
 
@@ -22,14 +25,13 @@ type Discipline = {
   teachers: Map<string, Set<string>>;
   next: Lesson | null;
   total: number;
-  mainKind: string;
 };
 
 // Дисциплины собираются из расписания группы за семестр: предметы, виды занятий и полные ФИО преподавателей.
 const collect = (lessons: Lesson[], todayKey: string) => {
   const map = new Map<string, Discipline>();
   for (const lesson of lessons) {
-    const item = map.get(lesson.subject) ?? { subject: lesson.subject, kinds: new Map(), teachers: new Map(), next: null, total: 0, mainKind: lesson.lessonType };
+    const item = map.get(lesson.subject) ?? { subject: lesson.subject, kinds: new Map(), teachers: new Map(), next: null, total: 0 };
     item.total += 1;
     item.kinds.set(lesson.lessonType, (item.kinds.get(lesson.lessonType) ?? 0) + 1);
     for (const teacher of lesson.teachers) {
@@ -39,9 +41,6 @@ const collect = (lessons: Lesson[], todayKey: string) => {
     }
     if (!item.next && lesson.date >= todayKey) item.next = lesson;
     map.set(lesson.subject, item);
-  }
-  for (const item of map.values()) {
-    item.mainKind = [...item.kinds.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? item.mainKind;
   }
   return [...map.values()].sort((left, right) => left.subject.localeCompare(right.subject, 'ru'));
 };
@@ -66,8 +65,8 @@ export const DisciplinesScreen = ({ profile, onBack, onOpen }: { profile: LocalP
       {lessons.status === 'error' && <ErrorState message={lessons.message} onRetry={retry} />}
       {lessons.status === 'ready' && list.length === 0 && <Empty title={t.disciplinesEmpty} />}
       <div className="discipline-list">
-        {list.map((item) => (
-          <button key={item.subject} type="button" className={`discipline ${lessonKindClass(item.mainKind)}`} onClick={() => onOpen(item.subject)}>
+        {list.map((item, index) => (
+          <button key={item.subject} type="button" className={`discipline ${subjectClass(index)}`} onClick={() => onOpen(item.subject)}>
             <span className="discipline__title">{item.subject}</span>
             <span className="discipline__meta">{[...item.teachers.keys()].slice(0, 2).join(', ') || t.noTeacher}</span>
             <span className="discipline__tags">
@@ -107,7 +106,7 @@ export const DisciplineScreen = ({ profile, subject, onBack }: { profile: LocalP
   return (
     <div className="screen screen--section">
       <BackHeader label={t.disciplines} onBack={onBack} />
-      <header className={`lesson-head ${lessonKindClass(item?.mainKind ?? '')}`}>
+      <header className={`lesson-head ${subjectClass(item ? list.indexOf(item) : 0)}`}>
         <p className="eyebrow">{t.discipline}</p>
         <h1 className="display">{subject}</h1>
       </header>

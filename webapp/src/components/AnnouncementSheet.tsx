@@ -34,7 +34,7 @@ export const AnnouncementSheet = ({ item, now, onClose, onSaved }: Props) => {
 
   return (
     <Sheet title={t.announcementTitle} labelId="announcement-title" onClose={onClose} busy={saving}
-      hint={[item.authorName, formatMoment(item.createdAt)].filter(Boolean).join(' · ')}>
+      hint={[item.authorName, formatMoment(item.createdAt)].filter(Boolean).join(', ')}>
       <p className="announcement-text">{item.text}</p>
       <p className="field-label">{t.myReminder}</p>
       {item.remindAt && <p className="sheet__hint">{t.headmanReminder(formatMoment(item.remindAt))}</p>}

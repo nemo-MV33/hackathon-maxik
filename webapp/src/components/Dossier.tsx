@@ -23,7 +23,7 @@ export const NoteRow = ({ note, withName = false }: { note: AbsenceNote; withNam
       <span className="note-row__text">
         <span className="note-row__title">{withName && note.senderName ? note.senderName : t.lateKind(note.kind)}</span>
         <span className="note-row__hint">
-          {[note.lesson && `${note.lesson.time.slice(0, 5)} · ${note.lesson.subject}`, reason(note)].filter(Boolean).join(' · ')}
+          {[note.lesson && `${note.lesson.time.slice(0, 5)}, ${note.lesson.subject}`, reason(note)].filter(Boolean).join(', ')}
         </span>
         <span className="note-row__meta">
           {formatStamp(note.createdAt)}

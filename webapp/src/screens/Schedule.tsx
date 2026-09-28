@@ -41,7 +41,7 @@ const dayDiff = (key: string, todayKey: string) =>
 
 type DayHeadingProps = { dateKey: string; todayKey: string; lessons: Lesson[]; level?: 'h1' | 'h2'; loading?: boolean };
 
-// Заголовок дня в одну строку: «Завтра · понедельник, 28 сентября», под ним — сколько пар и во сколько.
+// Заголовок дня в одну строку: «Завтра, понедельник, 28 сентября», под ним — сколько пар и во сколько.
 export const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1', loading = false }: DayHeadingProps) => {
   const { t } = useI18n();
   const Tag = level;
@@ -56,7 +56,7 @@ export const DayHeading = ({ dateKey, todayKey, lessons, level = 'h1', loading =
       {/* Пока неделя не загрузилась, строка пустая той же высоты: «Пар нет» до данных было бы неправдой. */}
       <span className="day-heading__summary">
         {loading ? '\u00a0' : lessons.length > 0
-          ? `${t.pairs(pairCount(lessons))} · ${lessonStart(lessons[0])}–${lessonEnd(lessons[lessons.length - 1])}`
+          ? `${t.pairs(pairCount(lessons))}, ${lessonStart(lessons[0])}–${lessonEnd(lessons[lessons.length - 1])}`
           : t.noLessonsTitle}
       </span>
     </div>
@@ -185,7 +185,7 @@ export const Schedule = ({
         </button>
         <span className="week-nav__range">
           {formatRange(fromDateKey(days[0]), fromDateKey(days[6]))}
-          {week.status === 'ready' && <span className="week-nav__parity"> · {week.data.weekEven ? t.even : t.odd}</span>}
+          {week.status === 'ready' && <span className="week-nav__parity">, {week.data.weekEven ? t.even : t.odd}</span>}
         </span>
         <button type="button" className="icon-button" aria-label={t.nextWeek} disabled={!canShift(1)} onClick={() => shiftWeek(1)}>
           <ChevronRight size={18} />

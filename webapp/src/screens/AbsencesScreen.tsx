@@ -78,7 +78,7 @@ export const AbsencesScreen = ({ profile, onBack, onOpenStudent }: Props) => {
                 <button key={key(lesson)} type="button" role="radio" className="choice choice--compact" aria-checked={selected && key(selected) === key(lesson)} onClick={() => setLessonKey(key(lesson))}>
                   <span className="choice__text">
                     <span className="choice__title">{lesson.subject}</span>
-                    <span className="choice__hint">{lesson.time} · {lesson.auditories.join(', ') || lesson.lessonType}</span>
+                    <span className="choice__hint">{lesson.time}, {lesson.auditories.join(', ') || lesson.lessonType}</span>
                   </span>
                 </button>
               ))}

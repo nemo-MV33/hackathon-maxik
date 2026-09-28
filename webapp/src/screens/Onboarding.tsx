@@ -77,7 +77,7 @@ const SubgroupStep = ({ group, current, onPick, onBack }: {
     <div className="screen">
       <BackLink label={t.otherGroup} onClick={onBack} />
       <div className="intro">
-        <p className="eyebrow">{[group.institute, group.course && t.course(group.course)].filter(Boolean).join(' · ')}</p>
+        <p className="eyebrow">{[group.institute, group.course && t.course(group.course)].filter(Boolean).join(', ')}</p>
         <h1 className="display">{group.title}</h1>
       </div>
       <div className="choice-list" role="radiogroup" aria-label={t.subgroupField}>

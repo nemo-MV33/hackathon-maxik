@@ -338,7 +338,7 @@ test('личная версия ДЗ, сообщение старосте, на�
   assert.match(quick.find((item) => item.to === 'callback').text, /Передал старосте/);
   let toHeadman = sent.slice(before).find((item) => item.to === 'user');
   assert.equal(toHeadman.userId, HEADMAN.user_id);
-  assert.match(toHeadman.text, /Опоздание · ~10 мин · ИСТб-25-1/);
+  assert.match(toHeadman.text, /Опоздание, ~10 мин, ИСТб-25-1/);
   assert.match(toHeadman.text, /Аня Петрова/, 'староста видит, кто опаздывает');
   assert.match(toHeadman.text, /Транспорт задерживается/);
 
@@ -348,7 +348,7 @@ test('личная версия ДЗ, сообщение старосте, на�
   const replies = await say(STUDENT, 'Температура, справку принесу');
   assert.match(replies.find((item) => item.to === 'chat').text, /Передал старосте/);
   toHeadman = sent.slice(before).find((item) => item.to === 'user');
-  assert.match(toHeadman.text, /Не придёт · ИСТб-25-1/);
+  assert.match(toHeadman.text, /Не придёт, ИСТб-25-1/);
   assert.match(toHeadman.text, /Аня Петрова/);
   assert.match(toHeadman.text, /Температура, справку принесу/);
   assert.equal((await community.pendingNoticesForHeadman(HEADMAN.user_id)).length, 0);
@@ -400,7 +400,7 @@ test('сообщение старосте ждёт, пока староста н
   await run({ update_type: 'bot_started', chat_id: PRIVATE_CHAT(HEADMAN).chat_id, user: HEADMAN });
   const delivered = sent.slice(before).find((item) => item.to === 'user' && item.userId === HEADMAN.user_id);
   assert.ok(delivered, 'сообщение дошло после «Начать»');
-  assert.match(delivered.text, /Не придёт · ИСТб-25-1/);
+  assert.match(delivered.text, /Не придёт, ИСТб-25-1/);
   assert.match(delivered.text, /Аня Петрова/);
   assert.match(delivered.text, /Заболел\(а\)/);
   assert.equal((await community.pendingNoticesForHeadman(HEADMAN.user_id)).length, 0);
@@ -444,8 +444,8 @@ test('всё управление кнопками: без единой кома
   assert.equal(notHeadman.notification, 'Это может сделать только староста');
   await press(HEADMAN, 'm:ed:0', inGroup);
   const withEditor = (await press(HEADMAN, 'es:1', inGroup)).find((item) => item.to === 'callback');
-  assert.ok(buttons(withEditor).some((item) => item.text === 'Аня Петрова · редактор'));
-  assert.ok(buttons(withEditor).some((item) => item.text === 'Маша Староста · староста'));
+  assert.ok(buttons(withEditor).some((item) => item.text === 'Аня Петрова, редактор'));
+  assert.ok(buttons(withEditor).some((item) => item.text === 'Маша Староста, староста'));
   const [removed] = await press(HEADMAN, 'es:1', inGroup);
   assert.ok(buttons(removed).some((item) => item.text === 'Аня Петрова'));
 

@@ -39,7 +39,7 @@ const formatLesson = (language, lesson, scheduleKind, ordinal) => {
     lessonTypeLabel(language, lesson.lessonType),
     lesson.subgroup ? t.subgroupShort(lesson.subgroup) : '',
     lesson.transferred ? t.transferred : '',
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean).join(', ');
   const where = [
     lesson.auditories.length ? `📍 ${lesson.auditories.join(', ')}` : '',
     scheduleKind !== 'teacher' && lesson.teachers.length ? `👤 ${lesson.teachers.map(shortName).join(', ')}` : '',
@@ -108,7 +108,7 @@ export const formatHomework = (language, items) => {
   const t = texts(language);
   if (!items.length) return `${t.homeworkTitle}\n\n${t.homeworkEmpty}`;
   return [t.homeworkTitle, ...items.map((item) => [
-    `**${item.subject}** · ${formatDate(language, item.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' })}, ${item.lessonTime.slice(0, 5)}`,
+    `**${item.subject}**, ${formatDate(language, item.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' })}, ${item.lessonTime.slice(0, 5)}`,
     item.text,
     item.source === 'personal' ? t.homeworkPersonalMark : '',
   ].filter(Boolean).join('\n'))].join('\n\n');

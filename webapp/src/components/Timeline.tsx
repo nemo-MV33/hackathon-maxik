@@ -26,13 +26,13 @@ const LessonCard = ({ lesson, state, nowMinutes, homework, onOpen, metaKind }: C
   const start = timeToMinutes(lessonStart(lesson));
   const end = timeToMinutes(lessonEnd(lesson));
   const progress = state === 'live' ? Math.min(100, Math.max(0, ((nowMinutes - start) / (end - start)) * 100)) : 0;
-  const kind = [lessonKindName(lesson.lessonType), lesson.auditories[0]].filter(Boolean).join(' · ');
+  const kind = [lessonKindName(lesson.lessonType), lesson.auditories[0]].filter(Boolean).join(', ');
   const meta = [
     metaKind !== 'teacher' ? lesson.teachers.join(', ') : '',
     metaKind !== 'group' ? (lesson.groups ?? []).join(', ') : '',
     lesson.subgroup ? t.subgroup(lesson.subgroup) : '',
     lesson.auditories.length > 1 ? lesson.auditories.slice(1).join(', ') : '',
-  ].filter(Boolean).join(' · ');
+  ].filter(Boolean).join(', ');
   const classes = [
     'card',
     lessonKindClass(lesson.lessonType),

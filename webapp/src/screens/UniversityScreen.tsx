@@ -34,7 +34,7 @@ export const UniversityScreen = ({ profile, onBack, onChangeGroup }: { profile: 
         </div>
         <button type="button" className="settings-row" onClick={onChangeGroup}>
           <span className="settings-row__text">
-            <span className="settings-row__hint">{t.fieldGroup}{profile.group.course ? ` · ${t.course(profile.group.course)}` : ''}</span>
+            <span className="settings-row__hint">{t.fieldGroup}{profile.group.course ? `, ${t.course(profile.group.course)}` : ''}</span>
             <span className="settings-row__title">{profile.group.title}</span>
           </span>
           <span className="text-button">{t.changeGroup}</span>

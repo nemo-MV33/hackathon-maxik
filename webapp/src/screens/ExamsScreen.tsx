@@ -43,7 +43,7 @@ export const ExamsScreen = ({ profile, onBack, onOpenLesson }: Props) => {
               </span>
               <span className="card__subject">{lesson.subject}</span>
               <span className="card__meta">
-                {[lessonKindName(lesson.lessonType), lesson.time.slice(0, 5), lesson.auditories.join(', ')].filter(Boolean).join(' · ')}
+                {[lessonKindName(lesson.lessonType), lesson.time.slice(0, 5), lesson.auditories.join(', ')].filter(Boolean).join(', ')}
               </span>
             </button>
           ))}

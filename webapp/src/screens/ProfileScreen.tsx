@@ -80,7 +80,7 @@ export const ProfileScreen = ({ profile, onBack, onOpen, onAccountDeleted }: Pro
         <div className="profile-head__text">
           <h1 className="profile-head__name">{name}</h1>
           <p className="profile-head__meta">
-            {[username && `@${username}`, profile.group.title].filter(Boolean).join(' · ')}
+            {[username && `@${username}`, profile.group.title].filter(Boolean).join(', ')}
           </p>
           {me && me.role !== 'student' && <span className="role-badge">{t.roleNames[me.role]}</span>}
         </div>
@@ -89,7 +89,7 @@ export const ProfileScreen = ({ profile, onBack, onOpen, onAccountDeleted }: Pro
       <section className="settings" aria-label={t.studySection}>
         <p className="settings__label">{t.studySection}</p>
         <div className="settings-list">
-          <Row icon={<SchoolIcon />} title={t.university} hint={`${profile.group.title} · ${profile.subgroup ? t.subgroup(profile.subgroup) : t.wholeGroup}`} onClick={() => onOpen('university')} />
+          <Row icon={<SchoolIcon />} title={t.university} hint={`${profile.group.title}, ${profile.subgroup ? t.subgroup(profile.subgroup) : t.wholeGroup}`} onClick={() => onOpen('university')} />
           <Row icon={<BookIcon />} title={t.disciplines} hint={t.disciplinesHint} onClick={() => onOpen('disciplines')} />
           <Row icon={<RunIcon />} title={t.absencesSection} hint={me?.role === 'headman' ? t.absencesHintHeadman : t.absencesHint} onClick={() => onOpen('absences')} />
         </div>

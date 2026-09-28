@@ -78,7 +78,7 @@ export const ImportScreen = ({ shared, profile, onDone }: {
       </div>
       <dl className="facts">
         <div><dt>{t.groupField}</dt><dd>{group?.title ?? t.groupNotFound}{shared.subgroup ? `, ${t.subgroup(shared.subgroup)}` : ''}</dd></div>
-        <div><dt>{t.when}</dt><dd className="first-letter">{formatDay(fromDateKey(shared.date))}{lesson ? <> · <span className="mono">{lesson.time}</span></> : ''}</dd></div>
+        <div><dt>{t.when}</dt><dd className="first-letter">{formatDay(fromDateKey(shared.date))}{lesson ? <>, <span className="mono">{lesson.time}</span></> : ''}</dd></div>
       </dl>
       <div className="hw-block hw-block--quote">
         <p className="hw-block__label">{t.task}</p>

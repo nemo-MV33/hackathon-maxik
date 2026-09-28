@@ -197,7 +197,7 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
               <button key={homeworkKey(item)} type="button" role="radio" className="choice choice--compact" aria-checked={homeworkKey(item) === lessonKey} onClick={() => setLessonKey(homeworkKey(item))}>
                 <span className="choice__text">
                   <span className="choice__title">{item.subject}</span>
-                  <span className="choice__hint">{item.time} · {item.lessonType}{item.subgroup ? ` · ${t.subgroupShort(item.subgroup)}` : ''}</span>
+                  <span className="choice__hint">{item.time}, {item.lessonType}{item.subgroup ? `, ${t.subgroupShort(item.subgroup)}` : ''}</span>
                 </span>
               </button>
             ))}

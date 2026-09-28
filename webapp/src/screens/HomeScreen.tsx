@@ -91,7 +91,7 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfi
           {focusDay && lessons.status === 'ready' && (
             <span className="block-note first-letter">
               {formatDay(fromDateKey(focusDay))}
-              {todayActive ? ` · ${t.pairs(new Set(today.map((lesson) => lesson.lessonNumber)).size)} · ${lessonStart(today[0])}–${lessonEnd(today[today.length - 1])}` : ''}
+              {todayActive ? `, ${t.pairs(new Set(today.map((lesson) => lesson.lessonNumber)).size)}, ${lessonStart(today[0])}–${lessonEnd(today[today.length - 1])}` : ''}
             </span>
           )}
         </div>

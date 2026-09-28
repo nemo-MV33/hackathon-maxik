@@ -342,7 +342,7 @@ export class NotificationService {
       t.summaryLessons(pairs.length, lessons[0].time.slice(0, 5)),
       '',
       t.summaryHomework(new Set(withHomework.map((item) => item.lessonNumber)).size, pairs.length),
-      ...subjects.map((subject) => `· ${subject}`),
+      ...subjects.map((subject) => `— ${subject}`),
     ].join('\n');
   }
 
@@ -408,13 +408,13 @@ export class NotificationService {
     const t = texts(lang);
     const lines = changes.slice(0, 12).map(({ type, lesson, previous }) => {
       const when = t.changeWhen(shortDate(lang, lesson.date), String(lesson.time ?? '').slice(0, 5));
-      if (type === 'cancelled') return `· ${t.changeCancelled(when, lesson.subject)}`;
-      if (type === 'added') return `· ${t.changeAdded(when, lesson.subject)}`;
-      if (type === 'subject') return `· ${t.changeSubject(when, previous.subject, lesson.subject)}`;
-      if (type === 'room') return `· ${t.changeRoom(when, lesson.subject, previous.auditories.join(', '), lesson.auditories.join(', '))}`;
-      return `· ${t.changeTeacher(when, lesson.subject, lesson.teachers.join(', '))}`;
+      if (type === 'cancelled') return `— ${t.changeCancelled(when, lesson.subject)}`;
+      if (type === 'added') return `— ${t.changeAdded(when, lesson.subject)}`;
+      if (type === 'subject') return `— ${t.changeSubject(when, previous.subject, lesson.subject)}`;
+      if (type === 'room') return `— ${t.changeRoom(when, lesson.subject, previous.auditories.join(', '), lesson.auditories.join(', '))}`;
+      return `— ${t.changeTeacher(when, lesson.subject, lesson.teachers.join(', '))}`;
     });
-    if (changes.length > 12) lines.push(`· …+${changes.length - 12}`);
+    if (changes.length > 12) lines.push(`— …+${changes.length - 12}`);
     return [t.changesTitle(groupTitle), '', ...lines].join('\n');
   }
 }

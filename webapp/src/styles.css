@@ -101,6 +101,13 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .kind-exam { --kind-bg: var(--k-exam); }
 .kind-credit { --kind-bg: var(--k-credit); }
 .kind-other { --kind-bg: var(--k-other); }
+/* Дисциплины красятся по предмету: у одного предмета бывают лекции, практики и лабы. */
+.subject-0 { --kind-bg: var(--k-lecture); }
+.subject-1 { --kind-bg: var(--k-practice); }
+.subject-2 { --kind-bg: var(--k-lab); }
+.subject-3 { --kind-bg: var(--k-credit); }
+.subject-4 { --kind-bg: #cfdcf3; }
+.subject-5 { --kind-bg: #ddd2f2; }
 
 /* Каркас */
 
@@ -734,7 +741,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .welcome-notify__title { font-size: 20px; }
 .exam-banner__next::first-letter { text-transform: uppercase; }
 
-/* ───────── Тёмная тема: те же роли цветов, пастель приглушена, обводка светлая ───────── */
+/* ───────── Тёмная тема: фон тёмный, цветные карточки — те же сочные, что в светлой ───────── */
 
 :root[data-theme='dark'] #root > * {
   --bg: #161412;
@@ -752,16 +759,20 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   --on-highlight: #141414;
   --tick-selected: var(--yellow);
 
-  --live-bg: #1f7a45;
   --live-ink: #fff8ec;
   --card-hw: rgba(0, 0, 0, 0.22);
 
-  --k-lecture: #4a2b3a;
-  --k-practice: #213b2b;
-  --k-lab: #4d2e20;
-  --k-exam: #4f2622;
-  --k-credit: #4a3f16;
-  --k-other: #2e2a26;
+}
+:root[data-theme='dark'] :is(.card:not(.card--live), .lesson-head, .discipline, .hw-block--quote, .note-row__badge--late, .report-card) {
+  --ink: #141414;
+  --ink-2: rgba(20, 20, 20, 0.64);
+  --ink-3: rgba(20, 20, 20, 0.45);
+  --press: rgba(20, 20, 20, 0.05);
+  --surface: #fbf8f1;
+  --surface-2: #e6dfd0;
+  --line: rgba(20, 20, 20, 0.16);
+  --card-hw: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
 }
 :root[data-theme='dark'] .day--selected { background: var(--ink); }
 :root[data-theme='dark'] .day--selected .day__number { color: #161412; }

@@ -65,7 +65,7 @@ export const AbsenceSheet = ({ kind, lesson, onClose, onSent }: Props) => {
       labelId="absence-title"
       onClose={onClose}
       busy={Boolean(sending)}
-      hint={<>{lesson ? `${lesson.subject} · ${lesson.time.slice(0, 5)}. ` : ''}{toDeputy ? t.absenceHintDeputy(me?.deputy?.name ?? null) : t.absenceHint}</>}
+      hint={<>{lesson ? `${lesson.subject}, ${lesson.time.slice(0, 5)}. ` : ''}{toDeputy ? t.absenceHintDeputy(me?.deputy?.name ?? null) : t.absenceHint}</>}
     >
       {!done && kind === 'late' && (
         <>

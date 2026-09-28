@@ -72,7 +72,7 @@ export const ReminderPicker = ({ value, onChange, dateKey, now }: Props) => {
           aria-label={t.remindCustom}
         />
       )}
-      {value && <p className="reminder__note">🔔 {formatMoment(value)} · {t.irkutskTime}</p>}
+      {value && <p className="reminder__note">🔔 {formatMoment(value)}, {t.irkutskTime}</p>}
     </div>
   );
 };

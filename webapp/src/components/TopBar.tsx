@@ -17,7 +17,7 @@ export const TopBar = ({ left, onOpenProfile, extra }: Props) => {
       <div className="topbar__right">
         {extra}
         <button type="button" className="avatar-button" aria-label={t.profile} onClick={onOpenProfile}>
-          {name ? name.slice(0, 1).toUpperCase() : '·'}
+          {name ? name.slice(0, 1).toUpperCase() : ''}
         </button>
       </div>
     </header>
