@@ -24,7 +24,7 @@ const COMMANDS = [
   { name: 'today', description: 'Пары сегодня' },
   { name: 'tomorrow', description: 'Пары завтра' },
   { name: 'week', description: 'Неделя' },
-  { name: 'homework', description: 'Домашка' },
+  { name: 'homework', description: 'ДЗ' },
   { name: 'add', description: 'Записать ДЗ' },
   { name: 'news', description: 'Объявления' },
   { name: 'absence', description: 'Опоздаю / не приду' },

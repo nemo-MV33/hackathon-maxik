@@ -55,7 +55,7 @@ const ru = {
   failedTitle: 'Не получилось',
   retry: 'Повторить',
 
-  introTitle: 'Расписание ИРНИТУ и домашка группы',
+  introTitle: 'Расписание ИРНИТУ и ДЗ группы',
   introLead: 'Пары на день и неделю, а у каждой пары — ДЗ, которое записал староста',
   otherGroup: 'Другая группа',
   currentGroup: (title: string) => `Сейчас выбрана ${title}`,
@@ -172,7 +172,7 @@ const ru = {
   welcomeLead: 'Вот что здесь есть',
   welcomeSchedule: 'Расписание',
   welcomeScheduleText: 'Пары на день и неделю, текущая подсвечена',
-  welcomeHomework: 'Домашка',
+  welcomeHomework: 'ДЗ',
   welcomeHomeworkText: 'ДЗ от старосты и свои заметки к каждой паре',
   welcomeAbsence: 'Опоздаю / не приду',
   welcomeAbsenceText: 'Одно нажатие — и староста в курсе',
@@ -434,7 +434,7 @@ const ru = {
     },
   ] as { title: string; items: [string, string][] }[],
 
-  outsideMax: 'Домашка доступна, когда приложение открыто из бота в MAX',
+  outsideMax: 'ДЗ доступно, когда приложение открыто из бота в MAX',
   network: 'Нет связи с сервисом. Проверь интернет',
   failed: 'Не удалось выполнить действие',
   scheduleMissing: 'Расписание ещё не выгружено',

@@ -1,10 +1,20 @@
 schemaVersion: '1.0'
 solution: norfly
-baseUrl: http://localhost:3000
+baseUrl: https://158-160-37-19.sslip.io
 authentication:
   type: header
   name: Authorization
-  description: Подписанные MAX initData в формате "tma <initData>". Для локальной проверки можно задать DEV_USER_ID.
+  roles:
+    anonymous:
+      description: Без заголовка авторизации.
+    service:
+      description: Служебный ключ API_ACCESS_KEY. Значение указано на первом слайде презентации.
+      value: "Bearer <API_ACCESS_KEY>"
+    student:
+      description: >-
+        Подписанные MAX initData в формате "tma <initData>". Их формирует клиент MAX при открытии
+        мини-приложения из бота, поэтому личные методы (профиль, ДЗ, опоздания, объявления)
+        проверяются через мини-приложение в MAX. Контракт этих методов описан в openapi.yaml.
 checks:
   - name: health
     role: anonymous
@@ -15,73 +25,85 @@ checks:
       statusCodes: [200]
       contentType: application/json
       requiredFields: [status]
-  - name: current-profile
-    role: student
+  - name: unauthorized-without-key
+    role: anonymous
     request:
       method: GET
-      path: /api/me
-      headers:
-        Authorization: "tma <MAX_INIT_DATA>"
-    expected:
-      statusCodes: [200]
-      contentType: application/json
-      requiredFields: [user, profile]
-  - name: homework-list
-    role: student
-    request:
-      method: GET
-      path: /api/homework
+      path: /api/groups
       query:
-        groupId: 478237
-        from: '2026-09-01'
-        to: '2026-10-31'
+        q: истб-25
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+  - name: institutes
+    role: service
+    request:
+      method: GET
+      path: /api/institutes
       headers:
-        Authorization: "tma <MAX_INIT_DATA>"
+        Authorization: "Bearer <API_ACCESS_KEY>"
     expected:
       statusCodes: [200]
       contentType: application/json
-      requiredFields: [group, role, canEditShared, period, items]
-  - name: personal-homework
-    role: student
+      requiredFields: [items]
+  - name: group-search
+    role: service
     request:
-      method: PUT
-      path: /api/homework
+      method: GET
+      path: /api/groups
+      query:
+        q: истб-25
+        limit: 5
       headers:
-        Authorization: "tma <MAX_INIT_DATA>"
-      body:
-        date: '2026-09-25'
-        lessonNumber: 3
-        subgroup: 1
-        text: 'Проверочная личная запись'
-        scope: personal
+        Authorization: "Bearer <API_ACCESS_KEY>"
     expected:
       statusCodes: [200]
       contentType: application/json
-      requiredFields: [item]
-  - name: notification-settings
-    role: student
+      requiredFields: [items, items[].id, items[].title]
+  - name: teacher-search
+    role: service
     request:
-      method: PUT
+      method: GET
+      path: /api/teachers
+      query:
+        q: Лукьянов
+      headers:
+        Authorization: "Bearer <API_ACCESS_KEY>"
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [items]
+  - name: group-schedule
+    role: service
+    request:
+      method: GET
+      path: /api/schedule/group/478237
+      query:
+        week: '2026-09-28'
+      headers:
+        Authorization: "Bearer <API_ACCESS_KEY>"
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [kind, entityId, period, weekEven, lessons]
+  - name: invalid-schedule-target
+    role: service
+    request:
+      method: GET
+      path: /api/schedule/building/1
+      headers:
+        Authorization: "Bearer <API_ACCESS_KEY>"
+    expected:
+      statusCodes: [400]
+      contentType: application/json
+      requiredFields: [error]
+  - name: profile-requires-max-signature
+    role: anonymous
+    request:
+      method: GET
       path: /api/me
-      headers:
-        Authorization: "tma <MAX_INIT_DATA>"
-      body:
-        notifications:
-          changes: false
     expected:
-      statusCodes: [200]
+      statusCodes: [401]
       contentType: application/json
-      requiredFields: [profile]
-  - name: absence-note
-    role: student
-    request:
-      method: POST
-      path: /api/absence
-      headers:
-        Authorization: "tma <MAX_INIT_DATA>"
-      body:
-        kind: late
-        reason: transport
-    expected:
-      statusCodes: [200, 409]
-      contentType: application/json
+      requiredFields: [error]

@@ -4,10 +4,13 @@ info:
   version: 0.2.0
   description: Профиль, расписание и домашние задания студента ИРНИТУ.
 servers:
+  - url: https://158-160-37-19.sslip.io
+    description: Рабочий сервер (Yandex Cloud)
   - url: http://localhost:3000
     description: Запуск через Docker
 security:
   - maxInitData: []
+  - serviceKey: []
 paths:
   /health:
     get:
@@ -162,7 +165,7 @@ paths:
                 text: { type: string, maxLength: 1500 }
                 remindAt: { type: [string, 'null'], format: date-time }
       responses:
-        '200': { description: Опубликовано, postedToChat — удалось ли написать в чат группы }
+        '200': { description: 'Опубликовано, postedToChat — удалось ли написать в чат группы' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { description: Публикует только староста }
@@ -242,7 +245,7 @@ paths:
                   type: string
                   enum: [late10, late20, transport, ill, family, certificate]
                   description: Готовая причина. late10, late20, transport — для late; ill, family, certificate — для absent
-                text: { type: string, maxLength: 500, description: Своя причина, если reason не указан }
+                text: { type: string, maxLength: 500, description: 'Своя причина, если reason не указан' }
                 lessonDate: { type: string, format: date }
                 lessonNumber: { type: integer, minimum: 1 }
       responses:
@@ -313,7 +316,7 @@ paths:
                 lessonNumber: { type: integer, minimum: 1 }
                 subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
                 text: { type: [string, 'null'], maxLength: 2000, description: null удаляет версию }
-                scope: { type: string, enum: [shared, personal, reminder], description: reminder — только личное напоминание, text не нужен }
+                scope: { type: string, enum: [shared, personal, reminder], description: 'reminder — только личное напоминание, text не нужен' }
                 remindAt: { type: [string, 'null'], format: date-time, description: Личное напоминание о ДЗ; null снимает }
       responses:
         '200':
@@ -324,8 +327,110 @@ paths:
           description: Нет прав на изменение общего ДЗ
         '404':
           description: Пара не найдена в расписании ИРНИТУ
+  /api/institutes:
+    get:
+      summary: Институты ИРНИТУ
+      security: [{ serviceKey: [] }, { maxInitData: [] }]
+      responses:
+        '200':
+          description: Список институтов
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StringList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/groups:
+    get:
+      summary: Поиск учебной группы
+      security: [{ serviceKey: [] }, { maxInitData: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string }, example: истб-25 }
+        - { name: institute, in: query, schema: { type: string } }
+        - { name: course, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: Найденные группы
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, title]
+                      properties:
+                        id: { type: integer }
+                        title: { type: string }
+                        course: { type: integer }
+                        institute: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/teachers:
+    get:
+      summary: Поиск преподавателя
+      security: [{ serviceKey: [] }, { maxInitData: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: Найденные преподаватели
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/auditories:
+    get:
+      summary: Поиск аудитории
+      security: [{ serviceKey: [] }, { maxInitData: [] }]
+      parameters:
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: Найденные аудитории
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ItemList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/schedule/{kind}/{id}:
+    get:
+      summary: Расписание группы, преподавателя или аудитории на неделю
+      security: [{ serviceKey: [] }, { maxInitData: [] }]
+      parameters:
+        - { name: kind, in: path, required: true, schema: { type: string, enum: [group, teacher, auditory] } }
+        - { name: id, in: path, required: true, schema: { type: integer }, example: 478237 }
+        - { name: week, in: query, description: Любая дата недели, schema: { type: string, format: date } }
+        - { name: subgroup, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Пары за неделю
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [kind, entityId, period, weekEven, lessons]
+                properties:
+                  kind: { type: string }
+                  entityId: { type: integer }
+                  period:
+                    type: object
+                    required: [from, to]
+                    properties:
+                      from: { type: string, format: date }
+                      to: { type: string, format: date }
+                  weekEven: { type: boolean }
+                  lessons: { type: array, items: { type: object } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 components:
   securitySchemes:
+    serviceKey:
+      type: http
+      scheme: bearer
+      description: Служебный ключ API_ACCESS_KEY для проверки справочников и расписания. Значение указано на первом слайде презентации.
     maxInitData:
       type: apiKey
       in: header
@@ -337,6 +442,22 @@ components:
     BadRequest:
       description: Некорректные параметры запроса
   schemas:
+    StringList:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { type: string } }
+    ItemList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [id]
+            properties:
+              id: { type: integer }
     Group:
       type: object
       required: [id, title]
@@ -352,7 +473,7 @@ components:
         course: { type: [integer, 'null'] }
         subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
         remindersEnabled: { type: boolean }
-        lang: { type: [string, 'null'], enum: [ru, en, null], description: Язык, выбранный в боте или приложении }
+        lang: { type: [string, 'null'], enum: [ru, en, null], description: 'Язык, выбранный в боте или приложении' }
         notifications: { $ref: '#/components/schemas/Notifications' }
         onboarded: { type: boolean }
     Notifications:
@@ -365,7 +486,7 @@ components:
         lessonEnd: { type: boolean, description: Напоминание перед концом пары (по умолчанию выключено) }
         summary: { type: boolean, description: Сводка на завтра во время summaryTime }
         homework: { type: boolean, description: Новое или изменённое ДЗ группы }
-        changes: { type: boolean, description: Переносы, отмены и смена аудитории }
+        changes: { type: boolean, description: 'Переносы, отмены и смена аудитории' }
     NotificationsPatch:
       type: object
       additionalProperties: false
