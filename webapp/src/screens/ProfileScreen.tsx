@@ -82,7 +82,7 @@ export const ProfileScreen = ({ profile, onBack, onOpen, onAccountDeleted }: Pro
           <p className="profile-head__meta">
             {[username && `@${username}`, profile.group.title].filter(Boolean).join(', ')}
           </p>
-          {me && me.role !== 'student' && <span className="role-badge">{t.roleNames[me.role]}</span>}
+          {me?.role && me.role !== 'student' && <span className="role-badge">{t.roleNames[me.role]}</span>}
         </div>
       </header>
 

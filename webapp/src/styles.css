@@ -25,6 +25,7 @@
   --danger: #d63a1e;
   --highlight: var(--yellow);
   --on-highlight: #141414;
+  --on-ink: var(--bg);
   --tick-selected: var(--yellow);
 
   --live-bg: var(--green);
@@ -181,7 +182,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--ink);
-  color: var(--bg);
+  color: var(--on-ink);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -232,7 +233,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   transition: background 0.15s, color 0.15s;
 }
 .segment button[aria-selected='true'],
-.lang-switch button[aria-checked='true'] { background: var(--ink); color: var(--bg); }
+.lang-switch button[aria-checked='true'] { background: var(--ink); color: var(--on-ink); }
 .lang-switch { margin-left: auto; }
 .lang-switch button { padding: 5px 10px; font-size: 12px; letter-spacing: 0.04em; }
 
@@ -286,7 +287,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .day--today .day__weekday { color: var(--ink); }
 .day--selected { border-color: var(--ink); background: var(--ink); }
 .day--selected .day__weekday { color: color-mix(in srgb, var(--bg) 60%, var(--ink)); }
-.day--selected .day__number { color: var(--bg); }
+.day--selected .day__number { color: var(--on-ink); }
 .day--selected .day__ticks i { background: var(--tick-selected); }
 
 .day-view { display: flex; flex-direction: column; gap: 14px; touch-action: pan-y; }
@@ -316,7 +317,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 .card__row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .card__time { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
-.card__time small { margin-left: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0; opacity: 0.5; }
+.card__time small { margin-left: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0; opacity: 0.62; }
 .card__kind {
   min-width: 0;
   font-size: 11px;
@@ -362,6 +363,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .card--past { opacity: 0.5; }
 .card--live { background: var(--live-bg); color: var(--live-ink); box-shadow: var(--hard-shadow); }
 .card--live .card__hw { background: var(--live-hw); }
+/* На зелёном фоне полупрозрачный мелкий текст теряется: вторичные строки идущей пары плотнее. */
+.card--live :is(.card__time small, .card__kind, .card__meta) { opacity: 0.86; }
 .card--control { border-color: var(--danger); box-shadow: inset 0 0 0 1px var(--danger); }
 .card--control .card__kind { color: var(--danger); opacity: 1; }
 
@@ -488,7 +491,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 .lesson-head .eyebrow { color: var(--ink); }
 .lesson-head .display { font-size: 30px; }
-.kind-code { padding: 3px 8px; border-radius: 999px; background: var(--ink); color: var(--bg); letter-spacing: 0.04em; }
+.kind-code { padding: 3px 8px; border-radius: 999px; background: var(--ink); color: var(--on-ink); letter-spacing: 0.04em; }
 .lesson-head.is-control { box-shadow: inset 0 0 0 2px var(--danger); }
 .lesson-head.is-control .kind-code { background: var(--danger); color: #fff; }
 .lesson-head .flag { margin: 0; }
@@ -525,7 +528,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .editor__counter { align-self: flex-end; font-size: 12px; font-weight: 700; color: var(--ink-3); }
 .editor__counter.is-near { color: var(--danger); }
 
-.toast { margin-top: 8px; padding: 12px 14px; border-radius: 16px; background: var(--ink); color: var(--bg); font-size: 14px; font-weight: 700; animation: toast-in 0.2s ease-out; }
+.toast { margin-top: 8px; padding: 12px 14px; border-radius: 16px; background: var(--ink); color: var(--on-ink); font-size: 14px; font-weight: 700; animation: toast-in 0.2s ease-out; }
 .toast--error { background: var(--danger); color: #fff; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(4px); } }
 
@@ -762,7 +765,22 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   --live-ink: #fff8ec;
   --card-hw: rgba(0, 0, 0, 0.22);
 
+  /* Включённый переключатель — фирменный зелёный: кремовая дорожка сливается с белым кружком. */
+  --controls-active: var(--green);
+
+  /* На тёмном фоне пастель выглядит блёкло, поэтому цвета типов пар насыщеннее, чем в светлой теме. */
+  --k-lecture: #f7b3d1;
+  --k-practice: #a9dcb8;
+  --k-lab: #f9b48f;
+  --k-exam: #f7a99a;
+  --k-credit: #f8d766;
+  --k-other: #ddd3c0;
 }
+/* Полупрозрачность на тёмном фоне даёт серую муть: прошедшая пара остаётся цветной, но темнее. */
+:root[data-theme='dark'] .card--past { opacity: 1; filter: brightness(0.8) saturate(1.1); }
+:root[data-theme='dark'] .preview__card.card--past { filter: brightness(0.8); }
+:root[data-theme='dark'] .subject-4 { --kind-bg: #b3cbf2; }
+:root[data-theme='dark'] .subject-5 { --kind-bg: #cdbcf2; }
 :root[data-theme='dark'] :is(.card:not(.card--live), .lesson-head, .discipline, .hw-block--quote, .note-row__badge--late, .report-card) {
   --ink: #141414;
   --ink-2: rgba(20, 20, 20, 0.64);
@@ -772,6 +790,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   --surface-2: #e6dfd0;
   --line: rgba(20, 20, 20, 0.16);
   --card-hw: rgba(255, 255, 255, 0.55);
+  --on-ink: #fbf8f1;
   color: var(--ink);
 }
 :root[data-theme='dark'] .day--selected { background: var(--ink); }
@@ -817,7 +836,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.tabbar__item[aria-current='page'] { background: var(--ink); color: var(--bg); }
+.tabbar__item[aria-current='page'] { background: var(--ink); color: var(--on-ink); }
 .tabbar__icon { display: grid; place-items: center; height: 24px; }
 .tabbar__label { max-width: 100%; font-size: 11.5px; font-weight: 800; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -843,7 +862,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 .avatar-button:active { transform: scale(0.94); }
 .icon-button--lg { width: 38px; height: 38px; }
-.icon-button.is-active { background: var(--ink); color: var(--bg); }
+.icon-button.is-active { background: var(--ink); color: var(--on-ink); }
 
 /* Заголовок дня — одной строкой, чтобы над лентой дней осталось место для поиска. */
 .day-heading__row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
@@ -886,7 +905,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   border: 1.5px solid var(--outline);
   border-radius: 999px;
   background: var(--ink);
-  color: var(--bg);
+  color: var(--on-ink);
   font: inherit;
   font-size: 14px;
   font-weight: 800;
@@ -965,7 +984,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.chip-option[aria-checked='true'] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.chip-option[aria-checked='true'] { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
 .chip-option:active { transform: scale(0.97); }
 
 .field {
@@ -994,7 +1013,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 .segment--wide { display: grid; grid-template-columns: 1fr 1fr; width: 100%; box-sizing: border-box; }
 .segment--small button { padding: 5px 10px; font-size: 12.5px; }
-.segment button[aria-checked='true'] { background: var(--ink); color: var(--bg); }
+.segment button[aria-checked='true'] { background: var(--ink); color: var(--on-ink); }
 
 .sheet .field-label { margin-top: 6px; }
 .sheet .editor textarea { min-height: 90px; }
@@ -1066,7 +1085,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 .report-card { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1.5px solid var(--edge); border-radius: 24px; background: var(--k-practice); box-shadow: var(--hard-shadow); }
 .report-card .choice { background: var(--surface); }
-.report-card .pill-button { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.report-card .pill-button { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
 .pill-button:disabled { opacity: 0.4; cursor: default; }
 
 /* ───────── Профиль ───────── */
@@ -1081,7 +1100,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .settings-row .text-button { padding: 0; font-size: 13px; }
 .settings-group { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .settings-group:disabled { opacity: 0.45; }
-.role-badge { align-self: flex-start; margin-top: 4px; padding: 3px 9px; border-radius: 999px; background: var(--ink); color: var(--bg); font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+.role-badge { align-self: flex-start; margin-top: 4px; padding: 3px 9px; border-radius: 999px; background: var(--ink); color: var(--on-ink); font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
 .danger-button {
   display: flex;
   align-items: center;
@@ -1147,7 +1166,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .discipline__tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .discipline__chevron { position: absolute; top: 50%; right: 14px; transform: translateY(-50%); opacity: 0.5; }
 .tag { padding: 2px 8px; border-radius: 999px; background: var(--card-hw); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.03em; text-transform: uppercase; }
-.tag--control { background: var(--ink); color: var(--bg); }
+.tag--control { background: var(--ink); color: var(--on-ink); }
 
 .faq-group { display: flex; flex-direction: column; gap: 8px; }
 .faq { display: flex; flex-direction: column; padding: 2px 16px; border: 1.5px solid var(--outline); border-radius: 22px; background: var(--surface); }
@@ -1185,3 +1204,35 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .note-row { grid-template-columns: auto minmax(0, 1fr); }
 .note-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
 .status-pill--small { padding: 2px 8px; font-size: 11px; }
+
+/* ───────── Заставка первого запуска ───────── */
+
+/* Видео вписано целиком, поля сверху и снизу — цвет неба и песка из самой анимации. */
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(to bottom, #caddf9 50%, #ebd5a3 50%);
+  transition: opacity 0.35s ease-out;
+}
+.intro--leaving { opacity: 0; pointer-events: none; }
+.intro__video { width: 100%; height: 100%; object-fit: contain; }
+.intro__skip {
+  position: absolute;
+  right: 16px;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+  padding: 8px 14px;
+  border: 1.5px solid #141414;
+  border-radius: 999px;
+  background: rgba(251, 248, 241, 0.9);
+  color: #141414;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}

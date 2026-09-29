@@ -48,8 +48,9 @@ export const devData = (): Plugin => ({
   apply: 'serve',
   configureServer(server) {
     const settings = {
-      remindersEnabled: true, onboarded: false,
-      notifications: { summary: true, homework: true, changes: true, exams: true },
+      remindersEnabled: true, onboarded: false, muted: false, reminderMinutes: 10, endMinutes: 5,
+      summaryTime: '20:00', lang: 'ru',
+      notifications: { summary: true, homework: true, changes: true, exams: true, announcements: true, lessonEnd: true },
     };
     const notes: Record<string, unknown>[] = [];
     const homework = new Map<string, {
@@ -76,6 +77,9 @@ export const devData = (): Plugin => ({
           const body = await readBody(request);
           if (typeof body.remindersEnabled === 'boolean') settings.remindersEnabled = body.remindersEnabled;
           if (typeof body.onboarded === 'boolean') settings.onboarded = body.onboarded;
+          for (const key of ['muted', 'reminderMinutes', 'endMinutes', 'summaryTime', 'lang'] as const) {
+            if (key in body) Object.assign(settings, { [key]: body[key] });
+          }
           Object.assign(settings.notifications, body.notifications ?? {});
         }
         return send(response, {
@@ -83,7 +87,10 @@ export const devData = (): Plugin => ({
           profile: {
             group: { id: 1, title: 'ДЕМО-25-1' }, institute: 'Демо-институт', course: 1, subgroup: 1,
             remindersEnabled: settings.remindersEnabled, onboarded: settings.onboarded, notifications: settings.notifications,
+            muted: settings.muted, reminderMinutes: settings.reminderMinutes, endMinutes: settings.endMinutes,
+            summaryTime: settings.summaryTime, lang: settings.lang, controls: {},
           },
+          role: 'headman', headman: { name: 'Тест' }, deputy: null,
         });
       }
       if (url.pathname === '/api/absence' && request.method === 'POST') {

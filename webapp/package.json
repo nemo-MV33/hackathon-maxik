@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "intro": "sh scripts/intro.sh"
   },
   "dependencies": {
     "@fontsource-variable/manrope": "5.3.0",

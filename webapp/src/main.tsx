@@ -9,6 +9,7 @@ import '@fontsource/jetbrains-mono/cyrillic-600.css';
 import '@fontsource/jetbrains-mono/latin-600.css';
 import './styles.css';
 import { App } from './App';
+import { Intro } from './components/Intro';
 import { webApp } from './bridge/max';
 import { watchForUpdates } from './lib/updates';
 import { I18nProvider } from './lib/i18n';
@@ -25,6 +26,7 @@ createRoot(document.getElementById('root')!).render(
         <MaxUI colorScheme={theme}>
           <I18nProvider>
             <App />
+            <Intro />
           </I18nProvider>
         </MaxUI>
       )}

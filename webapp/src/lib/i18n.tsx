@@ -437,6 +437,7 @@ const ru = {
   outsideMax: 'ДЗ доступно, когда приложение открыто из бота в MAX',
   network: 'Нет связи с сервисом. Проверь интернет',
   failed: 'Не удалось выполнить действие',
+  introSkip: 'Пропустить',
   scheduleMissing: 'Расписание ещё не выгружено',
 };
 
@@ -856,6 +857,7 @@ const en: Dictionary = {
   outsideMax: 'Homework is available when the app is opened from the bot in MAX',
   network: 'No connection to the service. Check your internet',
   failed: 'Could not complete the action',
+  introSkip: 'Skip',
   scheduleMissing: 'The timetable has not been loaded yet',
 };
 

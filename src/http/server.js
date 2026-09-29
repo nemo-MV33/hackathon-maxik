@@ -156,7 +156,7 @@ const route = async (request, response, options) => {
   if (request.method !== 'GET') return sendJson(response, 405, { error: 'method_not_allowed' });
 
   if (parts[0] !== 'api') {
-    if (webappDir && await serveStatic(webappDir, url.pathname, response)) return undefined;
+    if (webappDir && await serveStatic(webappDir, url.pathname, response, request.headers.range)) return undefined;
     return sendJson(response, 404, { error: 'not_found' });
   }
 
