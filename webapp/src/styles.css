@@ -1215,7 +1215,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(to bottom, #caddf9 50%, #ebd5a3 50%);
+  background: linear-gradient(to bottom, #b7d2e6 50%, #debf84 50%);
   transition: opacity 0.35s ease-out;
 }
 .intro--leaving { opacity: 0; pointer-events: none; }

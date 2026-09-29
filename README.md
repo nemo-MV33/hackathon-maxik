@@ -283,7 +283,7 @@ npm test                 # тесты сервера и сценариев бо�
 npm run dev:web          # мини-приложение на http://localhost:5173 с демо-данными
 npm start                # бот и HTTP-сервер (нужен .env)
 npm run export:schedule  # выгрузить ближайшие недели расписания
-npm run intro --prefix webapp -- анимация.gif  # заменить заставку первого запуска (нужен ffmpeg)
+npm run intro --prefix webapp -- анимация.mp4  # заменить заставку первого запуска, GIF или видео (нужен ffmpeg)
 ```
 
 ## ⚠️ Известные ограничения
