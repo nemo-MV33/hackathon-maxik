@@ -563,7 +563,7 @@ export const createBot = ({
     return show(ctx, t.notifyTitle, rows);
   };
 
-  // Что бот знает о человеке — прямо и без канцелярита. Отсюда же удаление всех данных.
+  // «Мои данные»: что бот хранит о пользователе, и кнопка удаления всех данных.
   const showAccount = async (ctx) => {
     const { t, prefs, lang } = ctx;
     const group = ownGroup(prefs);
@@ -910,7 +910,7 @@ export const createBot = ({
     return show(ctx, [t.announcementsTitle, '', lines.length ? lines.join('\n\n') : t.announcementsEmpty].join('\n'), rows);
   };
 
-  // Первое знакомство после выбора группы: коротко о возможностях и осознанный выбор уведомлений
+  // Первое знакомство после выбора группы: что умеет бот и какие уведомления включить
 
   const showOnboarding = (ctx, group) => show(ctx, `${ctx.t.onboardingTitle(group.title)}\n\n${ctx.t.onboardingText}`, [
     [button(ctx.t.onboardingAll, 'onb:all', 'positive'), button(ctx.t.onboardingPick, 'onb:pick')],

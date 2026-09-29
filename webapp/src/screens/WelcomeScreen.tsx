@@ -12,7 +12,7 @@ type Props = {
 const ALL_ON = { summary: true, homework: true, changes: true, exams: true };
 const ALL_OFF = { summary: false, homework: false, changes: false, exams: false };
 
-// Первое знакомство: что умеет приложение и осознанный выбор уведомлений. Флаг onboarded общий с ботом.
+// Первое знакомство: что умеет приложение и какие уведомления включить. Флаг onboarded общий с ботом.
 export const WelcomeScreen = ({ groupTitle, onDone }: Props) => {
   const { t } = useI18n();
   const [saving, setSaving] = useState<string | null>(null);

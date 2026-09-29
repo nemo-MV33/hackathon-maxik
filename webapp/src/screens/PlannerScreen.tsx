@@ -135,7 +135,7 @@ type CreateProps = {
   onSaved: (date: string) => void;
 };
 
-// Новое ДЗ: день → пара этого дня → текст → напоминание. Староста и редакторы могут сразу записать для группы.
+// Новое ДЗ: день, пара этого дня, текст и напоминание. Староста и редакторы могут сразу записать для группы.
 const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onSaved }: CreateProps) => {
   const { t } = useI18n();
   const todayKey = toDateKey(now);

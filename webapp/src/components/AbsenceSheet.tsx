@@ -23,7 +23,7 @@ type Props = {
 
 type Result = { tone: 'ok' | 'error'; text: string };
 
-// Опоздание: «на сколько» → причина одним нажатием или своими словами. Отсутствие: сразу причина.
+// Опоздание: сначала на сколько, потом причина кнопкой или своими словами. Отсутствие: сразу причина.
 export const AbsenceSheet = ({ kind, lesson, onClose, onSent }: Props) => {
   const { t } = useI18n();
   const { me } = useMe();

@@ -1,11 +1,11 @@
-/* norfly — цветные карточки: жирный гротеск, пастельный цвет у каждого типа пары, идущая пара — контрастная.
-   Тема светлая или тёмная — выбирается в профиле (по умолчанию как на устройстве). */
+/* Стили мини-приложения. У каждого типа пары свой цвет, идущая пара выделена зелёным.
+   Тема светлая или тёмная, выбирается в профиле. По умолчанию как на устройстве. */
 
 #root > * {
   --sans: 'Manrope Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
 
-  /* Палитра презентации: зелёный, розовый, оранжевый, жёлтый на кремовом, чёрная обводка. */
+  /* Основные цвета: зелёный, розовый, оранжевый и жёлтый на кремовом фоне, чёрная обводка. */
   --green: #1f8a4c;
   --pink: #ee6ca6;
   --orange: #e75a24;
@@ -102,7 +102,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .kind-exam { --kind-bg: var(--k-exam); }
 .kind-credit { --kind-bg: var(--k-credit); }
 .kind-other { --kind-bg: var(--k-other); }
-/* Дисциплины красятся по предмету: у одного предмета бывают лекции, практики и лабы. */
+/* Дисциплины красятся по предмету: у одного предмета бывают лекции, практики и лабораторные. */
 .subject-0 { --kind-bg: var(--k-lecture); }
 .subject-1 { --kind-bg: var(--k-practice); }
 .subject-2 { --kind-bg: var(--k-lab); }
@@ -539,7 +539,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
-/* Мелкие подписи — моноширинным капсом, как служебные строки в презентации. */
+/* Мелкие подписи набраны моноширинным шрифтом капсом. */
 .card__kind, .day-heading__eyebrow, .lesson-head .eyebrow, .field-label, .facts dt, .hw-block__label,
 .card__hw-label, .day__weekday, .now-marker__time, .result__course, .flag, .kind-code, .lang-switch button {
   font-family: var(--mono);
@@ -744,7 +744,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .welcome-notify__title { font-size: 20px; }
 .exam-banner__next::first-letter { text-transform: uppercase; }
 
-/* ───────── Тёмная тема: фон тёмный, цветные карточки — те же сочные, что в светлой ───────── */
+/* Тёмная тема */
 
 :root[data-theme='dark'] #root > * {
   --bg: #161412;
@@ -765,7 +765,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   --live-ink: #fff8ec;
   --card-hw: rgba(0, 0, 0, 0.22);
 
-  /* Включённый переключатель — фирменный зелёный: кремовая дорожка сливается с белым кружком. */
+  /* Кремовая дорожка сливается с белым кружком, поэтому включённый переключатель зелёный. */
   --controls-active: var(--green);
 
   /* На тёмном фоне пастель выглядит блёкло, поэтому цвета типов пар насыщеннее, чем в светлой теме. */
@@ -798,7 +798,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 :root[data-theme='dark'] .sheet-backdrop { background: rgba(0, 0, 0, 0.55); }
 :root[data-theme='dark'] .preview::after { background: linear-gradient(to bottom, transparent, var(--bg)); }
 
-/* ───────── Каркас с нижней панелью ───────── */
+/* Каркас с нижней панелью */
 
 .screen--tabbed { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 
@@ -870,7 +870,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .day-heading--h1 .day-heading__title { font-size: 24px; letter-spacing: -0.025em; }
 .day-heading--h2 .day-heading__title { font-size: 20px; }
 
-/* ───────── Блоки главной и планера ───────── */
+/* Блоки главной и планера */
 
 .home-block { display: flex; flex-direction: column; gap: 10px; }
 .block-head { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
@@ -965,7 +965,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .day__ticks--tasks i { background: var(--orange); }
 .day--selected .day__ticks--tasks i { background: var(--tick-selected); }
 
-/* ───────── Чипы, поля, выбор ───────── */
+/* Чипы, поля, выбор */
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chips--scroll { flex-wrap: nowrap; overflow-x: auto; margin: 0 -16px; padding: 2px 16px 4px; scrollbar-width: none; }
@@ -1019,7 +1019,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .sheet .editor textarea { min-height: 90px; }
 .announcement-text { font-size: 16px; font-weight: 600; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-/* ───────── Поиск по расписанию ───────── */
+/* Поиск по расписанию */
 
 .schedule-search { display: flex; flex-direction: column; gap: 10px; }
 .search-field {
@@ -1051,7 +1051,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .page-head { display: flex; flex-direction: column; gap: 6px; }
 .page-head__eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-2); }
 
-/* ───────── Староста: цифры, сообщения, досье ───────── */
+/* Староста: цифры, сообщения, досье */
 
 .stat-row { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; }
 .stat { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1.5px solid var(--outline); border-radius: 18px; background: var(--surface); }
@@ -1088,7 +1088,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .report-card .pill-button { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
 .pill-button:disabled { opacity: 0.4; cursor: default; }
 
-/* ───────── Профиль ───────── */
+/* Профиль */
 
 .settings__label { margin: 4px 4px 0; font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
 .settings-row__icon { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 11px; background: var(--surface-2); color: var(--ink); }
@@ -1205,10 +1205,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .note-row__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
 .status-pill--small { padding: 2px 8px; font-size: 11px; }
 
-/* ───────── Заставка первого запуска ───────── */
+/* Заставка первого запуска */
 
 /* Видео вписано целиком, поля сверху и снизу — цвет неба и песка из самой анимации. */
-.intro {
+.splash {
   position: fixed;
   inset: 0;
   z-index: 100;
@@ -1218,9 +1218,9 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   background: linear-gradient(to bottom, #b7d2e6 50%, #debf84 50%);
   transition: opacity 0.35s ease-out;
 }
-.intro--leaving { opacity: 0; pointer-events: none; }
-.intro__video { width: 100%; height: 100%; object-fit: contain; }
-.intro__skip {
+.splash--leaving { opacity: 0; pointer-events: none; }
+.splash__video { width: 100%; height: 100%; object-fit: contain; }
+.splash__skip {
   position: absolute;
   right: 16px;
   bottom: calc(20px + env(safe-area-inset-bottom));

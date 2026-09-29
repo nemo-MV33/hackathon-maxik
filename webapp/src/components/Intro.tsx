@@ -3,7 +3,7 @@ import { useI18n } from '../lib/i18n';
 import introVideo from '../assets/intro.mp4';
 import introPoster from '../assets/intro.jpg';
 
-// Заставка показывается один раз, при первом открытии приложения. Заменить анимацию: npm run intro -- файл.gif
+// Заставка показывается один раз, при первом открытии приложения. Заменить анимацию: npm run intro -- файл.gif или файл.mp4
 const KEY = 'norfly.intro';
 const FADE_MS = 350;
 // Если видео зависло на загрузке, заставка не держит пользователя дольше этого времени.
@@ -46,10 +46,10 @@ export const Intro = () => {
 
   if (!visible) return null;
   return (
-    <div className={`intro${leaving ? ' intro--leaving' : ''}`} onClick={finish} role="presentation">
+    <div className={`splash${leaving ? ' splash--leaving' : ''}`} onClick={finish} role="presentation">
       <video
         ref={video}
-        className="intro__video"
+        className="splash__video"
         src={introVideo}
         poster={introPoster}
         muted
@@ -59,7 +59,7 @@ export const Intro = () => {
         onEnded={finish}
         onError={finish}
       />
-      <button type="button" className="intro__skip" onClick={finish}>{t.introSkip}</button>
+      <button type="button" className="splash__skip" onClick={finish}>{t.introSkip}</button>
     </div>
   );
 };

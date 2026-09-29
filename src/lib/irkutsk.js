@@ -32,7 +32,7 @@ export const timeToMinutes = (time) => {
 
 export const lessonEndMinutes = (lesson) => timeToMinutes(String(lesson.time).split(/[–-]/)[1] ?? lesson.time);
 
-// «2026-09-28» + «13:30» по Иркутску → момент времени (Иркутск — UTC+8 без перехода на летнее время).
+// Дата и время по Иркутску («2026-09-28», «13:30») в момент времени. В Иркутске UTC+8 круглый год.
 export const irkutskMoment = (dateKey, time) => {
   const [year, month, day] = dateKey.split('-').map(Number);
   const [hours, minutes] = time.split(':').map(Number);

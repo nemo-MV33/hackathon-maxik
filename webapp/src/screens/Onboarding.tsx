@@ -13,7 +13,7 @@ import { useI18n } from '../lib/i18n';
 
 const normalize = (value: string) => value.toLowerCase().replace(/ё/g, 'е').replace(/[\s.\-–—]+/g, '');
 const LATIN: Record<string, string> = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
-// Латиницей группу тоже находим: «istb-25-1» → «ИСТб-25-1».
+// Группу можно искать и латиницей: «istb-25-1» найдёт «ИСТб-25-1».
 const transliterate = (value: string) => [...value].map((char) => LATIN[char] ?? char).join('');
 const position = (title: string, needle: string) => {
   const target = normalize(title);

@@ -2,7 +2,7 @@ import { useI18n } from '../lib/i18n';
 import { BackHeader } from '../components/BackHeader';
 import { ChevronDown } from '../components/Icon';
 
-// Частые вопросы: коротко, по делу, без отсылок к «технической поддержке».
+// Частые вопросы о приложении.
 export const FaqScreen = ({ onBack }: { onBack: () => void }) => {
   const { t } = useI18n();
   return (

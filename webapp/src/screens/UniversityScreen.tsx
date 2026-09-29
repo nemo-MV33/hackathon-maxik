@@ -6,7 +6,7 @@ import { haptic } from '../bridge/max';
 import { BackHeader } from '../components/BackHeader';
 import { ChevronRight } from '../components/Icon';
 
-// Университет: здесь меняют группу и подгруппу (раньше это было в шапке расписания).
+// Университет: здесь меняют группу и подгруппу.
 export const UniversityScreen = ({ profile, onBack, onChangeGroup }: { profile: LocalProfile; onBack: () => void; onChangeGroup: () => void }) => {
   const { t } = useI18n();
   const [, saveProfile] = useProfile();
