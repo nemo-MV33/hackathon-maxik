@@ -60,7 +60,7 @@ checks:
     expected:
       statusCodes: [200]
       contentType: application/json
-      requiredFields: [items, items[].id, items[].title]
+      requiredFields: [items, "items[].id", "items[].title"]
   - name: teacher-search
     role: service
     request:

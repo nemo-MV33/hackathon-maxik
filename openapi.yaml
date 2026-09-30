@@ -14,6 +14,7 @@ security:
 paths:
   /health:
     get:
+      operationId: getHealth
       security: []
       summary: Проверка состояния сервиса
       responses:
@@ -28,6 +29,7 @@ paths:
                   status: { type: string, const: ok }
   /api/me:
     get:
+      operationId: getProfile
       summary: Профиль текущего пользователя
       responses:
         '200':
@@ -37,6 +39,7 @@ paths:
               schema: { $ref: '#/components/schemas/MeResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     put:
+      operationId: updateProfile
       summary: Изменение группы, подгруппы, языка и уведомлений
       requestBody:
         required: true
@@ -68,6 +71,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     delete:
+      operationId: deleteProfile
       summary: Удалить аккаунт
       description: Стирает профиль, настройки, личное ДЗ и напоминания, снимает роли старосты и редактора. Сообщения об опозданиях остаются в журнале группы.
       responses:
@@ -79,6 +83,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/absence/history:
     get:
+      operationId: listAbsenceHistory
       summary: История опозданий
       description: Студенту — только свои сообщения. Старосте — ещё и «досье» по каждому студенту группы (минуты опоздания, пропуск пары = 90 минут), а с параметром student — подробности по одному студенту.
       parameters:
@@ -110,6 +115,7 @@ paths:
         '404': { description: У студента нет сообщений }
   /api/group/members:
     get:
+      operationId: listGroupMembers
       summary: Одногруппники, которые пользуются ботом (только старосте)
       responses:
         '200':
@@ -125,6 +131,7 @@ paths:
         '403': { description: Доступно только старосте }
   /api/deputy:
     put:
+      operationId: setDeputy
       summary: Кому уходят опоздания самого старосты
       requestBody:
         required: true
@@ -138,6 +145,7 @@ paths:
         '403': { description: Доступно только старосте }
   /api/announcements:
     get:
+      operationId: listAnnouncements
       summary: Объявления старосты для группы пользователя
       responses:
         '200':
@@ -152,6 +160,7 @@ paths:
                   items: { type: array, items: { $ref: '#/components/schemas/Announcement' } }
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
+      operationId: createAnnouncement
       summary: Опубликовать объявление (староста)
       description: Бот отправляет объявление в чат группы и каждому одногруппнику в личку.
       requestBody:
@@ -171,6 +180,7 @@ paths:
         '403': { description: Публикует только староста }
   /api/announcements/{id}:
     delete:
+      operationId: deleteAnnouncement
       summary: Удалить объявление (староста)
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -180,6 +190,7 @@ paths:
         '404': { description: Не найдено }
   /api/announcements/{id}/reminder:
     put:
+      operationId: setAnnouncementReminder
       summary: Своё время напоминания об объявлении
       parameters:
         - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
@@ -196,6 +207,7 @@ paths:
         '404': { description: Не найдено }
   /api/absence:
     get:
+      operationId: listAbsences
       summary: Сообщения об опоздании за день
       description: Старосте — все сообщения его группы с именами, студенту — только свои.
       parameters:
@@ -230,6 +242,7 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
+      operationId: reportAbsence
       summary: Сообщить старосте об опоздании или отсутствии
       description: Бот отправляет старосте группы личное сообщение с именем студента, парой и причиной.
       requestBody:
@@ -264,6 +277,7 @@ paths:
         '409': { description: Группа не выбрана или у группы нет старосты в боте }
   /api/homework:
     get:
+      operationId: listHomework
       summary: Общие и личные ДЗ текущего студента
       parameters:
         - in: query
@@ -302,6 +316,7 @@ paths:
         '409':
           description: Учебная группа не выбрана
     put:
+      operationId: saveHomework
       summary: Запись, обновление или сброс ДЗ
       description: Общее ДЗ могут менять староста и редакторы. Личное ДЗ доступно только его владельцу.
       requestBody:
@@ -329,6 +344,7 @@ paths:
           description: Пара не найдена в расписании ИРНИТУ
   /api/institutes:
     get:
+      operationId: listInstitutes
       summary: Институты ИРНИТУ
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       responses:
@@ -340,6 +356,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/groups:
     get:
+      operationId: searchGroups
       summary: Поиск учебной группы
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
@@ -369,6 +386,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/teachers:
     get:
+      operationId: searchTeachers
       summary: Поиск преподавателя
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
@@ -383,6 +401,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/auditories:
     get:
+      operationId: searchAuditories
       summary: Поиск аудитории
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
@@ -397,6 +416,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/schedule/{kind}/{id}:
     get:
+      operationId: getSchedule
       summary: Расписание группы, преподавателя или аудитории на неделю
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
