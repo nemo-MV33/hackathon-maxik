@@ -1,4 +1,7 @@
 import type { Plugin } from 'vite';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const pad = (value: number) => String(value).padStart(2, '0');
 const dateKey = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
@@ -46,120 +49,84 @@ const week = (offset: number) => {
 export const devData = (): Plugin => ({
   name: 'norfly-dev-data',
   apply: 'serve',
-  configureServer(server) {
-    const settings = {
-      remindersEnabled: true, onboarded: false, muted: false, reminderMinutes: 10, endMinutes: 5,
-      summaryTime: '20:00', lang: 'ru',
-      notifications: { summary: true, homework: true, changes: true, exams: true, announcements: true, lessonEnd: true },
+  async configureServer(server) {
+    // Демо использует те же маршруты и переносы, что бот и продакшен.
+    const backend = (path: string) => import(/* @vite-ignore */ new URL(path, import.meta.url).href);
+    const { CommunityStore } = await backend('../src/storage/community.js');
+    const { PreferencesStore } = await backend('../src/storage/preferences.js');
+    const { LessonChangeService } = await backend('../src/services/lesson-change-service.js');
+    const { createHttpServer } = await backend('../src/http/server.js');
+    const directory = await mkdtemp(join(tmpdir(), 'norfly-demo-'));
+    server.httpServer?.once('close', () => { void rm(directory, { recursive: true, force: true }); });
+    const community = new CommunityStore(join(directory, 'community.json'));
+    const preferences = new PreferencesStore(join(directory, 'preferences.json'));
+    const groups = [
+      { id: 1, title: 'ДЕМО-25-1', institute: 'Демо-институт', course: 1 },
+      { id: 2, title: 'ДЕМО-24-2', institute: 'Демо-институт', course: 2 },
+    ];
+    const group = { ...groups[0], kind: 'group' };
+    await community.setChat(-1, { group, headman: { userId: 1, name: 'Тест' }, editors: [{ userId: 3, name: 'Редактор' }], lang: 'ru' });
+    for (const id of [1, 2, 3]) await preferences.set(id, { selection: group, subgroup: 1, lang: 'ru', onboarded: false });
+    const weeks = [week(0), week(1)];
+    const updatedAt = new Date().toISOString();
+    const notifications: { chatId?: number; userId?: number; text: string }[] = [];
+    let lessonChanges: InstanceType<typeof LessonChangeService>;
+    const service = {
+      groups: async () => groups,
+      institutes: async () => ['Демо-институт'],
+      searchGroups: async () => groups,
+      groupSchedule: async (id: number, { week: requested = new Date(), subgroup = null, raw = false } = {}) => {
+        const start = new Date(requested);
+        start.setDate(start.getDate() - (start.getDay() + 6) % 7);
+        const key = dateKey(start);
+        const value = weeks.find((item) => item.weekStart === key);
+        const end = new Date(start); end.setDate(end.getDate() + 6);
+        let lessons = value?.lessons ?? [];
+        if (!raw) lessons = await lessonChanges.overlay(id, lessons, key, dateKey(end));
+        return { kind: 'group', entityId: id, period: { from: start, to: end }, weekEven: value?.weekEven ?? false,
+          updatedAt, lessons: lessons.filter((item: { subgroup: number | null }) => !subgroup || !item.subgroup || item.subgroup === subgroup)
+            .map((item: object) => ({ ...item, updatedAt })) };
+      },
     };
-    const notes: Record<string, unknown>[] = [];
-    const homework = new Map<string, {
-      sharedText: string | null;
-      personalText: string | null;
-      subject: string;
-      time: string;
-      version: number;
-    }>();
-    const send = (response: import('node:http').ServerResponse, body: unknown, status = 200) => {
-      response.statusCode = status;
-      response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify(body));
+    lessonChanges = new LessonChangeService({ community, preferences, service, bot: { api: {
+      sendMessageToChat: async (chatId: number, text: string) => { notifications.push({ chatId, text }); },
+      sendMessageToUser: async (userId: number, text: string) => { notifications.push({ userId, text }); },
+    } } });
+    const sendAbsence = async (input: {
+      user: { user_id: number; first_name?: string }; kind: string; reasonCode: string | null;
+      text: string | null; minutes: number | null; lesson?: { date: string; lessonNumber: number; subject: string; time: string };
+    }) => {
+      await community.addNotice({ groupId: 1, chatId: -1, date: input.lesson?.date ?? dateKey(new Date()),
+        senderId: input.user.user_id, senderName: input.user.first_name ?? 'Тест', kind: input.kind,
+        reasonCode: input.reasonCode, text: input.text, minutes: input.minutes, lesson: input.lesson ?? null });
+      return { status: 'sent' };
     };
-    const readBody = async (request: import('node:http').IncomingMessage) => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+    const publishAnnouncement = async (item: { chatId: number; text: string }) => {
+      notifications.push({ chatId: item.chatId, text: item.text });
+      return { chat: true };
     };
-    server.middlewares.use(async (request, response, next) => {
-      const url = new URL(request.url ?? '/', 'http://localhost');
-      if (url.pathname === '/api/me') {
-        if (request.method === 'PUT') {
-          const body = await readBody(request);
-          if (typeof body.remindersEnabled === 'boolean') settings.remindersEnabled = body.remindersEnabled;
-          if (typeof body.onboarded === 'boolean') settings.onboarded = body.onboarded;
-          for (const key of ['muted', 'reminderMinutes', 'endMinutes', 'summaryTime', 'lang'] as const) {
-            if (key in body) Object.assign(settings, { [key]: body[key] });
-          }
-          Object.assign(settings.notifications, body.notifications ?? {});
-        }
-        return send(response, {
-          user: { id: 1, firstName: 'Тест' },
-          profile: {
-            group: { id: 1, title: 'ДЕМО-25-1' }, institute: 'Демо-институт', course: 1, subgroup: 1,
-            remindersEnabled: settings.remindersEnabled, onboarded: settings.onboarded, notifications: settings.notifications,
-            muted: settings.muted, reminderMinutes: settings.reminderMinutes, endMinutes: settings.endMinutes,
-            summaryTime: settings.summaryTime, lang: settings.lang, controls: {},
-          },
-          role: 'headman', headman: { name: 'Тест' }, deputy: null,
-        });
-      }
-      if (url.pathname === '/api/absence' && request.method === 'POST') {
-        const body = await readBody(request);
-        if (!body.reason && !body.text?.trim()) return send(response, { error: 'invalid_text', message: 'Укажи причину' }, 400);
-        notes.push({
-          id: String(notes.length + 1), kind: body.kind, senderName: 'Тест', reason: body.reason ?? null, text: body.text ?? null,
-          lesson: body.lessonDate ? { date: body.lessonDate, lessonNumber: body.lessonNumber, subject: 'Пара', time: '' } : null,
-          createdAt: new Date().toISOString(), acceptedAt: notes.length % 2 ? new Date().toISOString() : null, date: body.lessonDate,
-        });
-        return send(response, { status: 'sent' });
-      }
-      if (url.pathname === '/api/absence') {
-        const date = url.searchParams.get('date');
-        return send(response, { role: 'headman', date, items: notes.filter((note) => !date || note.date === date) });
-      }
-      if (url.pathname !== '/api/homework') return next();
-      if (request.method === 'PUT') {
-        const body = await readBody(request);
-        const key = `${body.date}:${body.lessonNumber}:${body.subgroup ?? 0}`;
-        const lessons = [...week(0).lessons, ...week(1).lessons];
-        const lesson = lessons.find((item) => `${item.date}:${item.lessonNumber}:${item.subgroup ?? 0}` === key);
-        if (!lesson) return send(response, { error: 'lesson_not_found', message: 'Пара не найдена' }, 404);
-        const current = homework.get(key) ?? {
-          sharedText: null, personalText: null, subject: lesson.subject, time: lesson.time, version: 0,
-        };
-        if (body.scope === 'shared') {
-          current.sharedText = body.text;
-          if (body.text) current.version += 1;
-        } else current.personalText = body.text;
-        homework.set(key, current);
-        return send(response, { item: current });
-      }
-      const from = url.searchParams.get('from') ?? '0000-00-00';
-      const to = url.searchParams.get('to') ?? '9999-99-99';
-      const items = [...homework.entries()].map(([key, item]) => {
-        const [date, lessonNumber, subgroup] = key.split(':');
-        return {
-          groupId: 1, date, lessonNumber: Number(lessonNumber), subgroup: Number(subgroup) || null,
-          subject: item.subject, lessonTime: item.time, sharedText: item.sharedText,
-          personalText: item.personalText, text: item.personalText ?? item.sharedText ?? '',
-          source: item.personalText ? 'personal' : 'shared', updatedAt: new Date().toISOString(),
-          authorName: item.sharedText ? 'Староста' : null, version: item.version,
-        };
-      }).filter((item) => item.date >= from && item.date <= to && item.text);
-      return send(response, {
-        group: { id: 1, title: 'ДЕМО-25-1' }, role: 'headman', canEditShared: true,
-        period: { from, to }, items,
-      });
-    });
+    const options = { service, community, preferences, lessonChanges, sendAbsence, publishAnnouncement };
+    const api = createHttpServer({ ...options, devUserId: 1 });
+    const apiStudent = createHttpServer({ ...options, devUserId: 2 });
+    const apiEditor = createHttpServer({ ...options, devUserId: 3 });
     server.middlewares.use((request, response, next) => {
-      const match = request.url?.match(/\/data\/(groups|meta)\.json$|\/data\/schedule\/\d+\/(\d{4}-\d{2}-\d{2})\.json$/);
-      if (!match) return next();
-      const weeks = [dateKey(monday(0)), dateKey(monday(1))];
-      let body: unknown;
-      if (match[1] === 'groups') {
-        body = [
-          { id: 1, title: 'ДЕМО-25-1', institute: 'Демо-институт', course: 1 },
-          { id: 2, title: 'ДЕМО-24-2', institute: 'Демо-институт', course: 2 },
-        ];
-      } else if (match[1] === 'meta') {
-        body = { updatedAt: new Date().toISOString(), weeks, groups: 2, failed: 0 };
-      } else {
-        const offset = weeks.indexOf(match[2]);
-        if (offset < 0) { response.statusCode = 404; return response.end(); }
-        body = week(offset);
+      const url = new URL(request.url ?? '/', 'http://localhost');
+      const send = (value: unknown) => { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(value)); };
+      if (url.pathname === '/api/demo/notifications') return send({ items: notifications });
+      if (url.pathname.startsWith('/api/')) {
+        const selected = request.headers['x-demo-user'] === '2' ? apiStudent : request.headers['x-demo-user'] === '3' ? apiEditor : api;
+        selected.emit('request', request, response);
+        return;
       }
-      response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify(body));
+      if (url.pathname === '/data/groups.json') return send(groups);
+      if (url.pathname === '/data/meta.json') return send({ updatedAt, weeks: weeks.map((item) => item.weekStart), groups: 2, failed: 0 });
+      const match = url.pathname.match(/^\/data\/schedule\/\d+\/(\d{4}-\d{2}-\d{2})\.json$/);
+      if (match) {
+        const value = weeks.find((item) => item.weekStart === match[1]);
+        if (!value) { response.statusCode = 404; response.end(); return; }
+        return send({ ...value, updatedAt });
+      }
+      next();
     });
   },
 });

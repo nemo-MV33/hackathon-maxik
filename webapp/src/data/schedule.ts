@@ -1,3 +1,4 @@
+import { apiRequest } from '../lib/api';
 import { t } from '../lib/i18n';
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/`;
@@ -5,6 +6,10 @@ const DATA_URL = `${import.meta.env.BASE_URL}data/`;
 export type Group = { id: number; title: string; institute: string; course: number | null };
 
 export type Lesson = {
+  updatedAt?: string | null;
+  markedBy?: string;
+  markedAt?: string;
+  moveId?: string;
   date: string;
   lessonNumber: number;
   time: string;
@@ -19,7 +24,7 @@ export type Lesson = {
   groups?: string[];
 };
 
-export type WeekSchedule = { weekStart: string; weekEven: boolean; lessons: Lesson[] };
+export type WeekSchedule = { updatedAt?: string | null; weekStart: string; weekEven: boolean; lessons: Lesson[] };
 
 export type Meta = { updatedAt: string; weeks: string[]; groups: number; failed: number };
 
@@ -47,5 +52,15 @@ const load = <T>(path: string): Promise<T> => {
 
 export const loadMeta = () => load<Meta>('meta.json');
 export const loadGroups = () => load<Group[]>('groups.json');
-export const loadWeek = (groupId: number, weekStart: string) =>
-  load<WeekSchedule>(`schedule/${groupId}/${weekStart}.json`);
+export const invalidateSchedule = () => cache.clear();
+
+// Динамический API применяет отметки старосты и запускает обновление устаревшей недели.
+// Статическая выгрузка остаётся доступной при недоступности сервера.
+export const loadWeek = async (groupId: number, weekStart: string): Promise<WeekSchedule> => {
+  try {
+    const result = await apiRequest<WeekSchedule>(`/api/schedule/group/${groupId}?week=${weekStart}`);
+    return { ...result, weekStart, lessons: result.lessons.map((lesson) => ({ ...lesson, updatedAt: lesson.updatedAt ?? result.updatedAt })) };
+  } catch {
+    return load<WeekSchedule>(`schedule/${groupId}/${weekStart}.json`);
+  }
+};

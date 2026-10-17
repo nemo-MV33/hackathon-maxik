@@ -1,7 +1,7 @@
 import { Fragment } from 'react';
 import type { Lesson } from '../data/schedule';
 import { homeworkKey, type HomeworkItem } from '../data/homework';
-import { clockLabel, formatDuration, timeToMinutes } from '../lib/date';
+import { clockLabel, formatDuration, formatStamp, timeToMinutes } from '../lib/date';
 import { isControlLesson, lessonKindClass, lessonKindName } from '../lib/lessonKind';
 import { useI18n } from '../lib/i18n';
 import type { AbsenceKind } from '../lib/api';
@@ -52,6 +52,7 @@ const LessonCard = ({ lesson, state, nowMinutes, homework, onOpen, metaKind }: C
         {lesson.transferred && <span className="flag">{t.transferred}</span>}
         {lesson.subject}
       </span>
+      {lesson.markedBy && lesson.markedAt && <span className="card__meta">{t.moveMarked(lesson.markedBy, formatStamp(lesson.markedAt))}</span>}
       {meta && <span className="card__meta">{meta}</span>}
       {state === 'live' && (
         <span className="card__live">

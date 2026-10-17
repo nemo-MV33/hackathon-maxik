@@ -1,3 +1,4 @@
+import { ScheduleFreshness } from '../components/ScheduleFreshness';
 import { useEffect, useState } from 'react';
 import type { Lesson } from '../data/schedule';
 import { useRemoteHomework } from '../data/homework';
@@ -36,12 +37,19 @@ type Props = {
 // Ниже — задачи: ДЗ и объявления от ближайшего к дальнему.
 export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfile, onOpenExams, onOpenPlanner }: Props) => {
   const { t } = useI18n();
+  const [scheduleRevision, setScheduleRevision] = useState(0);
+  useEffect(() => {
+    const refresh = () => setScheduleRevision((value) => value + 1);
+    window.addEventListener('schedule-changed', refresh);
+    window.addEventListener('focus', refresh);
+    return () => { window.removeEventListener('schedule-changed', refresh); window.removeEventListener('focus', refresh); };
+  }, []);
   const now = useNow();
   const todayKey = toDateKey(now);
   const lastKey = toDateKey(addDays(now, LOOKAHEAD_DAYS));
   const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const [lessons, retry] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, lastKey), [profile.group.id, profile.subgroup, todayKey]);
-  const [homework] = useRemoteHomework(profile.group.id, todayKey, toDateKey(addDays(now, TASK_DAYS)), profileRevision);
+  const [lessons, retry] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, lastKey), [profile.group.id, profile.subgroup, todayKey, scheduleRevision]);
+  const [homework] = useRemoteHomework(profile.group.id, todayKey, toDateKey(addDays(now, TASK_DAYS)), `${profileRevision}:${scheduleRevision}`);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [openAnnouncement, setOpenAnnouncement] = useState<Announcement | null>(null);
   const [absence, setAbsence] = useState<{ kind: AbsenceKind; lesson: Lesson } | null>(null);
@@ -95,6 +103,7 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfi
             </span>
           )}
         </div>
+        <ScheduleFreshness at={focusLessons[0]?.updatedAt} />
         {lessons.status === 'loading' && <ScheduleSkeleton rows={2} />}
         {lessons.status === 'error' && <ErrorState message={lessons.message} onRetry={retry} />}
         {lessons.status === 'ready' && !focusDay && <Empty title={t.noUpcomingTitle}>{t.noUpcomingText}</Empty>}

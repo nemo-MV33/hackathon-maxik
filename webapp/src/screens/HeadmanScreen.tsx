@@ -1,3 +1,4 @@
+import { OrphanedHomework } from '../components/OrphanedHomework';
 import { useEffect, useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import {
@@ -14,7 +15,7 @@ import { NoteRow, StudentList } from '../components/Dossier';
 import { Empty, ErrorState, Loading } from '../components/Status';
 import { BellIcon, TrashIcon } from '../components/Icon';
 
-type Section = 'late' | 'news';
+type Section = 'late' | 'news' | 'homework';
 const MAX_TEXT = 1_500;
 
 // Инструменты старосты: кто опаздывает, досье группы и объявления с напоминанием.
@@ -28,11 +29,12 @@ export const HeadmanScreen = ({ onOpenProfile, onOpenStudent }: { onOpenProfile:
         left={(
           <div className="segment" role="tablist" aria-label={t.tabHeadman}>
             <button type="button" role="tab" aria-selected={section === 'late'} onClick={() => setSection('late')}>{t.lateSection}</button>
+            <button type="button" role="tab" aria-selected={section === 'homework'} onClick={() => setSection('homework')}>{t.homeworkTitle}</button>
             <button type="button" role="tab" aria-selected={section === 'news'} onClick={() => setSection('news')}>{t.newsSection}</button>
           </div>
         )}
       />
-      {section === 'late' ? <Lateness onOpenStudent={onOpenStudent} /> : <News />}
+      {section === 'homework' ? <OrphanedHomework /> : section === 'late' ? <Lateness onOpenStudent={onOpenStudent} /> : <News />}
     </div>
   );
 };

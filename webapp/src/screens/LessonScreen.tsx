@@ -1,3 +1,5 @@
+import { LessonMove } from '../components/LessonMove';
+import { ScheduleFreshness } from '../components/ScheduleFreshness';
 import { useEffect, useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
@@ -154,6 +156,10 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
       )}
       <LessonHeading lesson={lesson} />
       <LessonFacts lesson={lesson} />
+      <ScheduleFreshness at={lesson.updatedAt} />
+      {lesson.markedBy && lesson.markedAt && <p className="footnote">{t.moveMarked(lesson.markedBy, formatStamp(lesson.markedAt))}</p>}
+      {item?.status === 'orphaned' && <p role="status">{t.orphaned}</p>}
+      {canEditShared && <LessonMove lesson={lesson} groupId={profile.group.id} onSaved={onBack} />}
       {!lessonOver && (
         <div className="absence-actions absence-actions--wide">
           <button type="button" className="pill-button" onClick={() => setAbsence('late')}>{t.late}</button>
@@ -254,6 +260,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
         {homework.status === 'ready' && !editing && item?.text && !lessonOver && (
           <div className="hw-block">
             <p className="hw-block__label">{t.reminder}</p>
+            <Button stretched variant="secondary" disabled={saving} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', new Date(new Date(`${lesson.date}T${lesson.time.slice(0, 5)}:00+08:00`).getTime() - 600_000).toISOString(), 'lesson', 10), t.beforeLesson)}>{t.beforeLesson}</Button>
             <ReminderPicker
               value={item.remindAt}
               dateKey={lesson.date}

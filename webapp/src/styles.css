@@ -1236,3 +1236,17 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   text-transform: uppercase;
   cursor: pointer;
 }
+
+/* Поля переноса используют ту же сетку и цвета, что редактор ДЗ. */
+.editor input[type="date"], .editor select {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 8px 0 16px;
+  padding: 10px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 12px;
+  font: inherit;
+}

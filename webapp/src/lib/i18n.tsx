@@ -13,6 +13,21 @@ const plural = (count: number, one: string, few: string, many: string) => {
 };
 
 const ru = {
+  moveAction: 'Пара перенесена',
+  moveDate: 'Новая дата',
+  moveChoose: 'Выбери пару',
+  moveCancelled: 'Отменена',
+  moveUndo: 'Отменить отметку',
+  moveMarks: 'Отметки переносов',
+  beforeLesson: 'За 10 минут до пары',
+  moveErrors: { invalid_target: 'Выбери другую пару той же подгруппы', move_exists: 'Сначала отмени текущую отметку', invalid_lesson: 'Некорректная пара', lesson_not_found: 'Пара не найдена в расписании', homework_forbidden: 'Нет прав на изменение общего ДЗ', invalid_subgroup: 'Подгруппа должна совпадать', move_not_found: 'Отметка не найдена', homework_not_found: 'ДЗ не найдено' },
+  moveRebind: 'Привязать к другой паре',
+  orphaned: 'Пара отменена, ДЗ сохранено',
+  orphanedList: 'ДЗ отменённых пар',
+  orphanedEmpty: 'Сохранённых ДЗ без пары нет',
+  moveMarked: (name: string, at: string) => `Отмечено старостой, ${name}, ${at}`,
+  updatedMinutes: (count: number) => `Обновлено ${count} мин назад`,
+
   locale: 'ru-RU',
   weekdays: ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс'],
   today: 'Сегодня',
@@ -444,6 +459,20 @@ const ru = {
 type Dictionary = typeof ru;
 
 const en: Dictionary = {
+  moveAction: 'Lesson moved',
+  moveDate: 'New date',
+  moveChoose: 'Choose a lesson',
+  moveCancelled: 'Cancelled',
+  moveUndo: 'Revoke mark',
+  moveMarks: 'Move marks',
+  beforeLesson: '10 minutes before lesson',
+  moveErrors: { invalid_target: 'Choose another lesson in the same subgroup', move_exists: 'Revoke the current mark first', invalid_lesson: 'Invalid lesson', lesson_not_found: 'Lesson not found in schedule', homework_forbidden: 'You cannot edit shared homework', invalid_subgroup: 'Subgroup must match', move_not_found: 'Mark not found', homework_not_found: 'Homework not found' },
+  moveRebind: 'Assign to another lesson',
+  orphaned: 'Lesson cancelled, homework saved',
+  orphanedList: 'Homework from cancelled lessons',
+  orphanedEmpty: 'No homework without a lesson',
+  moveMarked: (name: string, at: string) => `Marked by headman, ${name}, ${at}`,
+  updatedMinutes: (count: number) => `Updated ${count} min ago`,
   locale: 'en-GB',
   weekdays: ['mo', 'tu', 'we', 'th', 'fr', 'sa', 'su'],
   today: 'Today',

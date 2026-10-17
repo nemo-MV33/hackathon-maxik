@@ -210,7 +210,7 @@ const Main = ({ profile, profileRevision, onChangeGroup, onAccountDeleted }: Mai
   const [launch, setLaunch] = useState(launchTarget);
   const scroll = useRef(new Map<string, number>());
   const top = stack.at(-1);
-  const isHeadman = me?.role === 'headman';
+  const isHeadman = me?.role === 'headman' || me?.role === 'editor';
   const key = top ? `${stack.length}:${top.name}` : `tab:${tab}`;
 
   // Каждая вкладка и экран помнит, где его листали.

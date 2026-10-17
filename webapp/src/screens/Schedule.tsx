@@ -1,3 +1,4 @@
+import { ScheduleFreshness } from '../components/ScheduleFreshness';
 import { useEffect, useRef, useState } from 'react';
 import { loadMeta, loadWeek, type Lesson } from '../data/schedule';
 import {
@@ -77,6 +78,13 @@ export const Schedule = ({
   profile, profileRevision, launch, onLaunchHandled, onOpenLesson, onOpenProfile, onOpenEntity,
 }: ScheduleProps) => {
   const { t } = useI18n();
+  const [scheduleRevision, setScheduleRevision] = useState(0);
+  useEffect(() => {
+    const refresh = () => setScheduleRevision((value) => value + 1);
+    window.addEventListener('schedule-changed', refresh);
+    window.addEventListener('focus', refresh);
+    return () => { window.removeEventListener('schedule-changed', refresh); window.removeEventListener('focus', refresh); };
+  }, []);
   const now = useNow();
   const todayKey = toDateKey(now);
   const [mode, setModeState] = useState<Mode>(readMode);
@@ -96,9 +104,9 @@ export const Schedule = ({
   const days = Array.from({ length: 7 }, (_, index) => toDateKey(addDays(fromDateKey(weekStart), index)));
 
   const [meta] = useAsync(loadMeta, []);
-  const [week, retry] = useAsync(() => loadWeek(profile.group.id, weekStart), [profile.group.id, weekStart]);
+  const [week, retry] = useAsync(() => loadWeek(profile.group.id, weekStart), [profile.group.id, weekStart, scheduleRevision]);
 
-  const [homework] = useRemoteHomework(profile.group.id, days[0], days[6], profileRevision);
+  const [homework] = useRemoteHomework(profile.group.id, days[0], days[6], `${profileRevision}:${scheduleRevision}`);
   const remoteHomework = homework.status === 'ready'
     ? new Map(homework.data.items.map((item) => [homeworkKey(item), item]))
     : null;
@@ -179,6 +187,8 @@ export const Schedule = ({
 
       {mode === 'day' && <DayHeading dateKey={selected} todayKey={todayKey} lessons={selectedLessons} loading={week.status !== 'ready'} />}
 
+      {week.status === 'ready' && <ScheduleFreshness at={week.data.updatedAt} />}
+
       <div className="week-nav">
         <button type="button" className="icon-button" aria-label={t.previousWeek} disabled={!canShift(-1)} onClick={() => shiftWeek(-1)}>
           <ChevronLeft size={18} />
@@ -217,6 +227,9 @@ export const Schedule = ({
         </div>
       )}
 
+      {homework.status === 'ready' && homework.data.items.filter((item) => item.status === 'orphaned' && (mode === 'week' || item.date === selected)).map((item) => (
+        <p key={homeworkKey(item)} className="hw-block">{item.date} · {item.subject}: {t.orphaned}<br />{item.text}</p>
+      ))}
       {week.status === 'error' && <ErrorState message={week.message} onRetry={retry} />}
 
       {mode === 'day' && week.status !== 'error' && (

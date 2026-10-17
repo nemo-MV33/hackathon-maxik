@@ -15,6 +15,7 @@ export const apiRequest = async <T>(path: string, init: RequestInit = {}): Promi
       ...init,
       headers: {
         'Content-Type': 'application/json',
+        ...(import.meta.env.DEV ? { 'X-Demo-User': new URLSearchParams(window.location.search).get('demoUser') ?? '1' } : {}),
         ...(initData ? { Authorization: `tma ${initData}` } : {}),
         ...init.headers,
       },
@@ -25,7 +26,7 @@ export const apiRequest = async <T>(path: string, init: RequestInit = {}): Promi
   const body = await response.json().catch(() => ({}));
   // Без initData MAX сервер не знает пользователя: так бывает, если открыть приложение ссылкой в браузере.
   if (response.status === 401) throw new ApiError(401, 'unauthorized', t().outsideMax);
-  if (!response.ok) throw new ApiError(response.status, body.error, body.message);
+  if (!response.ok) throw new ApiError(response.status, body.error, (t().moveErrors as Record<string, string>)[body.error] ?? body.message);
   return body as T;
 };
 

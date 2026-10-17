@@ -3,6 +3,7 @@ import type { Lesson } from './schedule';
 import { apiRequest } from '../lib/api';
 
 export type HomeworkItem = {
+  status?: 'active' | 'orphaned';
   groupId: number;
   date: string;
   lessonNumber: number;
@@ -40,7 +41,7 @@ export const loadHomework = (groupId: number, from: string, to: string) =>
 
 // remindAt: undefined — напоминание не трогаем, null — снять, ISO — поставить (напоминание личное).
 export const saveHomework = (
-  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null,
+  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null, reminderMode?: 'fixed' | 'lesson', minutesBefore?: number,
 ) =>
   apiRequest('/api/homework', {
     method: 'PUT',
@@ -50,6 +51,8 @@ export const saveHomework = (
       subgroup: lesson.subgroup,
       text,
       scope,
+      reminderMode,
+      minutesBefore,
       ...(remindAt !== undefined ? { remindAt } : {}),
     }),
   });
