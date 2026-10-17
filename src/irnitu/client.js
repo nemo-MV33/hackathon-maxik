@@ -2,7 +2,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { MemoryCache } from '../lib/cache.js';
 import { toDateKey } from '../lib/date.js';
 
 export class IrnituApiError extends Error {
@@ -14,11 +13,16 @@ export class IrnituApiError extends Error {
 }
 
 export class IrnituClient {
-  #cache = new MemoryCache();
+  #entries = new Map();
+  #attempts = new Map();
+  #active = 0;
+  #waiting = [];
+  #timestamps = new WeakMap();
   #inflight = new Map();
 
   constructor(options) {
     this.options = options;
+    this.now = options.now ?? Date.now;
   }
 
   groups() {
@@ -33,8 +37,8 @@ export class IrnituClient {
     return this.#directory('auditories', 'auditory/');
   }
 
-  groupSchedule(id, from, to) {
-    return this.#schedule('group', id, from, to);
+  groupSchedule(id, from, to, options = {}) {
+    return this.#schedule('group', id, from, to, options);
   }
 
   teacherSchedule(id, from, to) {
@@ -49,51 +53,47 @@ export class IrnituClient {
     return this.#cachedRequest(`directory:${key}`, path, this.options.directoryTtlMs);
   }
 
-  async #schedule(kind, id, from, to) {
+  async #schedule(kind, id, from, to, options = {}) {
     const query = new URLSearchParams({ dbeg: toDateKey(from), dend: toDateKey(to) });
     const path = `${kind}/${id}/schedule/?${query}`;
     const key = `schedule:${kind}:${id}:${query}`;
-    return this.#cachedRequest(key, path, this.options.scheduleTtlMs);
+    return this.#cachedRequest(key, path, this.options.scheduleTtlMs, options);
   }
 
-  async #cachedRequest(key, path, ttlMs) {
-    const fresh = this.#cache.get(key);
-    if (fresh) return fresh;
-    const persisted = await this.#readPersisted(key);
-    if (persisted !== undefined) {
-      this.#cache.set(key, persisted, ttlMs);
-      this.#refreshInBackground(key, path, ttlMs);
-      return persisted;
+  updatedAt(payload) {
+    return this.#timestamps.get(payload) ?? null;
+  }
+
+  async #cachedRequest(key, path, ttlMs, { fresh = false } = {}) {
+    let entry = this.#entries.get(key);
+    if (!entry) {
+      entry = await this.#readPersisted(key);
+      // Параллельный запрос мог уже загрузить более свежие данные.
+      entry = this.#entries.get(key) ?? entry;
+      if (entry) this.#entries.set(key, entry);
     }
-    if (this.#inflight.has(key)) return this.#inflight.get(key);
-
-    const request = this.#request(path)
-      .then(async (value) => {
-        this.#cache.set(key, value, ttlMs);
-        await this.#persist(key, value);
+    const now = this.now();
+    const stale = !entry || now - entry.savedAt >= ttlMs;
+    const allowed = !this.#attempts.has(key) || now - this.#attempts.get(key) >= ttlMs;
+    if (stale && allowed && !this.#inflight.has(key)) {
+      this.#attempts.set(key, now);
+      const pending = this.#request(path).then(async (value) => {
+        const updated = { value, savedAt: this.now() };
+        this.#entries.set(key, updated);
+        this.#timestamps.set(value, new Date(updated.savedAt).toISOString());
+        await this.#persist(key, value, updated.savedAt);
         return value;
-      })
-      .catch((error) => {
-        const stale = this.#cache.get(key, { allowStale: true });
-        if (stale) return stale;
-        throw error;
-      })
-      .finally(() => this.#inflight.delete(key));
-
-    this.#inflight.set(key, request);
-    return request;
-  }
-
-  #refreshInBackground(key, path, ttlMs) {
-    if (this.#inflight.has(key)) return;
-    const request = this.#request(path)
-      .then(async (value) => {
-        this.#cache.set(key, value, ttlMs);
-        await this.#persist(key, value);
-      })
-      .catch(() => {})
-      .finally(() => this.#inflight.delete(key));
-    this.#inflight.set(key, request);
+      }).finally(() => this.#inflight.delete(key));
+      this.#inflight.set(key, pending);
+      pending.catch(() => {});
+    }
+    if ((!entry || fresh) && this.#inflight.has(key)) {
+      try { return await this.#inflight.get(key); }
+      catch (error) { if (!entry) throw error; }
+    }
+    if (!entry) throw new IrnituApiError('Обновление расписания временно недоступно');
+    this.#timestamps.set(entry.value, new Date(entry.savedAt).toISOString());
+    return entry.value;
   }
 
   #cachePath(key) {
@@ -103,22 +103,34 @@ export class IrnituClient {
 
   async #readPersisted(key) {
     try {
-      return JSON.parse(await readFile(this.#cachePath(key), 'utf8')).value;
+      const entry = JSON.parse(await readFile(this.#cachePath(key), 'utf8'));
+      return entry.value === undefined ? undefined : { value: entry.value, savedAt: entry.savedAt ?? 0 };
     } catch (error) {
       if (error.code === 'ENOENT') return undefined;
       return undefined;
     }
   }
 
-  async #persist(key, value) {
+  async #persist(key, value, savedAt) {
     await mkdir(this.options.cacheDir, { recursive: true });
     const path = this.#cachePath(key);
     const temporaryPath = `${path}.tmp`;
-    await writeFile(temporaryPath, JSON.stringify({ savedAt: Date.now(), value }));
+    await writeFile(temporaryPath, JSON.stringify({ savedAt, value }));
     await rename(temporaryPath, path);
   }
 
   async #request(path) {
+    if (this.#active >= (this.options.concurrency ?? 4)) await new Promise((resolve) => this.#waiting.push(resolve));
+    else this.#active += 1;
+    try { return await this.#fetch(path); }
+    finally {
+      const next = this.#waiting.shift();
+      if (next) next();
+      else this.#active -= 1;
+    }
+  }
+
+  async #fetch(path) {
     const url = new URL(path, this.options.baseUrl);
     let lastError;
 

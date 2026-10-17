@@ -1,6 +1,6 @@
 schemaVersion: '1.0'
 solution: norfly
-baseUrl: https://158-160-37-19.sslip.io
+baseUrl: https://158-160-253-148.sslip.io
 authentication:
   type: header
   name: Authorization
@@ -107,3 +107,74 @@ checks:
       statusCodes: [401]
       contentType: application/json
       requiredFields: [error]
+
+  - name: lesson-changes-require-max
+    role: anonymous
+    request:
+      method: GET
+      path: /api/lesson-changes
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+  - name: orphaned-homework-requires-max
+    role: anonymous
+    request:
+      method: GET
+      path: /api/homework/orphaned
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+  - name: mark-lesson-change-requires-max
+    role: anonymous
+    request:
+      method: POST
+      path: /api/lesson-changes
+      body:
+        from: { date: '2026-10-19', lessonNumber: 1, subgroup: null }
+        to: null
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+  - name: revoke-lesson-change-requires-max
+    role: anonymous
+    request:
+      method: DELETE
+      path: /api/lesson-changes/example
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+  - name: rebind-orphaned-homework-requires-max
+    role: anonymous
+    request:
+      method: PUT
+      path: /api/homework/orphaned
+      body:
+        id: example
+        to: { date: '2026-10-20', lessonNumber: 2, subgroup: null }
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+  - name: delete-orphaned-homework-requires-max
+    role: anonymous
+    request:
+      method: DELETE
+      path: /api/homework/orphaned
+      body: { id: example }
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+# Личные методы проверяются с настоящими подписанными initData выбранной группы.
+# POST /api/lesson-changes: {from: {date, lessonNumber, subgroup}, to: {date, lessonNumber, subgroup}|null}
+# GET /api/lesson-changes: {items: [{id, groupId, from, to, status, authorName, at}]}
+# DELETE /api/lesson-changes/{id}: отмена pending-отметки, права общего ДЗ.
+# GET /api/homework/orphaned: {items: [...]}, староста или редактор.
+# PUT /api/homework/orphaned: {id, to: {date, lessonNumber, subgroup}}, перепривязка.
+# DELETE /api/homework/orphaned: {id}, удаление общего ДЗ без удаления личных версий.
+# Все личные методы: Authorization: tma <initData>; служебный Bearer не заменяет роль.
+# Расписание возвращает updatedAt, у ручной отметки пары — markedBy, markedAt, moveId.

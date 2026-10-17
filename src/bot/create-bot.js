@@ -76,7 +76,7 @@ export const ABSENCE_REASONS = {
 const lessonKey = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 
 export const createBot = ({
-  token, service, miniAppUrl, miniAppButton = 'app', preferences, community, onHomeworkSaved, onAnnouncement,
+  token, service, miniAppUrl, miniAppButton = 'app', preferences, community, onHomeworkSaved, getLessonChanges, onAnnouncement,
 }) => {
   const bot = new Bot(token);
   const sessions = new Map();
@@ -1006,6 +1006,7 @@ export const createBot = ({
     const config = await community.getChat(ctx.chatId);
     const rows = [[button(t.manageSetup, 'm:setup')]];
     if (config?.group) {
+      rows.push([button(t.orphanedList, 'mv:orphans')], [button(t.moveAction, 'mv:pick')], [button(t.moveMarks, 'mv:marks')]);
       rows.push([button(t.manageHeadman, 'm:head:0')], [button(t.manageEditors, 'm:ed:0')], [button(t.manageAccess, 'm:acc')], [button(t.invite, 'invite')]);
     }
     rows.push([button(t.manageLanguage, 'm:lang')], [button(t.menu, 'help')]);
@@ -1364,7 +1365,86 @@ export const createBot = ({
     const lesson = await findLesson(config.group.id, config.subgroup ?? null, ctx.match[1]);
     if (!lesson) return toast(ctx, t.selectionExpired);
     setSession(ctx, { step: 'group-text', lesson });
-    return show(ctx, t.homeworkTextPrompt(lesson.subject, lessonWhen(lang, lesson)), [[button(t.cancel, 'cancel')]]);
+    return show(ctx, t.homeworkTextPrompt(lesson.subject, lessonWhen(lang, lesson)), [[button(t.moveAction, `mv:${lessonKey(lesson)}`)], [button(t.cancel, 'cancel')]]);
+  });
+  const moveActor = (ctx) => ({ id: userId(ctx), first_name: senderLabel(ctx.user ?? ctx.message?.sender ?? ctx.update?.callback?.user ?? { user_id: userId(ctx) }) });
+  const moveConfig = async (ctx) => {
+    const config = await groupConfigFor(ctx);
+    if (!config?.group || !canEditHomework(ctx, config)) return null;
+    await getLessonChanges().authorize(config.group.id, userId(ctx));
+    return config;
+  };
+  bot.action('mv:pick', async (ctx) => {
+    const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    return lessonPicker(ctx, config.group.id, null, 'mv', ctx.t.moveAction);
+  });
+  bot.action('mv:marks', async (ctx) => {
+    const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    const items = (await community.lessonChanges(config.group.id)).filter((item) => item.status === 'pending');
+    return show(ctx, ctx.t.moveMarks, [...items.map((item) => [button(`${item.from.date}: ${item.from.subject} · ${ctx.t.moveUndo}`, `mu:${item.id}`)]), [button(ctx.t.back, 'manage')]]);
+  });
+  bot.action('mv:orphans', async (ctx) => {
+    const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    const items = await community.orphanedHomework(config.group.id);
+    return show(ctx, ctx.t.orphanedList, [...items.map((item) => [button(`${item.lessonDate}: ${item.subject}`, `mo:${item.id}`)]), [button(ctx.t.back, 'manage')]]);
+  });
+  bot.action(/^mo:([a-f0-9-]+)$/, async (ctx) => {
+    const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    const item = (await community.orphanedHomework(config.group.id)).find((value) => value.id === ctx.match[1]);
+    if (!item) return toast(ctx, ctx.t.selectionExpired);
+    setSession(ctx, { step: 'move-date', orphanId: item.id, groupId: config.group.id,
+      from: { date: item.lessonDate, lessonNumber: item.lessonNumber, subgroup: item.subgroup ?? null, time: item.lessonTime } });
+    return show(ctx, `${ctx.t.orphaned}\n${item.subject}\n${item.text}`, [[button(ctx.t.moveRebind, 'mv:date')], [button(ctx.t.deleteShared, `md:${item.id}`)], [button(ctx.t.cancel, 'cancel')]]);
+  });
+  bot.action(/^md:([a-f0-9-]+)$/, async (ctx) => {
+    const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    const item = (await community.orphanedHomework(config.group.id)).find((value) => value.id === ctx.match[1]);
+    if (item) await community.removeHomework(item);
+    setSession(ctx, null);
+    return showManage(ctx);
+  });
+  bot.action(/^mv:(\d{4}-\d{2}-\d{2}:\d+:\d+)$/, async (ctx) => {
+    const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    const [date, number, subgroup] = ctx.match[1].split(':');
+    const from = { date, lessonNumber: Number(number), subgroup: Number(subgroup) || null };
+    const existing = (await community.lessonChanges(config.group.id)).find((item) => item.status === 'pending' &&
+      lessonKey(item.to ?? item.from) === lessonKey(from));
+    if (existing) return show(ctx, ctx.t.moveAction, [[button(ctx.t.moveUndo, `mu:${existing.id}`)], [button(ctx.t.cancel, 'cancel')]]);
+    const lesson = await getLessonChanges().find(config.group.id, from);
+    setSession(ctx, { step: 'move-date', groupId: config.group.id, from: lesson });
+    return show(ctx, ctx.t.moveAction, [[button(ctx.t.moveDate, 'mv:date')], [button(ctx.t.moveCancelled, 'mv:cancelled')], [button(ctx.t.cancel, 'cancel')]]);
+  });
+  bot.action('mv:date', (ctx) => show(ctx, ctx.t.moveDate, [[button(ctx.t.cancel, 'cancel')]]));
+  const finishMove = async (ctx, target) => {
+    const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    const state = session(ctx);
+    if (state.step !== 'move-date' || String(config.group.id) !== String(state.groupId)) return toast(ctx, ctx.t.selectionExpired);
+    if (state.orphanId) {
+      if (!target) return toast(ctx, ctx.t.selectionExpired);
+      await getLessonChanges().apply(config.group.id, state.from, target, `${state.orphanId}:rebind:${lessonKey(target)}`, 'headman');
+    } else await getLessonChanges().manual({ groupId: config.group.id, user: moveActor(ctx), from: state.from, to: target });
+    setSession(ctx, null);
+    return show(ctx, ctx.t.moveSaved, [[button(ctx.t.menu, isGroupChat(ctx) ? 'help' : 'menu')]]);
+  };
+  bot.action('mv:cancelled', (ctx) => finishMove(ctx, null));
+  bot.action(/^mt:(\d{4}-\d{2}-\d{2}):(\d+):(\d+)$/, async (ctx) => {
+    const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    const target = await getLessonChanges().find(config.group.id, { date: ctx.match[1], lessonNumber: Number(ctx.match[2]), subgroup: Number(ctx.match[3]) || null });
+    return finishMove(ctx, target);
+  });
+  bot.action(/^mu:([a-f0-9-]+)$/, async (ctx) => {
+    const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    await getLessonChanges().undo(config.group.id, moveActor(ctx), ctx.match[1]);
+    return show(ctx, ctx.t.moveRevoked(''), [[button(ctx.t.menu, isGroupChat(ctx) ? 'help' : 'menu')]]);
   });
   bot.action('cancel', (ctx) => {
     setSession(ctx, null);
@@ -1549,6 +1629,14 @@ export const createBot = ({
     if (text.startsWith('/')) return undefined;
 
     const state = session(ctx);
+    if (state.step === 'move-date') {
+      const config = await moveConfig(ctx);
+    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(new Date(text).getTime())) return ctx.reply(ctx.t.moveDate);
+      const schedule = await service.groupSchedule(config.group.id, { week: dateFromKey(text), raw: true });
+      const lessons = schedule.lessons.filter((lesson) => lesson.date === text && (lesson.subgroup ?? null) === state.from.subgroup);
+      return show(ctx, ctx.t.moveChoose, [...lessons.map((lesson) => [button(`${lesson.time} ${lesson.subject}`, `mt:${lessonKey(lesson)}`)]), [button(ctx.t.cancel, 'cancel')]]);
+    }
     if (['group-text', 'personal-text'].includes(state.step)) {
       if (!text) return ctx.reply(ctx.t.homeworkNeedsText);
       if (text.length > HOMEWORK_LIMIT) return ctx.reply(ctx.t.homeworkTooLong);

@@ -1,4 +1,4 @@
-import { addDays, endOfWeek, startOfWeek } from '../lib/date.js';
+import { addDays, endOfWeek, startOfWeek, toDateKey } from '../lib/date.js';
 import { normalizeSchedule } from '../irnitu/normalize.js';
 
 const normalizeSearch = (value) => String(value ?? '')
@@ -27,8 +27,9 @@ export class ScheduleService {
   #teachersPromise;
   #auditoriesPromise;
 
-  constructor(client) {
+  constructor(client, { lessonChanges } = {}) {
     this.client = client;
+    this.lessonChanges = lessonChanges;
   }
 
   groups() {
@@ -79,8 +80,8 @@ export class ScheduleService {
       .slice(0, limit);
   }
 
-  groupSchedule(id, { week, subgroup } = {}) {
-    return this.#getSchedule('group', id, { week, subgroup, groupId: id });
+  groupSchedule(id, { week, subgroup, raw = false, fresh = false } = {}) {
+    return this.#getSchedule('group', id, { week, subgroup, groupId: id, raw, fresh });
   }
 
   teacherSchedule(id, { week } = {}) {
@@ -95,7 +96,7 @@ export class ScheduleService {
     const weekStart = startOfWeek(options.week ?? new Date());
     const weekEnd = endOfWeek(weekStart);
     const [payload, groups, teachers, auditories] = await Promise.all([
-      this.client[`${kind}Schedule`](id, weekStart, weekEnd),
+      this.client[`${kind}Schedule`](id, weekStart, weekEnd, { fresh: options.fresh }),
       this.groups().catch(() => []),
       this.teachers().catch(() => []),
       this.auditories().catch(() => []),
@@ -105,11 +106,19 @@ export class ScheduleService {
       teachers: new Map(teachers.map((item) => [item.id, item.fullName || item.name])),
       auditories: new Map(auditories.map((item) => [item.id, item.title])),
     };
+    const normalized = normalizeSchedule(payload, dictionaries, options);
+    const updatedAt = this.client.updatedAt?.(payload) ?? null;
+    if (kind === 'group' && !options.raw && this.lessonChanges) {
+      normalized.lessons = await this.lessonChanges.overlay(id, normalized.lessons, toDateKey(weekStart), toDateKey(weekEnd));
+    }
     return {
       kind,
+      updatedAt,
       entityId: Number(id),
       period: { from: weekStart, to: addDays(weekStart, 6) },
-      ...normalizeSchedule(payload, dictionaries, options),
+      ...normalized,
+      lessons: normalized.lessons.filter((lesson) => !options.subgroup || !lesson.subgroup || lesson.subgroup === options.subgroup)
+        .map((lesson) => ({ ...lesson, updatedAt })),
     };
   }
 

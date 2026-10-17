@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
   title: norfly API
-  version: 0.2.0
+  version: 0.3.0
   description: Профиль, расписание и домашние задания студента ИРНИТУ.
 servers:
-  - url: https://158-160-37-19.sslip.io
+  - url: https://158-160-253-148.sslip.io
     description: Рабочий сервер (Yandex Cloud)
   - url: http://localhost:3000
     description: Запуск через Docker
@@ -12,6 +12,119 @@ security:
   - maxInitData: []
   - serviceKey: []
 paths:
+  /api/lesson-changes:
+    get:
+      operationId: getLessonChanges
+      security: [{ maxInitData: [] }]
+      summary: Ручные отметки переноса выбранной группы
+      responses:
+        '200':
+          description: История отметок, видимая студентам группы
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/LessonChange' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: Учебная группа не выбрана }
+    post:
+      operationId: markLessonChange
+      security: [{ maxInitData: [] }]
+      summary: Староста или редактор отмечает перенос или отмену пары
+      description: Права совпадают с редактированием общего ДЗ, включая режим доступа всей группе. Обе пары проверяются по расписанию группы, подгруппа должна совпадать. Повтор той же отметки идемпотентен.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from: { $ref: '#/components/schemas/LessonSlot' }
+                to:
+                  description: Целевая пара из расписания; null означает отмену
+                  oneOf:
+                    - { $ref: '#/components/schemas/LessonSlot' }
+                    - { type: 'null' }
+      responses:
+        '200':
+          description: Отметка сохранена, ДЗ и напоминания перенесены, чат уведомлён
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/LessonChange' }
+        '400': { description: Некорректный слот или подгруппа }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Нет прав на изменение общего ДЗ }
+        '404': { description: Пара не найдена }
+        '409': { description: Группа не выбрана или уже есть другая действующая отметка }
+  /api/lesson-changes/{id}:
+    delete:
+      operationId: revokeLessonChange
+      security: [{ maxInitData: [] }]
+      summary: Отменить неподтверждённую ручную отметку и вернуть ДЗ
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Отметка отменена либо уже завершена }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Нет прав на изменение общего ДЗ }
+        '404': { description: Отметка не найдена в выбранной группе }
+        '409': { description: Группа не выбрана }
+  /api/homework/orphaned:
+    get:
+      operationId: getOrphanedHomework
+      security: [{ maxInitData: [] }]
+      summary: Общее ДЗ отменённых пар для старосты и редакторов
+      responses:
+        '200': { description: Объект items со списком ДЗ со статусом orphaned, включая старые даты }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Нет прав на изменение общего ДЗ }
+        '409': { description: Группа не выбрана }
+    put:
+      operationId: rebindOrphanedHomework
+      security: [{ maxInitData: [] }]
+      summary: Привязать сохранённое ДЗ и личные версии к другой паре
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, to]
+              properties:
+                id: { type: string }
+                to: { $ref: '#/components/schemas/LessonSlot' }
+      responses:
+        '200': { description: Объект saved со значением true }
+        '400': { description: Некорректная целевая пара }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Нет прав на изменение общего ДЗ }
+        '404': { description: ДЗ или пара не найдены }
+        '409': { description: Группа не выбрана }
+    delete:
+      operationId: deleteOrphanedHomework
+      security: [{ maxInitData: [] }]
+      summary: Удалить общее ДЗ отменённой пары
+      description: Личные версии студентов не удаляются.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string }
+      responses:
+        '200': { description: Объект deleted со значением true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Нет прав на изменение общего ДЗ }
+        '404': { description: ДЗ не найдено }
+        '409': { description: Группа не выбрана }
   /health:
     get:
       operationId: getHealth
@@ -333,6 +446,8 @@ paths:
                 text: { type: [string, 'null'], maxLength: 2000, description: null удаляет версию }
                 scope: { type: string, enum: [shared, personal, reminder], description: 'reminder — только личное напоминание, text не нужен' }
                 remindAt: { type: [string, 'null'], format: date-time, description: Личное напоминание о ДЗ; null снимает }
+                reminderMode: { type: string, enum: [fixed, lesson], default: fixed }
+                minutesBefore: { type: number, minimum: 0, description: За сколько минут до начала пары при reminderMode lesson }
       responses:
         '200':
           description: ДЗ сохранено или удалено
@@ -433,6 +548,7 @@ paths:
                 type: object
                 required: [kind, entityId, period, weekEven, lessons]
                 properties:
+                  updatedAt: { type: [string, 'null'], format: date-time, description: Время успешного запроса к API вуза }
                   kind: { type: string }
                   entityId: { type: integer }
                   period:
@@ -442,7 +558,16 @@ paths:
                       from: { type: string, format: date }
                       to: { type: string, format: date }
                   weekEven: { type: boolean }
-                  lessons: { type: array, items: { type: object } }
+                  lessons:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        updatedAt: { type: [string, 'null'], format: date-time }
+                        markedBy: { type: string, description: Автор неподтверждённой ручной отметки }
+                        markedAt: { type: string, format: date-time }
+                        moveId: { type: string }
+
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 components:
@@ -462,6 +587,34 @@ components:
     BadRequest:
       description: Некорректные параметры запроса
   schemas:
+    LessonSlot:
+      type: object
+      required: [date, lessonNumber]
+      properties:
+        date: { type: string, format: date }
+        lessonNumber: { type: integer, minimum: 1 }
+        subgroup: { type: [integer, 'null'], enum: [null, 1, 2] }
+    LessonChange:
+      type: object
+      required: [id, groupId, from, to, status, at, authorId, authorName]
+      properties:
+        id: { type: string }
+        groupId: { type: integer }
+        from: { $ref: '#/components/schemas/LessonSlot' }
+        to:
+          oneOf:
+            - { $ref: '#/components/schemas/LessonSlot' }
+            - { type: 'null' }
+        status: { type: string, enum: [pending, confirmed, conflict, revoked] }
+        at: { type: string, format: date-time }
+        authorId: { type: integer }
+        authorName: { type: string }
+        confirmedAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time }
+        official:
+          oneOf:
+            - { $ref: '#/components/schemas/LessonSlot' }
+            - { type: 'null' }
     StringList:
       type: object
       required: [items]
@@ -564,3 +717,25 @@ components:
         updatedAt: { type: string, format: date-time }
         authorName: { type: [string, 'null'] }
         version: { type: integer, minimum: 1 }
+        remindAt: { type: [string, 'null'], format: date-time }
+        status: { type: string, enum: [active, orphaned], default: active }
+        history:
+          type: array
+          items:
+            type: object
+            required: [type, from, to, at, by]
+            properties:
+              type: { type: string, enum: [moved, orphaned] }
+              from: { $ref: '#/components/schemas/LessonSlot' }
+              to:
+                oneOf:
+                  - { $ref: '#/components/schemas/LessonSlot' }
+                  - { type: 'null' }
+              at: { type: string, format: date-time }
+              by: { type: string, enum: [schedule, headman] }
+
+
+# Дополнения ответа расписания: updatedAt — время успешного запроса к вузу;
+# у пары также markedBy, markedAt, moveId для неподтверждённой отметки.
+# Ответ ДЗ: status (active по умолчанию или orphaned), history — события
+# {type: moved, from: LessonSlot, to: LessonSlot, at: ISO, by: schedule|headman}.

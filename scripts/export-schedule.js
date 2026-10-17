@@ -10,7 +10,7 @@ const outDir = resolve(process.argv[2] ?? 'webapp/dist/data');
 const cacheDir = `${outDir}-cache`;
 const mode = process.env.EXPORT_MODE === 'full' ? 'full' : 'recent';
 const recentWeeks = Number(process.env.EXPORT_WEEKS ?? 2);
-const concurrency = Number(process.env.EXPORT_CONCURRENCY ?? 6);
+const concurrency = Number(process.env.EXPORT_CONCURRENCY ?? config.irnitu.concurrency);
 const groupLimit = Number(process.env.EXPORT_GROUP_LIMIT ?? 0);
 
 const writeJson = async (path, value) => {
@@ -19,6 +19,7 @@ const writeJson = async (path, value) => {
 };
 
 const slimLesson = (lesson) => ({
+  updatedAt: lesson.updatedAt,
   date: lesson.date,
   lessonNumber: lesson.lessonNumber,
   time: lesson.time,
@@ -83,8 +84,9 @@ await writeJson(join(outDir, 'groups.json'), groups.map(({ id, title, institute,
 let failed = 0;
 const tasks = groups.flatMap((group) => weekStarts.map((week) => async () => {
   try {
-    const schedule = await service.groupSchedule(group.id, { week });
+    const schedule = await service.groupSchedule(group.id, { week, fresh: true, raw: true });
     await writeJson(join(outDir, 'schedule', String(group.id), `${toDateKey(week)}.json`), {
+      updatedAt: schedule.updatedAt,
       weekStart: toDateKey(week),
       weekEven: schedule.weekEven,
       lessons: schedule.lessons.map(slimLesson),

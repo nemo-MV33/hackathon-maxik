@@ -17,6 +17,20 @@ const minutesRu = (value) => `${value} ${plural(value, 'минуту', 'мину
 const minutesEn = (value) => `${value} min`;
 
 const ru = {
+  changeMoved: (subject, from, to) => `Пара ${subject} перенесена с ${from} на ${to}`,
+  moveConflict: (subject) => `Расписание вуза отличается от твоей отметки: ${subject}. Применено расписание вуза.`,
+  moveMarked: (name, at) => `Отмечено старостой, ${name}, ${at}`,
+  moveRevoked: (subject) => `Отметка переноса отменена: ${subject}`,
+  moveAction: 'Пара перенесена',
+  moveCancelled: 'Отменена',
+  moveDate: 'Введи новую дату в формате YYYY-MM-DD',
+  moveChoose: 'Выбери пару на новой дате',
+  moveSaved: 'Отметка сохранена. Группа получила уведомление.',
+  moveUndo: 'Отменить отметку',
+  moveMarks: 'Отметки переносов',
+  orphaned: 'Пара отменена, ДЗ сохранено',
+  orphanedList: 'ДЗ отменённых пар',
+  moveRebind: 'Привязать к другой паре',
   locale: 'ru-RU',
 
   languagePrompt: 'Выбери язык / Choose language',
@@ -390,6 +404,20 @@ const ru = {
 };
 
 const en = {
+  changeMoved: (subject, from, to) => `Lesson ${subject} moved from ${from} to ${to}`,
+  moveConflict: (subject) => `University schedule differs from your mark: ${subject}. University schedule applied.`,
+  moveMarked: (name, at) => `Marked by headman, ${name}, ${at}`,
+  moveRevoked: (subject) => `Move mark revoked: ${subject}`,
+  moveAction: 'Lesson moved',
+  moveCancelled: 'Cancelled',
+  moveDate: 'Enter new date as YYYY-MM-DD',
+  moveChoose: 'Choose a lesson on the new date',
+  moveSaved: 'Mark saved. Group notified.',
+  moveUndo: 'Revoke mark',
+  moveMarks: 'Move marks',
+  orphaned: 'Lesson cancelled, homework saved',
+  orphanedList: 'Homework from cancelled lessons',
+  moveRebind: 'Assign to another lesson',
   locale: 'en-GB',
 
   languagePrompt: 'Выбери язык / Choose language',

@@ -42,6 +42,8 @@ const lessonInput = (body) => {
   if (![null, 1, 2].includes(body.subgroup ?? null)) {
     throw new HttpError(400, 'invalid_subgroup', 'Подгруппа должна быть 1, 2 или null');
   }
+  if (body.reminderMode !== undefined && !['fixed', 'lesson'].includes(body.reminderMode)) throw new HttpError(400, 'invalid_remind_at', 'Неизвестный тип напоминания');
+  if (body.minutesBefore !== undefined && (!Number.isFinite(body.minutesBefore) || body.minutesBefore < 0)) throw new HttpError(400, 'invalid_remind_at', 'Некорректный интервал напоминания');
   if (!['shared', 'personal', 'reminder'].includes(body.scope)) throw new HttpError(400, 'invalid_scope', 'Неизвестный тип ДЗ');
   // scope: 'reminder' — только личное напоминание к паре, текст ДЗ не трогаем.
   if (body.scope === 'reminder') {
@@ -89,7 +91,9 @@ const serialize = (item, reminders = {}) => ({
   updatedAt: item.updatedAt,
   authorName: item.authorName ?? null,
   version: item.version ?? 1,
-  remindAt: reminders[reminderKey(item)]?.at ?? null,
+  status: item.status ?? 'active',
+  history: item.history ?? [],
+  remindAt: reminders[reminderKey(item)]?.suspended ? null : reminders[reminderKey(item)]?.at ?? null,
 });
 
 export const getHomework = async ({ user, preferences, community, url }) => {
@@ -119,12 +123,13 @@ export const getHomework = async ({ user, preferences, community, url }) => {
   };
 };
 
-const saveReminder = async (preferences, userId, lesson, remindAt) => {
+const saveReminder = async (preferences, userId, lesson, remindAt, body = {}) => {
   if (remindAt === undefined) return {};
   const profile = await preferences.get(userId);
   const reminders = { ...profile.homeworkReminders };
   const key = reminderKey({ lessonDate: lesson.date, lessonNumber: lesson.lessonNumber, subgroup: lesson.subgroup });
-  if (remindAt) reminders[key] = { at: remindAt, subject: lesson.subject, time: lesson.time.slice(0, 5) };
+  if (remindAt && body.reminderMode === 'lesson') remindAt = new Date(new Date(`${lesson.date}T${lesson.time.slice(0, 5)}:00+08:00`).getTime() - (body.minutesBefore ?? 0) * 60_000).toISOString();
+  if (remindAt) reminders[key] = { at: remindAt, subject: lesson.subject, time: lesson.time.slice(0, 5), mode: body.reminderMode === 'lesson' ? 'lesson' : 'fixed', minutesBefore: Number.isFinite(body.minutesBefore) ? body.minutesBefore : 0 };
   else delete reminders[key];
   await preferences.set(userId, { ...profile, homeworkReminders: reminders });
   return reminders;
@@ -133,8 +138,11 @@ const saveReminder = async (preferences, userId, lesson, remindAt) => {
 export const putHomework = async ({ user, preferences, community, service, body, onHomeworkSaved }) => {
   const { group } = await profileGroup(user, preferences);
   const input = lessonInput(body);
+  if (input.scope === 'shared' && await community.homeworkRoleForGroup(group.id, user.id) === 'student') {
+    throw new HttpError(403, 'homework_forbidden', 'Нет прав на изменение общего ДЗ');
+  }
   const lesson = await findLesson(service, group.id, input);
-  const reminders = await saveReminder(preferences, user.id, lesson, input.remindAt);
+  const reminders = await saveReminder(preferences, user.id, lesson, input.remindAt, body);
   if (input.scope === 'reminder') {
     return { scope: 'reminder', remindAt: reminders[`${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`]?.at ?? null };
   }

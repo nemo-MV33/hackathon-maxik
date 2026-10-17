@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 export class CommunityStore {
-  #data = { chats: {}, homework: [], personalHomework: [], notices: [], announcements: [] };
+  #data = { chats: {}, homework: [], personalHomework: [], notices: [], announcements: [], lessonChanges: [], scheduleOperations: [] };
   #loaded = false;
   #writeQueue = Promise.resolve();
 
@@ -35,6 +35,85 @@ export class CommunityStore {
     return Object.values(this.#data.chats).filter((chat) => String(chat.group?.id) === String(groupId));
   }
 
+  async allChats() {
+    await this.#load();
+    return Object.values(this.#data.chats);
+  }
+
+  async scheduleOperationApplied(id) {
+    await this.#load();
+    return this.#data.scheduleOperations.includes(id);
+  }
+
+  async recordScheduleOperation(id) {
+    await this.#load();
+    if (this.#data.scheduleOperations.includes(id)) return;
+    this.#data.scheduleOperations.push(id);
+    await this.#queueSave();
+  }
+
+  async lessonChanges(groupId) {
+    await this.#load();
+    return this.#data.lessonChanges.filter((item) => String(item.groupId) === String(groupId));
+  }
+
+  async saveLessonChange(value) {
+    await this.#load();
+    const current = this.#data.lessonChanges.find((item) => item.id === value.id);
+    if (current) Object.assign(current, value);
+    else this.#data.lessonChanges.push(value);
+    await this.#queueSave();
+    return current ?? value;
+  }
+
+  async orphanedLessons(groupId) {
+    await this.#load();
+    const lessons = new Map();
+    for (const item of [...this.#data.homework, ...this.#data.personalHomework]) {
+      if (String(item.groupId) !== String(groupId) || item.status !== 'orphaned') continue;
+      const from = item.history?.at(-1)?.from;
+      if (from) lessons.set(this.#lessonKey(item), from);
+    }
+    return [...lessons.values()];
+  }
+
+  async orphanedHomework(groupId) {
+    await this.#load();
+    return this.#data.homework.filter((item) => String(item.groupId) === String(groupId) && item.status === 'orphaned');
+  }
+
+  // Изменение слота и история сохраняются одним атомарным обновлением JSON.
+  async relocateHomework(groupId, from, to, { id, at = new Date().toISOString(), by = 'schedule' } = {}) {
+    await this.#load();
+    let changed = false;
+    for (const collection of ['homework', 'personalHomework']) {
+      for (const item of this.#data[collection]) {
+        if (!this.#sameLesson(item, { groupId, lessonDate: from.date, lessonTime: from.time, ...from })) continue;
+        if ((item.history ?? []).some((event) => event.id === id)) continue;
+        item.history = [...(item.history ?? []), { id, type: to ? 'moved' : 'orphaned', from, to, at, by }];
+        item.status = to ? 'active' : 'orphaned';
+        if (to) Object.assign(item, { lessonDate: to.date, lessonNumber: to.lessonNumber, lessonTime: to.time, subgroup: to.subgroup ?? null });
+        item.updatedAt = at;
+        changed = true;
+      }
+      // В целевом слоте может уже быть ДЗ. Сохраняем оба текста и историю.
+      const unique = new Map();
+      for (const item of this.#data[collection]) {
+        const key = `${this.#lessonKey(item)}:${item.userId ?? ''}`;
+        const previous = unique.get(key);
+        if (!previous) unique.set(key, item);
+        else {
+          item.text = [...new Set([previous.text, item.text].filter(Boolean))].join('\n\n');
+          item.history = [...(previous.history ?? []), ...(item.history ?? [])];
+          unique.set(key, item);
+        }
+      }
+      this.#data[collection] = [...unique.values()];
+    }
+    if (changed) await this.#queueSave();
+    return changed;
+  }
+
   async upsertHomework(value) {
     await this.#load();
     const now = new Date().toISOString();
@@ -45,6 +124,7 @@ export class CommunityStore {
       createdAt: current?.createdAt ?? now,
       ...current,
       ...value,
+      status: 'active',
       version: (current?.version ?? 0) + 1,
       updatedAt: now,
     };
@@ -288,6 +368,8 @@ export class CommunityStore {
         personalHomework: parsed.personalHomework ?? [],
         notices: parsed.notices ?? [],
         announcements: parsed.announcements ?? [],
+        lessonChanges: parsed.lessonChanges ?? [],
+        scheduleOperations: parsed.scheduleOperations ?? [],
       };
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;

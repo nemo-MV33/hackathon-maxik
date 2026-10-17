@@ -132,7 +132,7 @@ test('diffSchedules находит отмену, новую пару, аудит
   const after = [
     lesson('2026-10-02', 1, { auditories: ['В-208'], teachers: ['Петров С. В.'] }),
     lesson('2026-10-02', 3, { subject: 'Физика' }),
-    lesson('2026-10-03', 1), lesson('2026-10-03', 2),
+    lesson('2026-10-03', 1), lesson('2026-10-03', 2, { lessonType: 'практика' }),
     lesson('2026-10-20', 1),
   ];
   const types = diffSchedules(before, after, { from: '2026-10-01', to: '2026-10-07' }).map((change) => change.type);

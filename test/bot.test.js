@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { LessonChangeService } from '../src/services/lesson-change-service.js';
 import { createBot } from '../src/bot/create-bot.js';
 import { parseCommand } from '../src/bot/commands.js';
 import { addDays, startOfWeek, toDateKey } from '../src/lib/date.js';
@@ -66,7 +67,9 @@ const setup = async (t) => {
   const sent = [];
   const unreachable = new Set();
   const make = () => {
-    const bot = createBot({ token: 'test', service, preferences, community });
+    let changes;
+    const bot = createBot({ token: 'test', service, preferences, community, getLessonChanges: () => changes });
+    changes = new LessonChangeService({ community, preferences, service, bot });
     bot.botInfo = BOT;
     bot.catch((error) => { throw error; });
     Object.assign(bot.api, {
@@ -432,7 +435,7 @@ test('всё управление кнопками: без единой кома
   assert.deepEqual(payloads(groupMore), ['gh:pick', 'team', 'manage', 'help']);
 
   const [managed] = await press(ADMIN, 'manage', inGroup);
-  assert.deepEqual(payloads(managed), ['m:setup', 'm:head:0', 'm:ed:0', 'm:acc', 'invite', 'm:lang', 'help']);
+  assert.deepEqual(payloads(managed), ['m:setup', 'mv:orphans', 'mv:pick', 'mv:marks', 'm:head:0', 'm:ed:0', 'm:acc', 'invite', 'm:lang', 'help']);
   const [members] = await press(ADMIN, 'm:head:0', inGroup);
   assert.deepEqual(payloads(members), ['hs:2', 'hs:3', 'hs:1', 'manage'], 'бот в списке не показывается');
   const assigned = await press(ADMIN, 'hs:3', inGroup);
@@ -625,4 +628,28 @@ test('объявление старосты: в чат группы, в личк
   await press(STUDENT, `anm:${item.id}`);
   await press(STUDENT, `ans:${item.id}:none`);
   assert.equal((await preferences.get(STUDENT.user_id)).announcementReminders[item.id], null, 'студент выключил напоминание у себя');
+});
+
+test('староста отмечает перенос кнопками группы, студент видит ДЗ на новой дате', async (t) => {
+  const { say, press, payloads, preferences, community, sent } = await setup(t);
+  const group = { kind: 'group', ...GROUPS[0] };
+  await community.setChat(GROUP_CHAT.chat_id, { group, headman: { userId: HEADMAN.user_id, name: HEADMAN.name } });
+  await preferences.set(HEADMAN.user_id, { selection: group, lang: 'ru' });
+  await preferences.set(STUDENT.user_id, { selection: group, lang: 'ru' });
+  const from = lessonsFor(new Date()).find((lesson) => lesson.date >= toDateKey(new Date()) && lesson.subgroup === null);
+  const targetDate = toDateKey(addDays(new Date(from.date), 1));
+  await community.upsertHomework({ groupId: group.id, lessonDate: from.date, lessonNumber: from.lessonNumber,
+    lessonTime: from.time, subgroup: null, subject: from.subject, text: 'Задачи 1–5' });
+  const [menu] = await press(HEADMAN, `gh:${from.date}:1:0`, { chat: GROUP_CHAT });
+  assert.ok(payloads(menu).includes(`mv:${from.date}:1:0`));
+  await press(HEADMAN, `mv:${from.date}:1:0`, { chat: GROUP_CHAT });
+  await press(HEADMAN, 'mv:date', { chat: GROUP_CHAT });
+  const [picker] = await say(HEADMAN, targetDate, { chat: GROUP_CHAT });
+  assert.ok(payloads(picker).includes(`mt:${targetDate}:1:0`));
+  const result = await press(HEADMAN, `mt:${targetDate}:1:0`, { chat: GROUP_CHAT });
+  assert.ok(result.some((item) => item.to === 'chat' && /перенесена с/.test(item.text)));
+  const homework = await community.homeworkForUser(group.id, STUDENT.user_id, { from: targetDate, to: targetDate });
+  assert.equal(homework[0].text, 'Задачи 1–5');
+  assert.equal(homework[0].lessonDate, targetDate);
+  assert.equal(sent.filter((item) => item.to === 'chat' && /перенесена с/.test(item.text)).length, 1);
 });

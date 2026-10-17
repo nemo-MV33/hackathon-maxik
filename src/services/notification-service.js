@@ -1,3 +1,4 @@
+import { startOfWeek, toDateKey } from '../lib/date.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { Keyboard } from '@maxhub/max-bot-api';
@@ -10,7 +11,7 @@ import { notificationEnabled, summaryTime, timeToMinutes } from '../lib/settings
 // Сводка и напоминания о контрольных приходят во время, которое выбрал пользователь (по умолчанию 20:00).
 const summaryDue = (prefs, now) => irkutskMinutes(now) >= timeToMinutes(summaryTime(prefs));
 const EXAM_REMINDER_DAYS = [3, 1];
-const CHANGES_WINDOW_DAYS = 7;
+const CHANGES_WINDOW_DAYS = 14;
 const MINUTE = 60_000;
 
 const lessonKey = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
@@ -24,6 +25,7 @@ const slim = (lesson) => ({
   lessonNumber: lesson.lessonNumber,
   subgroup: lesson.subgroup ?? null,
   subject: lesson.subject,
+  lessonType: lesson.lessonType,
   time: lesson.time,
   teachers: lesson.teachers ?? [],
   auditories: lesson.auditories ?? [],
@@ -35,16 +37,40 @@ export const diffSchedules = (before, after, { from, to }) => {
   const previous = new Map(before.filter(inRange).map((lesson) => [lessonKey(lesson), lesson]));
   const next = new Map(after.filter(inRange).map((lesson) => [lessonKey(lesson), lesson]));
   const changes = [];
+  const identity = (left, right) => left.subject === right.subject && left.lessonType === right.lessonType
+    && (left.subgroup ?? null) === (right.subgroup ?? null)
+    && sameList([...(left.teachers ?? [])].sort(), [...(right.teachers ?? [])].sort());
+  const removed = [...previous].filter(([key, lesson]) => !next.has(key) || !identity(lesson, next.get(key))).map(([, lesson]) => lesson);
+  const added = [...next].filter(([key, lesson]) => !previous.has(key) || !identity(lesson, previous.get(key))).map(([, lesson]) => lesson);
+  const moment = (lesson) => new Date(`${lesson.date}T${String(lesson.time || '00:00').slice(0, 5)}:00+08:00`).getTime();
+  const movedFrom = new Set();
+  const movedTo = new Set();
+  for (const lesson of removed) {
+    const candidates = added.filter((item) => identity(lesson, item) && lessonKey(item) !== lessonKey(lesson))
+      .sort((left, right) => Math.abs(moment(left) - moment(lesson)) - Math.abs(moment(right) - moment(lesson))
+        || lessonKey(left).localeCompare(lessonKey(right)));
+    const target = candidates[0];
+    if (target) {
+      changes.push({ type: 'moved', previous: lesson, lesson: target });
+      movedFrom.add(lessonKey(lesson));
+      movedTo.add(lessonKey(target));
+      added.splice(added.indexOf(target), 1);
+    }
+  }
   for (const [key, lesson] of previous) {
     const current = next.get(key);
-    if (!current) changes.push({ type: 'cancelled', lesson });
-    else if (current.subject !== lesson.subject) changes.push({ type: 'subject', lesson: current, previous: lesson });
+    if (movedFrom.has(key)) {
+      if (current && !movedTo.has(key)) changes.push({ type: 'added', lesson: current });
+      continue;
+    }
+    if (!current || movedTo.has(key)) changes.push({ type: 'cancelled', lesson });
+    else if (current.subject !== lesson.subject || current.lessonType !== lesson.lessonType) changes.push({ type: 'subject', lesson: current, previous: lesson });
     else {
       if (!sameList(current.auditories, lesson.auditories)) changes.push({ type: 'room', lesson: current, previous: lesson });
       if (!sameList(current.teachers, lesson.teachers)) changes.push({ type: 'teacher', lesson: current, previous: lesson });
     }
   }
-  for (const [key, lesson] of next) if (!previous.has(key)) changes.push({ type: 'added', lesson });
+  for (const [key, lesson] of next) if (!previous.has(key) && !movedTo.has(key)) changes.push({ type: 'added', lesson });
   return changes.sort((left, right) => lessonKey(left.lesson).localeCompare(lessonKey(right.lesson)));
 };
 
@@ -94,7 +120,7 @@ export class NotificationService {
 
   constructor({
     bot, service, preferences, community, snapshotsPath,
-    now = () => new Date(), homeworkDelayMs = MINUTE, changesIntervalMs = 3 * 60 * MINUTE,
+    now = () => new Date(), homeworkDelayMs = MINUTE, changesIntervalMs = 15 * MINUTE, recentIntervalMs = 3 * 60 * MINUTE, lessonChanges,
   }) {
     this.bot = bot;
     this.service = service;
@@ -104,6 +130,8 @@ export class NotificationService {
     this.now = now;
     this.homeworkDelayMs = homeworkDelayMs;
     this.changesIntervalMs = changesIntervalMs;
+    this.recentIntervalMs = recentIntervalMs;
+    this.lessonChanges = lessonChanges;
   }
 
   start() {
@@ -115,7 +143,8 @@ export class NotificationService {
     every(MINUTE, () => this.sendSummaries());
     every(MINUTE, () => this.sendExamReminders());
     every(MINUTE, () => this.sendScheduled());
-    every(this.changesIntervalMs, () => this.checkChanges());
+    every(this.changesIntervalMs, () => this.checkChanges({ near: true }));
+    every(this.recentIntervalMs, () => this.checkChanges());
     const first = setTimeout(() => this.checkChanges().catch(console.error), 5 * MINUTE);
     first.unref();
     this.#timers.push(first);
@@ -299,7 +328,7 @@ export class NotificationService {
       }
       if (notificationEnabled(prefs, 'homework')) {
         for (const [lessonKey, reminder] of Object.entries(prefs.homeworkReminders ?? {})) {
-          if (!reminder?.at || new Date(reminder.at) > now || now - new Date(reminder.at) > 6 * 60 * MINUTE) continue;
+          if (reminder?.suspended || !reminder?.at || new Date(reminder.at) > now || now - new Date(reminder.at) > 6 * 60 * MINUTE) continue;
           const key = `h:${lessonKey}:${reminder.at}`;
           if (done.has(key)) continue;
           const [date, lessonNumber, subgroup] = lessonKey.split(':');
@@ -346,7 +375,7 @@ export class NotificationService {
     ].join('\n');
   }
 
-  async checkChanges() {
+  async checkChanges({ near = false } = {}) {
     if (this.#changesRunning) return 0;
     this.#changesRunning = true;
     let notified = 0;
@@ -363,13 +392,18 @@ export class NotificationService {
         groups.set(prefs.selection.id, list);
       }
 
+      for (const chat of await this.community.allChats()) {
+        if (chat.group && !groups.has(chat.group.id)) groups.set(chat.group.id, { title: chat.group.title, users: [] });
+      }
       for (const [groupId, group] of groups) {
         const recipients = group.users.filter(({ prefs }) => notificationEnabled(prefs, 'changes'));
-        if (!recipients.length) continue;
+
+        const previous = await this.snapshots.get(groupId);
         let lessons;
         try {
-          const weeks = await Promise.all([from, irkutskDateKey(now, 7)].map((key) =>
-            this.service.groupSchedule(groupId, { week: dateFromKey(key) })));
+          const keys = near && previous ? [from, irkutskDateKey(now, 1)] : [from, irkutskDateKey(now, 7), to];
+          const weeks = await Promise.all([...new Set(keys.map((key) => { const date = dateFromKey(key); date.setDate(date.getDate() - (date.getDay() + 6) % 7); return date.toISOString(); }))].map((key) =>
+            this.service.groupSchedule(groupId, { week: new Date(key), raw: true, fresh: true })));
           const seen = new Set();
           lessons = weeks.flatMap((week) => week.lessons)
             .filter((lesson) => lesson.date >= from && lesson.date <= to)
@@ -380,15 +414,49 @@ export class NotificationService {
           continue;
         }
 
-        const previous = await this.snapshots.get(groupId);
-        await this.snapshots.set(groupId, { from, to, takenAt: now.toISOString(), lessons });
-        if (!previous) continue;
+        if (near && previous) {
+          const weeks = new Set([from, irkutskDateKey(now, 1)].map((key) => toDateKey(startOfWeek(dateFromKey(key)))));
+          lessons = [...previous.lessons.filter((lesson) => !weeks.has(toDateKey(startOfWeek(dateFromKey(lesson.date)))) && lesson.date >= from && lesson.date <= to), ...lessons];
+        }
+        if (!previous) {
+          await this.snapshots.set(groupId, { from, to, takenAt: now.toISOString(), lessons });
+          continue;
+        }
         const range = { from: from > previous.from ? from : previous.from, to: to < previous.to ? to : previous.to };
-        const changes = diffSchedules(previous.lessons, lessons, range);
-        if (!changes.length) continue;
+        let changes = diffSchedules(previous.lessons, lessons, range);
+        // Исчезновение сегодня может оказаться переносом на следующую неделю.
+        // Дополнительные недели читаем только при таком изменении.
+        if (near && changes.some((change) => ['cancelled', 'subject'].includes(change.type))) {
+          try {
+            const keys = [...new Set([from, irkutskDateKey(now, 7), to].map((key) => toDateKey(startOfWeek(dateFromKey(key)))))];
+            const weeks = await Promise.all(keys.map((key) => this.service.groupSchedule(groupId, { week: dateFromKey(key), raw: true, fresh: true })));
+            const unique = new Map(weeks.flatMap((week) => week.lessons).filter((lesson) => lesson.date >= from && lesson.date <= to)
+              .map((lesson) => [lessonKey(lesson), slim(lesson)]));
+            lessons = [...unique.values()];
+            changes = diffSchedules(previous.lessons, lessons, range);
+          } catch (error) {
+            // До успешной проверки диапазона не объявляем пару отменённой.
+            console.error(`Move search failed for group ${groupId}:`, error.message);
+            continue;
+          }
+        }
+        const unresolved = (await this.community.orphanedLessons(groupId))
+          .filter((source) => !lessons.some((lesson) => lessonKey(source) === lessonKey(lesson) && source.subject === lesson.subject));
+        const recovered = diffSchedules(unresolved, changes.filter((change) => change.type === 'added').map((change) => change.lesson), range)
+          .filter((change) => change.type === 'moved');
+        const recoveredKeys = new Set(recovered.map((change) => lessonKey(change.lesson)));
+        changes = [...changes.filter((change) => change.type !== 'added' || !recoveredKeys.has(lessonKey(change.lesson))), ...recovered];
+        const visible = [];
+        for (const change of changes) {
+          const result = this.lessonChanges ? await this.lessonChanges.official(groupId, change, `${previous.takenAt}:${change.type}:${lessonKey(change.previous ?? change.lesson)}:${lessonKey(change.lesson)}`) : null;
+          if (!result?.silent) visible.push({ ...change, homework: result?.homework });
+        }
+        await this.snapshots.set(groupId, { from, to, takenAt: now.toISOString(), lessons });
+        if (!visible.length) continue;
+        if (this.lessonChanges) await this.lessonChanges.notifyChats(groupId, visible);
 
         for (const { id, prefs } of recipients) {
-          const own = changes.filter((change) => forSubgroup(prefs.subgroup, change.lesson.subgroup));
+          const own = visible.filter((change) => forSubgroup(prefs.subgroup, change.lesson.subgroup));
           if (!own.length) continue;
           try {
             await this.#send(id, prefs.lang, this.#changesText(prefs.lang, group.title, own), `day_${own[0].lesson.date}`, texts(prefs.lang).openDay);
@@ -406,8 +474,9 @@ export class NotificationService {
 
   #changesText(lang, groupTitle, changes) {
     const t = texts(lang);
-    const lines = changes.slice(0, 12).map(({ type, lesson, previous }) => {
+    const lines = changes.slice(0, 12).map(({ type, lesson, previous, homework }) => {
       const when = t.changeWhen(shortDate(lang, lesson.date), String(lesson.time ?? '').slice(0, 5));
+      if (type === 'moved') return `— ${t.changeMoved(lesson.subject, `${shortDate(lang, previous.date)}, ${previous.time?.slice(0, 5)}`, when)}${homework ? `\n${t.homework}: ${homework}` : ''}`;
       if (type === 'cancelled') return `— ${t.changeCancelled(when, lesson.subject)}`;
       if (type === 'added') return `— ${t.changeAdded(when, lesson.subject)}`;
       if (type === 'subject') return `— ${t.changeSubject(when, previous.subject, lesson.subject)}`;

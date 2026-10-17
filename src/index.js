@@ -6,6 +6,7 @@ import { createHttpServer } from './http/server.js';
 import { IrnituClient } from './irnitu/client.js';
 import { ScheduleService } from './services/schedule-service.js';
 import { ReminderService } from './services/reminder-service.js';
+import { LessonChangeService } from './services/lesson-change-service.js';
 import { NotificationService } from './services/notification-service.js';
 import { PreferencesStore } from './storage/preferences.js';
 import { CommunityStore } from './storage/community.js';
@@ -24,6 +25,7 @@ const community = new CommunityStore(
   fileURLToPath(new URL('../data/community.json', import.meta.url)),
 );
 let notifications;
+let lessonChanges;
 const onHomeworkSaved = (item) => notifications?.homeworkSaved(item);
 const onAnnouncement = (item) => notifications?.notifyAnnouncement(item);
 const bot = createBot({
@@ -35,8 +37,14 @@ const bot = createBot({
   community,
   onHomeworkSaved,
   onAnnouncement,
+  getLessonChanges: () => lessonChanges,
 });
+lessonChanges = new LessonChangeService({ community, preferences, service, bot });
+service.lessonChanges = lessonChanges;
 notifications = new NotificationService({
+  lessonChanges,
+  changesIntervalMs: config.changesIntervalMs,
+  recentIntervalMs: config.recentIntervalMs,
   bot,
   service,
   preferences,
@@ -44,6 +52,7 @@ notifications = new NotificationService({
   snapshotsPath: fileURLToPath(new URL('../data/schedule-snapshots.json', import.meta.url)),
 });
 const server = createHttpServer({
+  lessonChanges,
   service,
   preferences,
   community,

@@ -3,6 +3,7 @@ import { parseDateKey, toDateKey } from '../lib/date.js';
 import { serveStatic } from './static.js';
 import { InitDataError, validateInitData } from './auth.js';
 import { HttpError, deleteMe, getMe, updateMe } from './routes/me.js';
+import { lessonChangesRoute, orphanedRoute } from './routes/lesson-changes.js';
 import { getHomework, putHomework } from './routes/homework.js';
 import { getAbsenceHistory, getAbsences, getGroupMembers, postAbsence, putDeputy } from './routes/absence.js';
 import {
@@ -129,6 +130,14 @@ const route = async (request, response, options) => {
       return sendJson(response, 200, await putAnnouncementReminder({ user, preferences, community, id, body }));
     }
     return sendJson(response, 405, { error: 'method_not_allowed' });
+  }
+
+  if (parts[0] === 'api' && (parts[1] === 'lesson-changes' || url.pathname === '/api/homework/orphaned')) {
+    const user = authenticate(request, options);
+    if (!user) return sendJson(response, 401, { error: 'unauthorized' });
+    const handler = parts[1] === 'lesson-changes' ? lessonChangesRoute : orphanedRoute;
+    return sendJson(response, 200, await handler({ user, preferences, community, lessonChanges: options.lessonChanges,
+      method: request.method, id: parts[2], body: ['POST', 'PUT', 'DELETE'].includes(request.method) && (parts[1] === 'homework' || !parts[2]) ? await readJson(request) : undefined }));
   }
 
   if (url.pathname === '/api/homework') {

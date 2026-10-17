@@ -12,7 +12,10 @@ export const config = {
   miniAppUrl: process.env.MINI_APP_URL?.trim() ?? '',
   // app — кнопка MAX open_app (приложение открывается с авторизацией), link — обычная ссылка на MINI_APP_URL.
   miniAppButton: process.env.MINI_APP_BUTTON?.trim() === 'link' ? 'link' : 'app',
+  changesIntervalMs: numberFromEnv('CHANGES_INTERVAL_MS', 15 * 60 * 1000),
+  recentIntervalMs: numberFromEnv('RECENT_CHANGES_INTERVAL_MS', 3 * 60 * 60 * 1000),
   irnitu: {
+    concurrency: numberFromEnv('IRNITU_CONCURRENCY', 4),
     baseUrl: process.env.IRNITU_API_URL?.trim() ?? 'https://schedule.istu.edu/api/',
     token: process.env.IRNITU_API_TOKEN?.trim() ?? '',
     timeoutMs: numberFromEnv('IRNITU_TIMEOUT_MS', 6_000),
