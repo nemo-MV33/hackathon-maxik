@@ -325,6 +325,7 @@ test('custom target rejects invalid date, clocks, unchanged time and student wri
   for (const target of [
     { date: '2026-02-30', time: '10:00–11:30' }, { date: TO.date, time: '24:00–25:00' },
     { date: TO.date, time: '11:00–10:00' }, { date: TO.date, time: '10:00–10:00' },
+    { date: [TO.date], time: TO.time }, { date: TO.date, time: [TO.time] },
     { date: FROM.date, time: FROM.time },
   ]) await assert.rejects(changes.manual({ groupId: 1, user: USER, from: FROM, to: { ...target, custom: true } }), { error: 'invalid_target' });
   await assert.rejects(changes.manual({ groupId: 1, user: { id: 2 }, from: FROM, to: { custom: true, date: TO.date, time: TO.time } }), { status: 403 });

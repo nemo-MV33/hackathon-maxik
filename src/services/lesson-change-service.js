@@ -44,7 +44,7 @@ export class LessonChangeService {
   async target(groupId, source, input) {
     if (input?.custom === undefined) return this.find(groupId, input);
     if (input.custom !== true) throw new HttpError(400, 'invalid_target');
-    if (!parseDateKey(input.date) || !/^([01]\d|2[0-3]):[0-5]\d–([01]\d|2[0-3]):[0-5]\d$/.test(input.time ?? '')) {
+    if (typeof input.date !== 'string' || typeof input.time !== 'string' || !parseDateKey(input.date) || !/^([01]\d|2[0-3]):[0-5]\d–([01]\d|2[0-3]):[0-5]\d$/.test(input.time)) {
       throw new HttpError(400, 'invalid_target');
     }
     const [begin, end] = input.time.split('–');
