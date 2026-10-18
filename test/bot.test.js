@@ -771,3 +771,31 @@ test('необязательные срок, способ сдачи, напом
   assert.ok(longHistory.length < 3900);
   for (const version of [6, 7, 8, 9, 10]) assert.ok(longHistory.includes(`v${version} ·`));
 });
+
+
+test('/id: личный MAX ID доступен без выбора языка и группы', async (t) => {
+  const { say, preferences, getBot } = await setup(t);
+  assert.equal((await say(STUDENT, '/id'))[0].text, 'Ваш MAX ID: 1');
+  await preferences.set(STUDENT.user_id, { lang: 'en' });
+  assert.equal((await say(STUDENT, `/ID@${BOT.username}`))[0].text, 'Your MAX ID: 1');
+  let commands;
+  getBot().api.setMyCommands = async (value) => { commands = value; };
+  await getBot().syncCommands();
+  assert.ok(commands.some((command) => command.name === 'id'));
+});
+
+test('/id: ID группы видят только администратор и владелец чата', async (t) => {
+  const { say, getBot } = await setup(t);
+  assert.equal((await say(ADMIN, '/id', { chat: GROUP_CHAT }))[0].text, 'ID чата: -500');
+  for (const user of [STUDENT, HEADMAN]) {
+    const [reply] = await say(user, '/id', { chat: GROUP_CHAT });
+    assert.match(reply.text, /администратор чата/);
+    assert.doesNotMatch(reply.text, /-500/);
+  }
+  getBot().api.getChatAdmins = async () => ({ members: [{ user_id: HEADMAN.user_id, is_owner: true }] });
+  assert.equal((await say(HEADMAN, '/id', { chat: GROUP_CHAT }))[0].text, 'ID чата: -500');
+  getBot().api.getChatAdmins = async () => { throw new Error('chat.denied'); };
+  const [reply] = await say(HEADMAN, '/id', { chat: GROUP_CHAT });
+  assert.match(reply.text, /администратор чата/);
+  assert.doesNotMatch(reply.text, /-500/);
+});

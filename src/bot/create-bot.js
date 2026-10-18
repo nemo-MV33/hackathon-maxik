@@ -39,6 +39,7 @@ const COMMANDS = [
   { name: 'find', description: 'Найти расписание' },
   { name: 'settings', description: 'Настройки' },
   { name: 'manage', description: 'Управление чатом' },
+  { name: 'id', description: 'MAX ID пользователя или чата' },
   { name: 'help', description: 'Все команды' },
 ];
 
@@ -1084,6 +1085,11 @@ export const createBot = ({
   const commandHandlers = {
     start,
     help,
+    id: async (ctx) => {
+      if (!isGroupChat(ctx)) return show(ctx, ctx.t.userId(userId(ctx)));
+      if (!await isChatManager(ctx)) return show(ctx, ctx.t.needChatAdmin);
+      return show(ctx, ctx.t.chatId(ctx.chatId));
+    },
     today: scheduleCommand('d', 0),
     tomorrow: scheduleCommand('d', 1),
     week: scheduleCommand('w', 0),

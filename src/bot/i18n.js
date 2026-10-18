@@ -266,6 +266,8 @@ const ru = {
   deputyChange: 'Сменить, кому передаю',
   deputySaved: (name) => `✅ Готово, твои сообщения будет получать ${name}.\n\nЧто передать?`,
 
+  userId: (id) => `Ваш MAX ID: ${id}`,
+  chatId: (id) => `ID чата: ${id}`,
   unknownCommand: 'Такой команды нет. Вот что я умею:',
   help: [
     '**Команды**',
@@ -278,6 +280,7 @@ const ru = {
     '/absence — предупредить старосту',
     '/find — найти группу, преподавателя, аудиторию',
     '/settings — группа, уведомления, мои данные',
+    '/id — мой MAX ID',
     '',
     'А ещё можно просто написать группу, фамилию преподавателя или аудиторию.',
   ].join('\n'),
@@ -287,6 +290,7 @@ const ru = {
     '/homework — ДЗ',
     '/add — записать ДЗ',
     '/team — кто записывает ДЗ',
+    '/id — ID чата (только владелец и администраторы)',
     '',
     '**Для администраторов и старосты**',
     '/setup — привязать чат к группе',
@@ -663,6 +667,8 @@ const en = {
   deputyChange: 'Change who gets them',
   deputySaved: (name) => `✅ Done, ${name} will get your notes.\n\nWhat should I pass on?`,
 
+  userId: (id) => `Your MAX ID: ${id}`,
+  chatId: (id) => `Chat ID: ${id}`,
   unknownCommand: 'There’s no such command. Here’s what I can do:',
   help: [
     '**Commands**',
@@ -675,6 +681,7 @@ const en = {
     '/absence — tell the class representative',
     '/find — find a group, teacher or room',
     '/settings — group, notifications, my data',
+    '/id — my MAX ID',
     '',
     'Or just send a group, a teacher’s surname or a room.',
   ].join('\n'),
@@ -684,6 +691,7 @@ const en = {
     '/homework — homework',
     '/add — add homework',
     '/team — who adds homework',
+    '/id — chat ID (owner and admins only)',
     '',
     '**For admins and the representative**',
     '/setup — link this chat to a group',
