@@ -1,9 +1,13 @@
+import type { HomeworkAttachment } from '../components/HomeworkAttachments';
 import { addDays, fromDateKey, toDateKey } from '../lib/date';
 import { useCallback, useEffect, useState } from 'react';
 import type { Lesson } from './schedule';
 import { apiRequest } from '../lib/api';
 
 export type HomeworkItem = {
+  attachments?: HomeworkAttachment[];
+  sharedAttachments?: HomeworkAttachment[];
+  personalAttachments?: HomeworkAttachment[];
   status?: 'active' | 'orphaned';
   groupId: string | number;
   date: string;
@@ -11,6 +15,9 @@ export type HomeworkItem = {
   subgroup: number | null;
   subject: string;
   lessonTime: string;
+  sharedAuthorName?: string | null;
+  sharedUpdatedAt?: string;
+  sharedVersion?: number;
   sharedText: string | null;
   personalText: string | null;
   text: string;
@@ -42,7 +49,7 @@ export const loadHomework = (groupId: string | number, from: string, to: string)
 
 // remindAt: undefined — напоминание не трогаем, null — снять, ISO — поставить (напоминание личное).
 export const saveHomework = (
-  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup' | 'groupId'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null, reminderMode?: 'fixed' | 'lesson', minutesBefore?: number,
+  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup' | 'groupId'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null, reminderMode?: 'fixed' | 'lesson', minutesBefore?: number, attachments?: HomeworkAttachment[],
 ) =>
   apiRequest('/api/homework', {
     method: 'PUT',
@@ -52,6 +59,7 @@ export const saveHomework = (
       lessonNumber: lesson.lessonNumber,
       subgroup: lesson.subgroup,
       text,
+      ...(attachments ? { attachmentIds: attachments.map((file) => file.id) } : {}),
       scope,
       reminderMode,
       minutesBefore,
@@ -68,6 +76,12 @@ export const useRemoteHomework = (groupId: string | number, from: string, to: st
       .then((data) => setState({ status: 'ready', data }) as void)
       .catch((error: Error) => setState({ status: 'error', message: error.message }));
   }, [groupId, from, to, dependency]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    const update = () => { if (!document.hidden) void refresh(true); };
+    const timer = window.setInterval(update, 10_000);
+    window.addEventListener('focus', update);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', update); };
+  }, [refresh]);
   return [state, refresh] as const;
 };

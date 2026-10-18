@@ -1,3 +1,4 @@
+import { AttachmentEditor, AttachmentList, type HomeworkAttachment } from '../components/HomeworkAttachments';
 import { userTimeZone, lessonDate, lessonTime, lessonMoment } from '../lib/timezone';
 import { LessonMove } from '../components/LessonMove';
 import { ScheduleFreshness } from '../components/ScheduleFreshness';
@@ -75,6 +76,8 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
   const canEditShared = homework.status === 'ready' && homework.data.canEditShared;
   const [scope, setScope] = useState<Scope>('personal');
   const [text, setText] = useState('');
+  const [files, setFiles] = useState<HomeworkAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -106,6 +109,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
 
   const startEditing = (nextScope: Scope) => {
     setScope(nextScope);
+    setFiles(nextScope === 'shared' ? item?.sharedAttachments ?? [] : item?.personalAttachments ?? []);
     setText(nextScope === 'shared' ? item?.sharedText ?? '' : item?.personalText ?? item?.sharedText ?? '');
     setNotice(null);
     setConfirmDelete(false);
@@ -130,9 +134,9 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
   };
 
   const save = () => {
-    if (!text.trim() || saving) return;
+    if ((!text.trim() && !files.length) || saving || uploading) return;
     void run(
-      () => saveHomework(lesson, text.trim(), scope),
+      () => saveHomework(lesson, text.trim(), scope, undefined, undefined, undefined, files),
       scope === 'shared' ? t.savedShared : t.savedOwn,
     );
   };
@@ -193,35 +197,37 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
               <p className="hw-block__label">{t.forGroup}</p>
               {item?.sharedText
                 ? <p className="hw-block__text">{item.sharedText}</p>
-                : <p className="hw-block__empty">{t.nobodyWrote}</p>}
-              {item?.sharedText && (
+                : !item?.sharedAttachments?.length && <p className="hw-block__empty">{t.nobodyWrote}</p>}
+              <AttachmentList files={item?.sharedAttachments} />
+              {(item?.sharedText || item?.sharedAttachments?.length) && (
                 <p className="hw-block__meta">
-                  {[item.authorName, formatStamp(item.updatedAt), item.version > 1 && t.edit(item.version)].filter(Boolean).join(', ')}
+                  {[item.sharedAuthorName ?? item.authorName, formatStamp(item.sharedUpdatedAt ?? item.updatedAt), (item.sharedVersion ?? item.version) > 1 && t.edit(item.sharedVersion ?? item.version)].filter(Boolean).join(', ')}
                 </p>
               )}
             </div>
-            <div className={`hw-block${item?.personalText ? ' hw-block--personal' : ''}`}>
+            <div className={`hw-block${(item?.personalText || item?.personalAttachments?.length) ? ' hw-block--personal' : ''}`}>
               <p className="hw-block__label">{t.forMe}</p>
               {item?.personalText
                 ? <p className="hw-block__text">{item.personalText}</p>
-                : <p className="hw-block__empty">{item?.sharedText ? t.noOwnVersion : t.noOwnYet}</p>}
+                : !item?.personalAttachments?.length && <p className="hw-block__empty">{item?.sharedText ? t.noOwnVersion : t.noOwnYet}</p>}
+              <AttachmentList files={item?.personalAttachments} />
             </div>
 
             <div className="actions">
               {canEditShared && (
                 <Button stretched size="large" onClick={() => startEditing('shared')}>
-                  {item?.sharedText ? t.editShared : t.writeShared}
+                  {item?.sharedText || item?.sharedAttachments?.length ? t.editShared : t.writeShared}
                 </Button>
               )}
               <Button stretched size="large" variant={canEditShared ? 'secondary' : 'primary'} onClick={() => startEditing('personal')}>
-                {item?.personalText ? t.editOwn : t.writeOwn}
+                {item?.personalText || item?.personalAttachments?.length ? t.editOwn : t.writeOwn}
               </Button>
-              {item?.personalText && (
+              {(item?.personalText || !!item?.personalAttachments?.length) && (
                 <Button stretched variant="ghost" disabled={saving} onClick={() => remove('personal')}>
                   {t.deleteOwn}
                 </Button>
               )}
-              {canEditShared && item?.sharedText && (
+              {canEditShared && (item?.sharedText || !!item?.sharedAttachments?.length) && (
                 <Button
                   stretched
                   variant={confirmDelete ? 'destructive' : 'ghost'}
@@ -249,14 +255,15 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
               onChange={(event) => setText(event.target.value)}
             />
             <p className={`editor__counter${text.length > MAX_LENGTH * 0.9 ? ' is-near' : ''}`}>{text.length} / {MAX_LENGTH}</p>
+            <AttachmentEditor files={files} scope={scope} onChange={setFiles} onBusy={setUploading} />
             <div className="actions">
-              <Button stretched size="large" disabled={!text.trim()} loading={saving} onClick={save}>{t.save}</Button>
+              <Button stretched size="large" disabled={uploading || (!text.trim() && !files.length)} loading={saving} onClick={save}>{t.save}</Button>
               <Button stretched variant="ghost" disabled={saving} onClick={() => setEditing(false)}>{t.cancel}</Button>
             </div>
           </div>
         )}
 
-        {homework.status === 'ready' && !editing && item?.text && !lessonOver && (
+        {homework.status === 'ready' && !editing && (item?.text || !!item?.attachments?.length) && !lessonOver && (
           <div className="hw-block">
             <p className="hw-block__label">{t.reminder}</p>
             <Button stretched variant="secondary" disabled={saving} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', new Date(new Date(lessonMoment(lesson)).getTime() - 600_000).toISOString(), 'lesson', 10), t.beforeLesson)}>{t.beforeLesson}</Button>

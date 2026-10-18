@@ -64,6 +64,7 @@ export const devData = (): Plugin => ({
     for (const [id, name] of [['bgu~33340', 'telek-bi-26-1.html'], ['bgu~32143', 'telek-znb-23-1.html']]) {
       bguSources[id] = { html: await readFile(new URL(`../test/fixtures/bgu/${name}`, import.meta.url), 'utf8'), updatedAt: sources[name].savedAt };
     }
+    const { AttachmentStore } = await backend('../src/storage/attachments.js');
     const { CommunityStore } = await backend('../src/storage/community.js');
     const { PreferencesStore } = await backend('../src/storage/preferences.js');
     const { LessonChangeService } = await backend('../src/services/lesson-change-service.js');
@@ -72,6 +73,7 @@ export const devData = (): Plugin => ({
     server.httpServer?.once('close', () => { void rm(directory, { recursive: true, force: true }); });
     const community = new CommunityStore(join(directory, 'community.json'));
     const preferences = new PreferencesStore(join(directory, 'preferences.json'));
+    community.attachmentStore = new AttachmentStore(join(directory, 'files'), { community, preferences, secret: 'local-demo' });
     const groups = [
       { id: 'irnitu~1', universityId: 'irnitu', title: 'ДЕМО-25-1', institute: 'Демо-институт', course: 1 },
       { id: 'irnitu~2', universityId: 'irnitu', title: 'ДЕМО-24-2', institute: 'Демо-институт', course: 2 },
@@ -134,9 +136,23 @@ export const devData = (): Plugin => ({
       notifications.push({ chatId: item.chatId, text: item.text });
       return { chat: true };
     };
-    const options = { service, community, preferences, lessonChanges, sendAbsence, publishAnnouncement };
-    const api = createHttpServer({ ...options, devUserId: 1 });
-    const apiStudent = createHttpServer({ ...options, devUserId: 2 });
+    const demoFiles = [];
+    for (const [path, name] of [['board.jpg', 'Фото доски.jpg'], ['method.pdf', 'Методичка.pdf']]) {
+      demoFiles.push(await community.attachmentStore.upload(await readFile(new URL(`../test/fixtures/attachments/${path}`, import.meta.url)), {
+        userId: 1, groupId: group.id, scope: 'shared', name,
+      }));
+    }
+    const demoLesson = weeks[1].lessons[0];
+    await community.upsertHomework({ groupId: group.id, groupTitle: group.title, lessonDate: demoLesson.date,
+      lessonNumber: demoLesson.lessonNumber, lessonTime: demoLesson.time, subgroup: demoLesson.subgroup ?? null,
+      subject: demoLesson.subject, text: 'Найдите производные функций 1–5. Фото доски и методичка приложены.',
+      attachments: demoFiles, authorId: 1, authorName: 'Староста' });
+    const onHomeworkSaved = (item: { subject: string; version: number; attachments?: unknown[] }) => {
+      notifications.push({ chatId: -1, text: `${item.subject}: версия ${item.version}, вложений ${item.attachments?.length ?? 0}` });
+    };
+    const options = { service, community, preferences, lessonChanges, sendAbsence, publishAnnouncement, onHomeworkSaved };
+    const api = createHttpServer({ ...options, devUserId: 1, devUserName: 'Староста' });
+    const apiStudent = createHttpServer({ ...options, devUserId: 2, devUserName: 'Студент' });
     const apiEditor = createHttpServer({ ...options, devUserId: 3 });
     const apiBguHeadman = createHttpServer({ ...options, devUserId: 4 });
     const apiBguStudent = createHttpServer({ ...options, devUserId: 5 });

@@ -10,6 +10,7 @@ type WebApp = {
   initDataUnsafe: { user?: MaxUser; start_param?: string };
   platform?: string;
   ready?: () => void;
+  downloadFile?: (url: string, filename: string) => Promise<unknown> | void;
   openLink?: (url: string) => void;
   BackButton?: {
     show: () => void;

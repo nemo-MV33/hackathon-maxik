@@ -62,10 +62,10 @@ const LessonCard = ({ lesson, state, homework, onOpen, metaKind }: CardProps) =>
           <span className="meter" aria-hidden="true"><i style={{ width: `${progress}%` }} /></span>
         </span>
       )}
-      {homework?.text && (
+      {(homework?.text || !!homework?.attachments?.length) && (
         <span className="card__hw">
           <span className="card__hw-label">{homework.source === 'personal' ? t.homeworkMine : t.homeworkShort}</span>
-          <span className="card__hw-text">{homework.text}</span>
+          <span className="card__hw-text">{homework?.text || `${t.attachmentsLabel}: ${homework?.attachments?.length ?? 0}`}</span>
         </span>
       )}
     </button>

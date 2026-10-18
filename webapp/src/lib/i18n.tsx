@@ -13,6 +13,8 @@ const plural = (count: number, one: string, few: string, many: string) => {
 };
 
 const ru = {
+  attachmentsLabel: 'Вложения', attachFiles: 'Прикрепить', removeAttachment: 'Убрать', uploadingFile: 'Загрузка файла', retryAttachment: 'Повторить',
+  openAttachment: 'Открыть / скачать', closeAttachment: 'Закрыть', photoGallery: 'Просмотр фото', previousPhoto: 'Предыдущее', nextPhoto: 'Следующее',
   sourceUnavailable: 'Источник временно недоступен. Показано сохранённое расписание.',
   quietHours: 'Тихие часы',
   quietFrom: 'Не отправлять с',
@@ -466,6 +468,8 @@ const ru = {
 type Dictionary = typeof ru;
 
 const en: Dictionary = {
+  attachmentsLabel: 'Attachments', attachFiles: 'Attach', removeAttachment: 'Remove', uploadingFile: 'Uploading file', retryAttachment: 'Retry',
+  openAttachment: 'Open / download', closeAttachment: 'Close', photoGallery: 'Photo gallery', previousPhoto: 'Previous', nextPhoto: 'Next',
   sourceUnavailable: 'The source is temporarily unavailable. Showing the saved timetable.',
   quietHours: 'Quiet hours',
   quietFrom: 'Do not send from',

@@ -1,3 +1,4 @@
+import { AttachmentList } from './HomeworkAttachments';
 import type { Lesson } from '../data/schedule';
 import type { HomeworkItem } from '../data/homework';
 import type { Announcement } from '../lib/api';
@@ -34,7 +35,7 @@ export const TaskList = ({ tasks, todayKey, onOpenHomework, onOpenAnnouncement, 
       {tasks.map((task) => (
         <li key={task.key}>
           {task.kind === 'homework' ? (
-            <button type="button" className={`task${task.item.source === 'personal' ? ' task--personal' : ''}`} onClick={() => onOpenHomework(task)}>
+            <div><button type="button" className={`task${task.item.source === 'personal' ? ' task--personal' : ''}`} onClick={() => onOpenHomework(task)}>
               <span className="task__top">
                 {showDate && <span className={`task__when${dayDiff(task.date, todayKey) <= 1 ? ' is-soon' : ''}`}>{when(task.date)}</span>}
                 <span className="task__time">{task.time}</span>
@@ -44,7 +45,7 @@ export const TaskList = ({ tasks, todayKey, onOpenHomework, onOpenAnnouncement, 
               <span className="task__title">{task.item.subject}</span>
               <span className="task__text">{task.item.text}</span>
               <ChevronRight size={18} className="task__chevron" />
-            </button>
+            </button><AttachmentList files={task.item.attachments} /></div>
           ) : (
             <button type="button" className="task task--announcement" onClick={() => onOpenAnnouncement?.(task.item)}>
               <span className="task__top">

@@ -1,3 +1,4 @@
+import { AttachmentEditor, type HomeworkAttachment } from '../components/HomeworkAttachments';
 import { lessonDate } from '../lib/timezone';
 import { useEffect, useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
@@ -144,6 +145,9 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
   const [lessonKey, setLessonKey] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [scope, setScope] = useState<'personal' | 'shared'>('personal');
+  const [filesByScope, setFilesByScope] = useState<{ personal: HomeworkAttachment[]; shared: HomeworkAttachment[] }>({ personal: [], shared: [] });
+  const files = filesByScope[scope];
+  const [uploading, setUploading] = useState(false);
   const [remindAt, setRemindAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,11 +165,11 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
   useEffect(() => { setLessonKey(dayLessons[0] ? homeworkKey(dayLessons[0]) : null); setRemindAt(null); }, [date, lessons.status]);
 
   const save = async () => {
-    if (!lesson || !text.trim() || saving) return;
+    if (!lesson || (!text.trim() && !files.length) || saving || uploading) return;
     setSaving(true);
     setError(null);
     try {
-      await saveHomework(lesson, text.trim(), scope, remindAt);
+      await saveHomework(lesson, text.trim(), scope, remindAt, undefined, undefined, files);
       haptic.success();
       onSaved(lesson.date);
       onClose();
@@ -204,28 +208,29 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
             ))}
           </div>
 
-          <p className="field-label">{t.fieldTask}</p>
-          <div className="editor">
-            <Textarea rows={3} maxLength={MAX_LENGTH} placeholder={t.placeholder} value={text} onChange={(event) => setText(event.target.value)} />
-          </div>
-
           {canShare && (
             <>
               <p className="field-label">{t.fieldWho}</p>
               <div className="segment segment--wide" role="radiogroup" aria-label={t.fieldWho}>
-                <button type="button" role="radio" aria-selected={scope === 'personal'} aria-checked={scope === 'personal'} onClick={() => setScope('personal')}>{t.forMe}</button>
-                <button type="button" role="radio" aria-selected={scope === 'shared'} aria-checked={scope === 'shared'} onClick={() => setScope('shared')}>{t.forGroup}</button>
+                <button type="button" role="radio" disabled={uploading} aria-selected={scope === 'personal'} aria-checked={scope === 'personal'} onClick={() => setScope('personal')}>{t.forMe}</button>
+                <button type="button" role="radio" disabled={uploading} aria-selected={scope === 'shared'} aria-checked={scope === 'shared'} onClick={() => setScope('shared')}>{t.forGroup}</button>
               </div>
               <p className="sheet__hint">{scope === 'shared' ? t.sharedScope : t.ownScope}</p>
             </>
           )}
+
+          <p className="field-label">{t.fieldTask}</p>
+          <div className="editor">
+            <Textarea rows={3} maxLength={MAX_LENGTH} placeholder={t.placeholder} value={text} onChange={(event) => setText(event.target.value)} />
+            <AttachmentEditor key={scope} files={files} scope={scope} onChange={(next) => setFilesByScope((current) => ({ ...current, [scope]: next }))} onBusy={setUploading} />
+          </div>
 
           <p className="field-label">{t.reminder}</p>
           <ReminderPicker value={remindAt} onChange={setRemindAt} dateKey={date} now={now} />
 
           {error && <p className="toast toast--error" role="alert">{error}</p>}
           <div className="actions">
-            <Button stretched size="large" disabled={!lesson || !text.trim()} loading={saving} onClick={save}>{t.save}</Button>
+            <Button stretched size="large" disabled={!lesson || uploading || (!text.trim() && !files.length)} loading={saving} onClick={save}>{t.save}</Button>
           </div>
         </>
       )}

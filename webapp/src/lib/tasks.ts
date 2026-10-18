@@ -11,7 +11,7 @@ export const announcementDay = (item: Announcement) => toLocalInput(item.myRemin
 export const buildTasks = (homework: HomeworkItem[], announcements: Announcement[], lessons: Lesson[], todayKey: string): Task[] => {
   const byKey = new Map(lessons.map((lesson) => [homeworkKey(lesson), lesson]));
   const items: Task[] = [
-    ...homework.filter((item) => item.text && lessonDate(byKey.get(homeworkKey(item)) ?? lessonFromHomework(item)) >= todayKey).map((item): Task => ({
+    ...homework.filter((item) => (item.text || item.attachments?.length) && lessonDate(byKey.get(homeworkKey(item)) ?? lessonFromHomework(item)) >= todayKey).map((item): Task => ({
       kind: 'homework', key: `hw:${homeworkKey(item)}`, date: lessonDate(byKey.get(homeworkKey(item)) ?? lessonFromHomework(item)), time: lessonTime(byKey.get(homeworkKey(item)) ?? lessonFromHomework(item)).slice(0, 5), item, lesson: byKey.get(homeworkKey(item)),
     })),
     ...announcements.filter((item) => announcementDay(item) >= todayKey).map((item): Task => ({
