@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -274,4 +274,25 @@ test('расписание применяет оверлей после норм
   const raw = await service.groupSchedule(1, { week: new Date(2026, 9, 19), raw: true });
   assert.equal(raw.lessons[0].date, FROM.date);
   assert.equal(raw.lessons[0].markedBy, undefined);
+});
+
+
+test('старый снимок без типа занятия обновляет базу без отмены ДЗ и ложной рассылки', async (t) => {
+  const { community, changes, preferences, service, state, bot, directory, sent } = await setup(t);
+  const { lessonType, ...legacy } = FROM;
+  const snapshotsPath = join(directory, 'snapshots.json');
+  await writeFile(snapshotsPath, JSON.stringify({ 1: { ...range, takenAt: NOW.toISOString(), lessons: [legacy] } }));
+  await community.upsertHomework(oldHomework);
+  state.lessons = [FROM];
+  const notifications = new NotificationService({ community, preferences, service, bot, lessonChanges: changes, snapshotsPath, now: () => NOW });
+  assert.equal(await notifications.checkChanges({ near: true }), 0);
+  assert.equal(sent.length, 0);
+  assert.equal((await homework(community))[0].lessonDate, FROM.date);
+  assert.equal((await homework(community))[0].status, 'active');
+  assert.equal((await homework(community))[0].history, undefined);
+  assert.equal(JSON.parse(await readFile(snapshotsPath, 'utf8'))['1'].schemaVersion, 2);
+  state.lessons = [TO];
+  await notifications.checkChanges();
+  assert.equal((await homework(community))[0].lessonDate, TO.date);
+  assert.equal(sent.filter((item) => item.chatId).length, 1);
 });

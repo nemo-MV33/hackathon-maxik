@@ -399,9 +399,10 @@ export class NotificationService {
         const recipients = group.users.filter(({ prefs }) => notificationEnabled(prefs, 'changes'));
 
         const previous = await this.snapshots.get(groupId);
+        const legacySnapshot = previous?.lessons.some((lesson) => typeof lesson.lessonType !== 'string');
         let lessons;
         try {
-          const keys = near && previous ? [from, irkutskDateKey(now, 1)] : [from, irkutskDateKey(now, 7), to];
+          const keys = near && previous && !legacySnapshot ? [from, irkutskDateKey(now, 1)] : [from, irkutskDateKey(now, 7), to];
           const weeks = await Promise.all([...new Set(keys.map((key) => { const date = dateFromKey(key); date.setDate(date.getDate() - (date.getDay() + 6) % 7); return date.toISOString(); }))].map((key) =>
             this.service.groupSchedule(groupId, { week: new Date(key), raw: true, fresh: true })));
           const seen = new Set();
@@ -414,12 +415,14 @@ export class NotificationService {
           continue;
         }
 
-        if (near && previous) {
+        if (near && previous && !legacySnapshot) {
           const weeks = new Set([from, irkutskDateKey(now, 1)].map((key) => toDateKey(startOfWeek(dateFromKey(key)))));
           lessons = [...previous.lessons.filter((lesson) => !weeks.has(toDateKey(startOfWeek(dateFromKey(lesson.date)))) && lesson.date >= from && lesson.date <= to), ...lessons];
         }
-        if (!previous) {
-          await this.snapshots.set(groupId, { from, to, takenAt: now.toISOString(), lessons });
+        // Старый формат не сохранял тип занятия: сравнение сочло бы все пары заменёнными.
+        // Первый новый снимок становится базой, ДЗ и уведомления при этом не меняются.
+        if (!previous || legacySnapshot) {
+          await this.snapshots.set(groupId, { schemaVersion: 2, from, to, takenAt: now.toISOString(), lessons });
           continue;
         }
         const range = { from: from > previous.from ? from : previous.from, to: to < previous.to ? to : previous.to };
@@ -451,7 +454,7 @@ export class NotificationService {
           const result = this.lessonChanges ? await this.lessonChanges.official(groupId, change, `${previous.takenAt}:${change.type}:${lessonKey(change.previous ?? change.lesson)}:${lessonKey(change.lesson)}`) : null;
           if (!result?.silent) visible.push({ ...change, homework: result?.homework });
         }
-        await this.snapshots.set(groupId, { from, to, takenAt: now.toISOString(), lessons });
+        await this.snapshots.set(groupId, { schemaVersion: 2, from, to, takenAt: now.toISOString(), lessons });
         if (!visible.length) continue;
         if (this.lessonChanges) await this.lessonChanges.notifyChats(groupId, visible);
 
