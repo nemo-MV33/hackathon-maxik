@@ -1,0 +1,9 @@
+[Unit]
+Description=Encrypted and verified norfly off-VM backup
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/yc-user/norfly/ops/backup.sh
+TimeoutStartSec=1h

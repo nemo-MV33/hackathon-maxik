@@ -11,7 +11,8 @@
     "build:web": "npm --prefix webapp run build",
     "export:schedule": "node scripts/export-schedule.js",
     "check:bgu": "node scripts/check-bgu.js",
-    "check:contracts": "node scripts/check-contracts.js"
+    "check:contracts": "node scripts/check-contracts.js",
+    "backup:restore": "node scripts/backup.js restore"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.2.2",
