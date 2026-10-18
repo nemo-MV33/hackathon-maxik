@@ -1,3 +1,4 @@
+import { irkutskDateKey, dateFromKey } from '../src/lib/irkutsk.js';
 import { historyText } from '../src/bot/homework-history.js';
 import { AttachmentStore } from '../src/storage/attachments.js';
 import assert from 'node:assert/strict';
@@ -642,7 +643,7 @@ test('староста отмечает перенос кнопками груп
   await community.setChat(GROUP_CHAT.chat_id, { group, headman: { userId: HEADMAN.user_id, name: HEADMAN.name } });
   await preferences.set(HEADMAN.user_id, { selection: group, lang: 'ru' });
   await preferences.set(STUDENT.user_id, { selection: group, lang: 'ru' });
-  const from = lessonsFor(new Date()).find((lesson) => lesson.date >= toDateKey(new Date()) && lesson.subgroup === null);
+  const from = lessonsFor(dateFromKey(irkutskDateKey())).find((lesson) => lesson.date >= irkutskDateKey() && lesson.subgroup === null);
   const targetDate = toDateKey(addDays(new Date(from.date), 1));
   await community.upsertHomework({ groupId: group.id, lessonDate: from.date, lessonNumber: from.lessonNumber,
     lessonTime: from.time, subgroup: null, subject: from.subject, text: 'Задачи 1–5' });
@@ -709,7 +710,7 @@ test('бот: текст и фото одним сообщением, серия
   community.attachmentStore = new AttachmentStore(join(directory, 'files'), { community, preferences, secret: 'test' });
   await community.setChat(GROUP_CHAT.chat_id, { group: { id: 11, title: 'ИСТб-25-1' }, headman: { userId: HEADMAN.user_id } });
   await preferences.set(HEADMAN.user_id, { selection: { kind: 'group', id: 11, title: 'ИСТб-25-1' }, lang: 'ru' });
-  const date = toDateKey(new Date());
+  const date = irkutskDateKey();
   const photo = { type: 'image', payload: { token: 'photo-token', url: 'https://photo.okcdn.ru/test' } };
   await press(HEADMAN, `gh:${date}:1:0`, { chat: GROUP_CHAT });
   await say(HEADMAN, 'x'.repeat(2001), { chat: GROUP_CHAT, mid: 'too-long' });

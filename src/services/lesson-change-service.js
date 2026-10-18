@@ -1,6 +1,6 @@
 import { withDeadline, dueReminderAt } from '../lib/homework-details.js';
 import { groupKey, sameGroup } from '../universities/identity.js';
-import { zonedMoment } from '../lib/timezone.js';
+import { zonedMoment, lessonMoments, universityTimeZone } from '../lib/timezone.js';
 import { randomUUID } from 'node:crypto';
 import { parseDateKey } from '../lib/date.js';
 import { HttpError } from '../http/routes/me.js';
@@ -41,6 +41,19 @@ export class LessonChangeService {
     return compact(found);
   }
 
+  async target(groupId, source, input) {
+    if (input?.custom === undefined) return this.find(groupId, input);
+    if (input.custom !== true) throw new HttpError(400, 'invalid_target');
+    if (!parseDateKey(input.date) || !/^([01]\d|2[0-3]):[0-5]\d–([01]\d|2[0-3]):[0-5]\d$/.test(input.time ?? '')) {
+      throw new HttpError(400, 'invalid_target');
+    }
+    const [begin, end] = input.time.split('–');
+    if (end <= begin || (input.date === source.date && input.time === source.time)) throw new HttpError(400, 'invalid_target');
+    const minute = Number(begin.slice(0, 2)) * 60 + Number(begin.slice(3));
+    // Отдельный диапазон идентификаторов не занимает слот исходного расписания.
+    return lessonMoments({ ...source, date: input.date, time: input.time, lessonNumber: 1000 + minute, custom: true }, universityTimeZone(groupId));
+  }
+
   async apply(groupId, from, to, id, by = 'schedule', actor = {}) {
     const at = this.now().toISOString();
     await this.community.relocateHomework(groupId, from, to, { id, at, by, authorId: actor.authorId, authorName: actor.authorName });
@@ -66,18 +79,24 @@ export class LessonChangeService {
     return this.#serial(async () => {
       await this.authorize(groupId, user.id);
       const source = await this.find(groupId, from);
-      const target = to === null ? null : await this.find(groupId, to);
+      const target = to === null ? null : await this.target(groupId, source, to);
       if (target && (sameSlot(source, target) || source.subgroup !== target.subgroup)) {
         throw new HttpError(400, 'invalid_target', 'Выбери другую пару той же подгруппы');
       }
       const records = await this.community.lessonChanges(groupId);
       const existing = records.find((item) => item.status === 'pending' && sameSlot(item.from, source));
-      if (existing) {
-        if ((!target && !existing.to) || sameSlot(existing.to, target)) return existing;
-        throw new HttpError(409, 'move_exists', 'Сначала отмени текущую отметку');
+      if (existing && ((!target && !existing.to) || (sameSlot(existing.to, target) && (!target.custom || existing.to.time === target.time)))) return existing;
+      if (existing && !target?.custom) throw new HttpError(409, 'move_exists');
+      if (records.some((item) => item.id !== existing?.id && item.status === 'pending' && (sameSlot(item.to, source) || (target && (sameSlot(item.to, target) || sameSlot(item.from, target)))))) {
+        throw new HttpError(409, 'move_exists');
       }
-      if (records.some((item) => item.status === 'pending' && (sameSlot(item.to, source) || (target && (sameSlot(item.to, target) || sameSlot(item.from, target)))))) {
-        throw new HttpError(409, 'move_exists', 'Сначала отмени текущую отметку');
+      if (existing) {
+        const changed = { ...existing, to: target, at: this.now().toISOString(), authorId: user.id,
+          authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || String(user.id) };
+        const homework = await this.apply(groupId, existing.to ?? source, target, `${existing.id}:edit:${randomUUID()}`, 'headman', changed);
+        await this.community.saveLessonChange(changed);
+        await this.notifyChats(groupId, [{ type: 'moved', previous: existing.to ?? source, lesson: target, homework }], changed);
+        return changed;
       }
       const item = { id: randomUUID(), groupId, from: source, to: target, status: 'pending', at: this.now().toISOString(),
         authorId: user.id, authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || String(user.id) };
@@ -112,8 +131,9 @@ export class LessonChangeService {
       const records = await this.community.lessonChanges(groupId);
       const manual = records.find((item) => item.status === 'pending' && sameSlot(item.from, source));
       if (manual) {
-        const confirmed = change.type === 'moved' ? sameSlot(manual.to, target) : change.type === 'cancelled' && !manual.to;
+        const confirmed = change.type === 'moved' ? (manual.to?.custom ? manual.to.date === target?.date && manual.to.time === target?.time : sameSlot(manual.to, target)) : change.type === 'cancelled' && !manual.to;
         if (confirmed) {
+          if (manual.to?.custom && target) await this.apply(groupId, manual.to, target, `${id}:confirm`);
           await this.community.saveLessonChange({ ...manual, status: 'confirmed', confirmedAt: this.now().toISOString() });
           return finish({ silent: true });
         }
@@ -134,8 +154,9 @@ export class LessonChangeService {
       if (item.status !== 'pending') continue;
       result = result.filter((lesson) => !sameSlot(lesson, item.from));
       if (item.to && item.to.date >= from && item.to.date <= to) {
-        result = result.filter((lesson) => !sameSlot(lesson, item.to));
+        if (!item.to.custom) result = result.filter((lesson) => !sameSlot(lesson, item.to));
         result.push({ ...item.from, date: item.to.date, time: item.to.time, lessonNumber: item.to.lessonNumber,
+          ...lessonMoments({ date: item.to.date, time: item.to.time }, item.to.timeZone ?? item.from.timeZone ?? universityTimeZone(groupId)),
           transferred: true, markedBy: item.authorName, markedAt: item.at, moveId: item.id });
       }
     }

@@ -52,11 +52,15 @@ test('demo reset clears only demo data, reminders and marks, restores seed, rema
   await community.upsertHomework({ groupId: 'bgu~11', lessonDate: lesson.date, lessonNumber: 1, lessonTime: lesson.time, text: 'Настоящая группа' });
   await preferences.set(2, { selection: { ...DEMO_GROUP, kind: 'group' }, homeworkReminders: { x: { at: '2099' } } });
   const options = { community, preferences, ids: ['1', '2', '3'], chatId: -100, now: new Date('2026-10-18') };
-  await resetDemo(options); await community.setPersonalHomework(2, { groupId: DEMO_GROUP.id, lessonDate: lesson.date, lessonNumber: 1, text: 'Секрет' });
+  await resetDemo(options);
+  const demoId = (await community.attachmentRecords()).find((item) => item.groupId === DEMO_GROUP.id).id;
+  await preferences.set(2, { ...await preferences.get(2), homeworkCompleted: { [demoId]: { revision: 'demo' }, real: { revision: 'keep' } } });
+  await community.setPersonalHomework(2, { groupId: DEMO_GROUP.id, lessonDate: lesson.date, lessonNumber: 1, text: 'Секрет' });
   await community.saveLessonChange({ id: 'demo-move', groupId: DEMO_GROUP.id });
   await resetDemo(options); await resetDemo(options);
   assert.equal((await community.attachmentRecords()).filter((item) => item.groupId === DEMO_GROUP.id).length, 1);
   assert.equal((await community.lessonChanges(DEMO_GROUP.id)).length, 0); assert.deepEqual((await preferences.get(2)).homeworkReminders, {});
+  assert.deepEqual((await preferences.get(2)).homeworkCompleted, { real: { revision: 'keep' } });
   assert.equal((await community.homeworkForGroup('bgu~11', { from: '2026-01-01' }))[0].text, 'Настоящая группа');
 });
 

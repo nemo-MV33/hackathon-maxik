@@ -1,3 +1,4 @@
+import { homeworkCompleted } from '../lib/homework-completion.js';
 import { withDeadline, detailsText, dueReminderAt } from '../lib/homework-details.js';
 import { isDemo, demoAllowed } from './demo-service.js';
 import { attachmentSummary } from '../bot/homework-attachments.js';
@@ -357,6 +358,7 @@ export class NotificationService {
           const lesson = { date, lessonNumber: Number(lessonNumber), subgroup: Number(subgroup) || null };
           const homework = (await this.community.homeworkForUser(prefs.selection.id, id, { from: date, to: date, subgroup: prefs.subgroup }))
             .find((item) => item.lessonNumber === lesson.lessonNumber && (item.subgroup ?? null) === lesson.subgroup);
+          if (homeworkCompleted(homework, prefs)) continue;
           const at = reminder.mode?.startsWith('due-') ? dueReminderAt(homework ? (await withDeadline(homework, this.service)).dueAt : null, reminder.mode, prefs) : reminder.at;
           if (!at || new Date(at) > now || now - new Date(at) > 6 * 60 * MINUTE) continue;
           const key = `${groupKey(prefs.selection.id)}|h:${lessonKey}:${at}`;

@@ -1,3 +1,4 @@
+import { completionRevision, homeworkCompleted } from '../../lib/homework-completion.js';
 import { detailsInput, withDeadline, dueReminderAt } from '../../lib/homework-details.js';
 import { sameGroup, groupKey } from '../../universities/identity.js';
 import { zonedMoment, zonedDateKey, profileTimeZone } from '../../lib/timezone.js';
@@ -47,11 +48,13 @@ const lessonInput = (body) => {
   }
   if (body.reminderMode !== undefined && !['fixed', 'lesson', 'due-day', 'due-morning'].includes(body.reminderMode)) throw new HttpError(400, 'invalid_remind_at', 'Неизвестный тип напоминания');
   if (body.minutesBefore !== undefined && (!Number.isFinite(body.minutesBefore) || body.minutesBefore < 0)) throw new HttpError(400, 'invalid_remind_at', 'Некорректный интервал напоминания');
-  if (!['shared', 'personal', 'reminder'].includes(body.scope)) throw new HttpError(400, 'invalid_scope', 'Неизвестный тип ДЗ');
+  if (!['shared', 'personal', 'reminder', 'completion'].includes(body.scope)) throw new HttpError(400, 'invalid_scope', 'Неизвестный тип ДЗ');
   if (body.restoreVersion !== undefined && (body.scope !== 'shared' || !Number.isInteger(body.restoreVersion) || body.restoreVersion < 1)) throw new HttpError(400, 'invalid_version');
   if (body.text != null && typeof body.text !== 'string') throw new HttpError(400, 'invalid_text');
   // scope: 'reminder' — только личное напоминание к паре, текст ДЗ не трогаем.
-  if (body.scope === 'reminder') {
+  if (body.scope === 'completion') {
+    if (typeof body.completed !== 'boolean' || !(/^[a-f0-9]{64}$/.test(body.revision ?? ''))) throw new HttpError(400, 'invalid_completion');
+  } else if (body.scope === 'reminder') {
     if (!('remindAt' in body)) throw new HttpError(400, 'invalid_remind_at', 'Нужно время напоминания или null');
   } else if (body.restoreVersion === undefined && body.text !== null && (typeof body.text !== 'string' || (!body.text.trim() && !body.attachmentIds?.length))) {
     throw new HttpError(400, 'invalid_text', 'ДЗ не может быть пустым');
@@ -63,7 +66,7 @@ const lessonInput = (body) => {
     lessonDate: body.date,
     lessonNumber: body.lessonNumber,
     subgroup: body.subgroup ?? null,
-    text: body.scope === 'reminder' || body.restoreVersion !== undefined ? null : body.text?.trim() ?? null,
+    text: ['reminder', 'completion'].includes(body.scope) || body.restoreVersion !== undefined ? null : body.text?.trim() ?? null,
     scope: body.scope,
     remindAt: reminderInput(body),
   };
@@ -83,6 +86,8 @@ const findLesson = async (service, groupId, input) => {
 };
 
 const serialize = (item, reminders = {}, profile = {}) => ({
+  completed: homeworkCompleted(item, profile),
+  completionRevision: completionRevision(item),
   deadline: item.deadline ?? { kind: 'lesson' },
   submission: item.submission ?? null,
   dueAt: item.dueAt ?? null,
@@ -170,6 +175,18 @@ export const putHomework = async ({ user, preferences, community, service, body,
   if (body.groupId != null && !sameGroup(body.groupId, group.id)) throw new HttpError(409, 'profile_out_of_sync');
   if (input.scope === 'shared' && await community.homeworkRoleForGroup(group.id, user.id) === 'student') {
     throw new HttpError(403, 'homework_forbidden', 'Нет прав на изменение общего ДЗ');
+  }
+  if (input.scope === 'completion') {
+    const effective = (await community.homeworkForUser(group.id, user.id, { from: input.lessonDate, to: input.lessonDate }))
+      .find((item) => reminderKey(item) === reminderKey(input));
+    if (!effective) throw new HttpError(404, 'homework_not_found');
+    if (body.revision !== completionRevision(effective)) throw new HttpError(409, 'homework_changed');
+    const current = await preferences.get(user.id);
+    const completed = { ...current.homeworkCompleted };
+    if (body.completed) completed[effective.id] = { revision: body.revision, at: new Date().toISOString() };
+    else delete completed[effective.id];
+    await preferences.set(user.id, { ...current, homeworkCompleted: completed });
+    return { completed: body.completed };
   }
   const lesson = await findLesson(service, group.id, input);
   const details = detailsInput(body, group.id);

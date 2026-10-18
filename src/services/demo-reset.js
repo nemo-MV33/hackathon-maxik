@@ -3,10 +3,13 @@ import { sameGroup } from '../universities/identity.js';
 import { addDays, startOfWeek } from '../lib/date.js';
 export const resetDemo = async ({ community, preferences, now = new Date(), ids = (process.env.DEMO_MAX_IDS || '').split(',').map((id) => id.trim()).filter(Boolean), chatId = process.env.DEMO_CHAT_ID }) => {
   if (!ids.length || !ids.every((id) => /^[1-9]\d*$/.test(String(id))) || !/^-?\d+$/.test(String(chatId ?? ''))) throw new Error('demo_ids_and_chat_required');
+  const demoHomework = new Set((await community.attachmentRecords()).filter((item) => sameGroup(item.groupId, DEMO_GROUP.id)).map((item) => item.id));
   await community.resetGroup(DEMO_GROUP.id);
   for (const [id, profile] of await preferences.entries()) {
+    const homeworkCompleted = Object.fromEntries(Object.entries(profile.homeworkCompleted ?? {}).filter(([key]) => !demoHomework.has(key)));
+    if (Object.keys(homeworkCompleted).length !== Object.keys(profile.homeworkCompleted ?? {}).length) await preferences.set(id, { ...profile, homeworkCompleted });
     if (profile.selection?.kind === 'group' && sameGroup(profile.selection.id, DEMO_GROUP.id)) await preferences.set(id, { ...profile,
-      homeworkReminders: {}, announcementReminders: {}, sentScheduled: [], sentReminders: [], examReminders: [], summarySentFor: null });
+      homeworkCompleted, homeworkReminders: {}, announcementReminders: {}, sentScheduled: [], sentReminders: [], examReminders: [], summarySentFor: null });
   }
   await community.setChat(Number(chatId), { group: DEMO_GROUP, headman: { userId: Number(ids[0]), name: 'Староста демо' }, editors: ids.slice(2).map((id) => ({ userId: Number(id), name: 'Редактор демо' })), homeworkMode: 'editors' });
   const lesson = demoLessons(addDays(startOfWeek(now), 7))[0];

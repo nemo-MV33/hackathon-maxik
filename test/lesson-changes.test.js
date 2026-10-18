@@ -296,3 +296,83 @@ test('старый снимок без типа занятия обновляе�
   assert.equal((await homework(community))[0].lessonDate, TO.date);
   assert.equal(sent.filter((item) => item.chatId).length, 1);
 });
+
+test('custom move adds a separate class without replacing an occupied slot; homework and reminders follow', async (t) => {
+  const { community, preferences, changes, state } = await setup(t);
+  await community.upsertHomework(oldHomework);
+  await community.setPersonalHomework(2, { ...oldHomework, text: 'Личная версия' });
+  await preferences.set(2, { ...await preferences.get(2), homeworkReminders: { [lessonSlot(FROM)]: { mode: 'lesson', minutesBefore: 10, at: '2026-10-19T00:05:00Z' } } });
+  const moved = await changes.manual({ groupId: 1, user: USER, from: FROM, to: { custom: true, date: TO.date, time: TO.time } });
+  assert.ok(moved.to.lessonNumber >= 1000);
+  const overlay = await changes.overlay(1, state.lessons, range.from, range.to);
+  assert.equal(overlay.length, 2);
+  assert.ok(overlay.some((item) => item.lessonNumber === TO.lessonNumber));
+  const custom = overlay.find((item) => item.lessonNumber === moved.to.lessonNumber);
+  assert.equal(custom.subject, FROM.subject);
+  assert.equal(custom.startsAt, '2026-10-20T02:00:00.000Z');
+  assert.equal(custom.endsAt, '2026-10-20T03:30:00.000Z');
+  const items = await community.homeworkForUser(1, 2, range);
+  assert.equal(items[0].lessonNumber, moved.to.lessonNumber);
+  assert.equal(items[0].personalText, 'Личная версия');
+  assert.equal((await preferences.get(2)).homeworkReminders[lessonSlot(moved.to)].at, '2026-10-20T01:50:00.000Z');
+  await changes.undo(1, USER, moved.id);
+  assert.equal((await homework(community))[0].lessonNumber, FROM.lessonNumber);
+  assert.deepEqual(await changes.overlay(1, state.lessons, range.from, range.to), state.lessons);
+});
+
+test('custom target rejects invalid date, clocks, unchanged time and student writes', async (t) => {
+  const { changes } = await setup(t);
+  for (const target of [
+    { date: '2026-02-30', time: '10:00–11:30' }, { date: TO.date, time: '24:00–25:00' },
+    { date: TO.date, time: '11:00–10:00' }, { date: TO.date, time: '10:00–10:00' },
+    { date: FROM.date, time: FROM.time },
+  ]) await assert.rejects(changes.manual({ groupId: 1, user: USER, from: FROM, to: { ...target, custom: true } }), { error: 'invalid_target' });
+  await assert.rejects(changes.manual({ groupId: 1, user: { id: 2 }, from: FROM, to: { custom: true, date: TO.date, time: TO.time } }), { status: 403 });
+});
+
+test('official confirmation converts a custom move to the official slot without losing homework', async (t) => {
+  const { changes, community, state } = await setup(t);
+  await community.upsertHomework(oldHomework);
+  const move = await changes.manual({ groupId: 1, user: USER, from: FROM, to: { custom: true, date: TO.date, time: TO.time } });
+  state.lessons = [TO];
+  const result = await changes.official(1, { type: 'moved', previous: FROM, lesson: TO }, 'custom-confirm');
+  assert.equal(result.silent, true);
+  assert.equal((await community.lessonChanges(1)).find((item) => item.id === move.id).status, 'confirmed');
+  assert.equal((await homework(community))[0].lessonNumber, TO.lessonNumber);
+  assert.equal((await homework(community))[0].text, oldHomework.text);
+});
+
+test('custom move can be rescheduled atomically and undone to the original class', async (t) => {
+  const { changes, community, state } = await setup(t);
+  await community.upsertHomework(oldHomework);
+  const first = await changes.manual({ groupId: 1, user: USER, from: FROM, to: { custom: true, date: TO.date, time: TO.time } });
+  const edited = await changes.manual({ groupId: 1, user: USER, from: FROM, to: { custom: true, date: '2026-10-22', time: '15:00–16:30' } });
+  assert.equal(edited.id, first.id);
+  assert.equal((await community.lessonChanges(1)).length, 1);
+  assert.equal((await homework(community))[0].lessonDate, '2026-10-22');
+  const overlay = await changes.overlay(1, state.lessons, range.from, range.to);
+  assert.equal(overlay.length, 2); assert.equal(overlay.at(-1).time, '15:00–16:30');
+  await changes.undo(1, USER, first.id);
+  assert.equal((await homework(community))[0].lessonDate, FROM.date);
+  assert.equal((await homework(community))[0].text, oldHomework.text);
+});
+
+test('HTTP custom move remains editable as homework and completion at its new time', async (t) => {
+  const { service, community, preferences, changes } = await setup(t);
+  await community.upsertHomework(oldHomework);
+  const server = createHttpServer({ service, community, preferences, lessonChanges: changes, devUserId: 1 });
+  await new Promise((done) => server.listen(0, '127.0.0.1', done));
+  t.after(() => new Promise((done) => server.close(done)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const put = (path, body, method = 'PUT') => fetch(base + path, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const moved = await put('/api/lesson-changes', { from: FROM, to: { custom: true, date: '2026-10-22', time: '14:00–15:30' } }, 'POST');
+  assert.equal(moved.status, 200); const target = (await moved.json()).item.to;
+  const saved = await put('/api/homework', { date: target.date, lessonNumber: target.lessonNumber, subgroup: null, scope: 'shared', text: 'ДЗ к новому времени' });
+  assert.equal(saved.status, 200);
+  const item = (await saved.json()).item;
+  const marked = await put('/api/homework', { date: item.date, lessonNumber: item.lessonNumber, subgroup: null, scope: 'completion', completed: true, revision: item.completionRevision });
+  assert.equal(marked.status, 200);
+  const result = await (await fetch(`${base}/api/homework?groupId=1&from=2026-10-22&to=2026-10-22`)).json();
+  assert.equal(result.items[0].completed, true);
+  assert.equal(result.items[0].dueAt, '2026-10-22T06:00:00.000Z');
+});

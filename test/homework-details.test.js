@@ -124,3 +124,52 @@ test('restoring content version does not undo cancellation of its lesson', async
   const restored = await community.restoreHomework(group.id, 3, current, 1, 'Редактор');
   assert.equal(restored.text, 'Исходное'); assert.equal(restored.status, 'orphaned');
 });
+
+test('completion is private, reversible and invalidated by a new assignment revision', async (t) => {
+  const { save, list, preferences, community } = await setup(t);
+  await save(1, 'Задачи');
+  const current = (await list(2)).items[0];
+  const mark = (id, completed, revision = current.completionRevision) => save(id, null, 'completion', { completed, revision });
+  await mark(2, true);
+  assert.equal((await list(2)).items[0].completed, true);
+  assert.equal((await list(4)).items[0].completed, false);
+  assert.equal((await community.homeworkForGroup(group.id, { from: lesson.date }))[0].version, 1);
+  await mark(2, false);
+  assert.equal((await list(2)).items[0].completed, false);
+  await mark(2, true);
+  await save(1, 'Новые задачи');
+  assert.equal((await list(2)).items[0].completed, false);
+  await assert.rejects(mark(2, true), { error: 'homework_changed' });
+  await assert.rejects(save(2, null, 'completion', { completed: 'yes', revision: current.completionRevision }), { error: 'invalid_completion' });
+  await preferences.set(5, { selection: { kind: 'group', id: 'bgu~12', title: 'Другая' } });
+  await assert.rejects(mark(5, true), { error: 'homework_not_found' });
+});
+
+test('completion follows the effective personal version and survives a class move', async (t) => {
+  const { save, list, community, preferences } = await setup(t);
+  await save(1, 'Общее');
+  await save(2, 'Личное', 'personal');
+  const current = (await list(2)).items[0];
+  await save(2, null, 'completion', { completed: true, revision: current.completionRevision });
+  await save(1, 'Изменилось только общее');
+  assert.equal((await list(2)).items[0].completed, true);
+  await community.relocateHomework(group.id, lesson, next, { id: 'move' });
+  const result = await getHomework({ user: { id: 2 }, preferences, community, service: { groupSchedule: async () => ({ lessons: [next] }) }, url: new URL(`http://test/api/homework?groupId=11&from=${next.date}&to=${next.date}`) });
+  assert.equal(result.items[0].completed, true);
+  await putHomework({ user: { id: 2 }, preferences, community, service: { groupSchedule: async () => ({ lessons: [next] }) }, body: { date: next.date, lessonNumber: next.lessonNumber, subgroup: null, scope: 'personal', text: null } });
+  const shared = (await list(2)).items[0];
+  assert.equal(shared.source, 'shared'); assert.equal(shared.completed, false);
+});
+
+test('completed homework does not send its scheduled reminder; new content enables it again', async (t) => {
+  const { save, list, community, preferences, service } = await setup(t);
+  await save(1, 'Задачи');
+  await save(2, null, 'reminder', { remindAt: '2099-10-19T00:00:00Z' });
+  await save(2, null, 'completion', { completed: true, revision: (await list(2)).items[0].completionRevision });
+  const sent = [];
+  const notifications = new NotificationService({ community, preferences, service, bot: { api: { sendMessageToUser: async (...args) => sent.push(args) } }, now: () => new Date('2099-10-19T00:00:30Z') });
+  assert.equal(await notifications.sendScheduled(), 0);
+  await save(1, 'Новый вариант');
+  assert.equal(await notifications.sendScheduled(), 1);
+  assert.equal(sent.length, 1);
+});
