@@ -24,7 +24,7 @@ export const installDemo = (service) => {
   service.searchGroups = async (query, options = {}) => {
     const matchesDemo = (options.universityId ?? 'irnitu') === 'irnitu' && demoAllowed() && (!query || DEMO_GROUP.title.toLowerCase().includes(query.toLowerCase()))
       && (!options.institute || options.institute === DEMO_GROUP.institute) && (!options.course || Number(options.course) === 1);
-    if (query && matchesDemo) return [DEMO_GROUP];
+    if (query?.trim().toLowerCase().startsWith('демо') && matchesDemo) return [DEMO_GROUP];
     const items = await search(query, options).catch((error) => { if (demoAllowed()) return []; throw error; });
     if (matchesDemo) return [DEMO_GROUP, ...items].slice(0, options.limit ?? 50);
     return items;

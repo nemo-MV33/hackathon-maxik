@@ -1,3 +1,4 @@
+import { historyText } from '../src/bot/homework-history.js';
 import { AttachmentStore } from '../src/storage/attachments.js';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -766,4 +767,7 @@ test('необязательные срок, способ сдачи, напом
   const latest = (await community.homeworkForGroup(11, { from: day }))[0];
   assert.equal(latest.deadline.kind, 'lesson'); assert.equal(latest.history.at(-1).restoredFrom, 1);
   const [list] = await say(STUDENT, '/homework'); assert.match(list.text, /Срок/); assert.match(JSON.stringify(list.extra), /История/);
+  const longHistory = historyText(Array.from({ length: 10 }, (_, index) => ({ type: 'edited', at: new Date().toISOString(), version: index + 1, after: { text: 'Задание '.repeat(100), submission: { kind: 'other', label: 'Описание '.repeat(100), url: 'https://example.org' } } })));
+  assert.ok(longHistory.length < 3900);
+  for (const version of [6, 7, 8, 9, 10]) assert.ok(longHistory.includes(`v${version} ·`));
 });

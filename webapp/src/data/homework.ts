@@ -4,7 +4,23 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Lesson } from './schedule';
 import { apiRequest } from '../lib/api';
 
+export type Deadline = { kind: 'lesson' | 'next' | 'date'; local?: string; at?: string; timeZone?: string };
+export type Submission = { kind: 'class' | 'moodle' | 'system' | 'email' | 'other'; label?: string; url?: string | null };
+export type HomeworkSnapshot = { text: string; attachments?: HomeworkAttachment[]; deadline?: Deadline; submission?: Submission | null };
+export type HomeworkEvent = { type: string; version?: number; at: string; by?: string | number; authorName?: string; before?: HomeworkSnapshot | null; after?: HomeworkSnapshot; restoredFrom?: number; added?: HomeworkAttachment[]; removed?: HomeworkAttachment[]; from?: { date: string; time?: string }; to?: { date: string; time?: string } | null };
+export type HomeworkDetailsInput = { deadline?: Deadline; submission?: Submission | null; restoreVersion?: number };
 export type HomeworkItem = {
+  deadline?: Deadline;
+  submission?: Submission | null;
+  dueAt?: string | null;
+  sharedDueAt?: string | null;
+  personalDueAt?: string | null;
+  sharedDeadline?: Deadline;
+  personalDeadline?: Deadline;
+  sharedSubmission?: Submission | null;
+  personalSubmission?: Submission | null;
+  sharedHistory?: HomeworkEvent[];
+  personalHistory?: HomeworkEvent[];
   attachments?: HomeworkAttachment[];
   sharedAttachments?: HomeworkAttachment[];
   personalAttachments?: HomeworkAttachment[];
@@ -26,6 +42,7 @@ export type HomeworkItem = {
   authorName: string | null;
   version: number;
   remindAt: string | null;
+  reminderMode?: 'fixed' | 'lesson' | 'due-day' | 'due-morning' | null;
 };
 
 export type HomeworkData = {
@@ -45,13 +62,13 @@ export const homeworkKey = (lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subg
   `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 
 export const loadHomework = (groupId: string | number, from: string, to: string) =>
-  apiRequest<HomeworkData>(`/api/homework?groupId=${groupId}&from=${toDateKey(addDays(fromDateKey(from), -1))}&to=${toDateKey(addDays(fromDateKey(to), 1))}`);
+  apiRequest<HomeworkData>(`/api/homework?groupId=${groupId}&from=${toDateKey(addDays(fromDateKey(from), -1))}&to=${toDateKey(addDays(fromDateKey(to), 1))}&includeOverdue=true`);
 
 // remindAt: undefined — напоминание не трогаем, null — снять, ISO — поставить (напоминание личное).
 export const saveHomework = (
-  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup' | 'groupId'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null, reminderMode?: 'fixed' | 'lesson', minutesBefore?: number, attachments?: HomeworkAttachment[],
+  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup' | 'groupId'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null, reminderMode?: 'fixed' | 'lesson' | 'due-day' | 'due-morning', minutesBefore?: number, attachments?: HomeworkAttachment[], details?: HomeworkDetailsInput,
 ) =>
-  apiRequest('/api/homework', {
+  apiRequest<{ item?: HomeworkItem }>('/api/homework', {
     method: 'PUT',
     body: JSON.stringify({
       groupId: lesson.groupId,
@@ -59,6 +76,7 @@ export const saveHomework = (
       lessonNumber: lesson.lessonNumber,
       subgroup: lesson.subgroup,
       text,
+      ...details,
       ...(attachments ? { attachmentIds: attachments.map((file) => file.id) } : {}),
       scope,
       reminderMode,

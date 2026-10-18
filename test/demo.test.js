@@ -43,6 +43,8 @@ test('allowlisted MAX user finds demo, selects it, sees schedule and makes manua
   const rows = await community.homeworkForGroup(DEMO_GROUP.id, { from: '2026-10-19' }); assert.equal(rows[0].lessonDate, '2026-10-20');
   const overlay = await (await fetch(`${url}/api/schedule/group/${DEMO_GROUP.id}?week=2026-10-19`)).json(); assert.ok(overlay.lessons.some((lesson) => lesson.markedBy));
   assert.equal(sourceCalls(), 0);
+  await fetch(`${url}/api/groups?q=25`);
+  assert.equal(sourceCalls(), 1, 'generic real-group search must still query the university');
 });
 test('demo reset clears only demo data, reminders and marks, restores seed, remains idempotent', async (t) => {
   const { community, preferences } = await setup(t, 1);

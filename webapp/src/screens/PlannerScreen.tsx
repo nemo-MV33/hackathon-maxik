@@ -1,5 +1,7 @@
+import { HomeworkDetailsEditor } from '../components/HomeworkDetails';
+import type { Deadline, Submission } from '../data/homework';
 import { AttachmentEditor, type HomeworkAttachment } from '../components/HomeworkAttachments';
-import { lessonDate } from '../lib/timezone';
+import { lessonDate, dateInZone } from '../lib/timezone';
 import { useEffect, useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
@@ -55,7 +57,7 @@ export const PlannerScreen = ({ profile, profileRevision, onOpenLesson, onOpenPr
   const items = homework.status === 'ready' ? homework.data.items : [];
   // В планере видно и прошедшие дни недели: удобно проверить, что было задано.
   const tasks = buildTasks(items, announcements, weekLessons, days[0]);
-  const dayTasks = tasks.filter((task) => task.date === selected);
+  const dayTasks = tasks.filter((task) => task.date === selected || (selected === todayKey && task.kind === 'homework' && task.item.dueAt && Date.parse(task.item.dueAt) < Date.now()));
   const countOn = (key: string) => tasks.filter((task) => task.date === key).length;
   const shiftWeek = (weeks: number) => setSelected(toDateKey(addDays(fromDateKey(weekStart), weeks * 7)));
 
@@ -144,6 +146,8 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
   const [date, setDate] = useState(initialDate);
   const [lessonKey, setLessonKey] = useState<string | null>(null);
   const [text, setText] = useState('');
+  const [deadline, setDeadline] = useState<Deadline>({ kind: 'lesson' });
+  const [submission, setSubmission] = useState<Submission | null>(null);
   const [scope, setScope] = useState<'personal' | 'shared'>('personal');
   const [filesByScope, setFilesByScope] = useState<{ personal: HomeworkAttachment[]; shared: HomeworkAttachment[] }>({ personal: [], shared: [] });
   const files = filesByScope[scope];
@@ -169,9 +173,9 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
     setSaving(true);
     setError(null);
     try {
-      await saveHomework(lesson, text.trim(), scope, remindAt, undefined, undefined, files);
+      const saved = await saveHomework(lesson, text.trim(), scope, remindAt, undefined, undefined, files, { deadline, submission });
       haptic.success();
-      onSaved(lesson.date);
+      onSaved(saved.item?.dueAt ? dateInZone(new Date(saved.item.dueAt)) : lessonDate(lesson));
       onClose();
     } catch (failure) {
       setError((failure as Error).message);
@@ -225,6 +229,7 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
             <AttachmentEditor key={scope} files={files} scope={scope} onChange={(next) => setFilesByScope((current) => ({ ...current, [scope]: next }))} onBusy={setUploading} />
           </div>
 
+          <HomeworkDetailsEditor deadline={deadline} submission={submission} onDeadline={setDeadline} onSubmission={setSubmission} />
           <p className="field-label">{t.reminder}</p>
           <ReminderPicker value={remindAt} onChange={setRemindAt} dateKey={date} now={now} />
 

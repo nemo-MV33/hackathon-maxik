@@ -1,3 +1,6 @@
+import { HomeworkDetails, HomeworkDetailsEditor } from '../components/HomeworkDetails';
+import { HomeworkHistory } from '../components/HomeworkHistory';
+import type { Deadline, Submission } from '../data/homework';
 import { AttachmentEditor, AttachmentList, type HomeworkAttachment } from '../components/HomeworkAttachments';
 import { userTimeZone, lessonDate, lessonTime, lessonMoment } from '../lib/timezone';
 import { LessonMove } from '../components/LessonMove';
@@ -76,6 +79,8 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
   const canEditShared = homework.status === 'ready' && homework.data.canEditShared;
   const [scope, setScope] = useState<Scope>('personal');
   const [text, setText] = useState('');
+  const [deadline, setDeadline] = useState<Deadline>({ kind: 'lesson' });
+  const [submission, setSubmission] = useState<Submission | null>(null);
   const [files, setFiles] = useState<HomeworkAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -109,6 +114,8 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
 
   const startEditing = (nextScope: Scope) => {
     setScope(nextScope);
+    setDeadline((nextScope === 'shared' ? item?.sharedDeadline : item?.personalDeadline) ?? { kind: 'lesson' });
+    setSubmission((nextScope === 'shared' ? item?.sharedSubmission : item?.personalSubmission) ?? null);
     setFiles(nextScope === 'shared' ? item?.sharedAttachments ?? [] : item?.personalAttachments ?? []);
     setText(nextScope === 'shared' ? item?.sharedText ?? '' : item?.personalText ?? item?.sharedText ?? '');
     setNotice(null);
@@ -136,7 +143,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
   const save = () => {
     if ((!text.trim() && !files.length) || saving || uploading) return;
     void run(
-      () => saveHomework(lesson, text.trim(), scope, undefined, undefined, undefined, files),
+      () => saveHomework(lesson, text.trim(), scope, undefined, undefined, undefined, files, { deadline, submission }),
       scope === 'shared' ? t.savedShared : t.savedOwn,
     );
   };
@@ -199,6 +206,8 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
                 ? <p className="hw-block__text">{item.sharedText}</p>
                 : !item?.sharedAttachments?.length && <p className="hw-block__empty">{t.nobodyWrote}</p>}
               <AttachmentList files={item?.sharedAttachments} />
+              {(item?.sharedText || !!item?.sharedAttachments?.length) && <HomeworkDetails deadline={item.sharedDeadline} submission={item.sharedSubmission} dueAt={item.sharedDueAt ?? (item.source === 'shared' ? item.dueAt : null)} />}
+              <HomeworkHistory history={item?.sharedHistory ?? []} lesson={lesson} canRestore={homework.data.role === 'headman' || homework.data.role === 'editor'} currentVersion={item?.sharedVersion} onSaved={() => refresh(true)} />
               {(item?.sharedText || item?.sharedAttachments?.length) && (
                 <p className="hw-block__meta">
                   {[item.sharedAuthorName ?? item.authorName, formatStamp(item.sharedUpdatedAt ?? item.updatedAt), (item.sharedVersion ?? item.version) > 1 && t.edit(item.sharedVersion ?? item.version)].filter(Boolean).join(', ')}
@@ -211,6 +220,10 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
                 ? <p className="hw-block__text">{item.personalText}</p>
                 : !item?.personalAttachments?.length && <p className="hw-block__empty">{item?.sharedText ? t.noOwnVersion : t.noOwnYet}</p>}
               <AttachmentList files={item?.personalAttachments} />
+              {(item?.personalText || !!item?.personalAttachments?.length) && <>
+                <HomeworkDetails deadline={item.personalDeadline} submission={item.personalSubmission} dueAt={item.personalDueAt ?? (item.source === 'personal' ? item.dueAt : null)} />
+                <HomeworkHistory history={item.personalHistory ?? []} lesson={lesson} onSaved={() => refresh(true)} />
+              </>}
             </div>
 
             <div className="actions">
@@ -255,6 +268,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
               onChange={(event) => setText(event.target.value)}
             />
             <p className={`editor__counter${text.length > MAX_LENGTH * 0.9 ? ' is-near' : ''}`}>{text.length} / {MAX_LENGTH}</p>
+            <HomeworkDetailsEditor deadline={deadline} submission={submission} onDeadline={setDeadline} onSubmission={setSubmission} />
             <AttachmentEditor files={files} scope={scope} onChange={setFiles} onBusy={setUploading} />
             <div className="actions">
               <Button stretched size="large" disabled={uploading || (!text.trim() && !files.length)} loading={saving} onClick={save}>{t.save}</Button>
@@ -263,10 +277,11 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
           </div>
         )}
 
-        {homework.status === 'ready' && !editing && (item?.text || !!item?.attachments?.length) && !lessonOver && (
+        {homework.status === 'ready' && !editing && (item?.text || !!item?.attachments?.length) && (
           <div className="hw-block">
             <p className="hw-block__label">{t.reminder}</p>
             <Button stretched variant="secondary" disabled={saving} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', new Date(new Date(lessonMoment(lesson)).getTime() - 600_000).toISOString(), 'lesson', 10), t.beforeLesson)}>{t.beforeLesson}</Button>
+            {(['due-day', 'due-morning'] as const).map((mode) => <Button key={mode} stretched aria-pressed={item.reminderMode === mode} variant="secondary" disabled={saving || !item.dueAt} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', item.dueAt, mode), t.reminder)}>{mode === 'due-day' ? t.dueDay : t.dueMorning}</Button>)}
             <ReminderPicker
               value={item.remindAt}
               dateKey={lessonDate(lesson)}

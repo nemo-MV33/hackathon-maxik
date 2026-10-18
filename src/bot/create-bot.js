@@ -1808,7 +1808,11 @@ ${historyText(item.history, ctx.lang, profileTimeZone(ctx.prefs))}`, [...version
     if (state.step === 'homework-date' || state.step === 'homework-link' || state.step === 'homework-label') {
       const item = await detailItem(ctx, state.id, true);
       const patch = state.step === 'homework-date' ? { deadline: { kind: 'date', local: text.replace(' ', 'T') } } : { submission: { ...(item.submission ?? { kind: 'other' }), ...(state.step === 'homework-link' ? { url: text } : { label: text }) } };
-      try { await updateDetails(ctx, item, patch); } catch (error) { return ctx.reply(error.message); }
+      try { await updateDetails(ctx, item, patch); } catch (error) {
+        const link = error.error === 'invalid_submission_url';
+        return ctx.reply(ctx.lang === 'en' ? (link ? 'Use an HTTPS link without username or password' : 'Check university date, time and submission details')
+          : (link ? 'Нужна ссылка https:// без логина и пароля' : 'Проверь дату, время вуза и способ сдачи'));
+      }
       setSession(ctx, null); return showDetails(ctx, item.id);
     }
     if (state.step === 'move-date') {

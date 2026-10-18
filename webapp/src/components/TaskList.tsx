@@ -1,3 +1,4 @@
+import { HomeworkDetails } from './HomeworkDetails';
 import { AttachmentList } from './HomeworkAttachments';
 import type { Lesson } from '../data/schedule';
 import type { HomeworkItem } from '../data/homework';
@@ -45,7 +46,7 @@ export const TaskList = ({ tasks, todayKey, onOpenHomework, onOpenAnnouncement, 
               <span className="task__title">{task.item.subject}</span>
               <span className="task__text">{task.item.text}</span>
               <ChevronRight size={18} className="task__chevron" />
-            </button><AttachmentList files={task.item.attachments} /></div>
+            </button><HomeworkDetails deadline={task.item.deadline} submission={task.item.submission} dueAt={task.item.dueAt} /><AttachmentList files={task.item.attachments} /></div>
           ) : (
             <button type="button" className="task task--announcement" onClick={() => onOpenAnnouncement?.(task.item)}>
               <span className="task__top">

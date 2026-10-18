@@ -22,6 +22,7 @@ export const historyText = (history = [], lang = 'ru', timeZone = 'Asia/Irkutsk'
       for (const file of event.added ?? []) lines.push(`+ ${file.name}`);
       for (const file of event.removed ?? []) lines.push(`− ${file.name}`);
     }
-    return lines.join('\n');
+    const text = lines.join('\n');
+    return text.length > 650 ? `${text.slice(0, 649)}…` : text;
   }).join('\n\n') || (en ? 'No recorded changes' : 'Изменений пока нет');
 };

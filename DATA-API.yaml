@@ -8,7 +8,7 @@ authentication:
     anonymous:
       description: Без заголовка авторизации.
     service:
-      description: Служебный ключ API_ACCESS_KEY. Значение указано на первом слайде презентации.
+      description: Служебный ключ API_ACCESS_KEY передаётся проверяющему отдельно, без публикации на слайдах.
       value: "Bearer <API_ACCESS_KEY>"
     student:
       description: >-
@@ -280,3 +280,41 @@ checks:
     expected:
       statusCodes: [401]
       contentType: application/json
+
+  - name: save-deadline-requires-max
+    role: anonymous
+    request:
+      method: PUT
+      path: /api/homework
+      body: { date: '2026-10-19', lessonNumber: 1, subgroup: null, scope: shared, text: 'ДЗ', deadline: { kind: next }, submission: { kind: moodle, url: 'https://example.org' } }
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+  - name: restore-homework-requires-max
+    role: anonymous
+    request:
+      method: PUT
+      path: /api/homework
+      body: { date: '2026-10-19', lessonNumber: 1, subgroup: null, scope: shared, restoreVersion: 1 }
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+  - name: service-cannot-read-demo-schedule
+    role: service
+    request:
+      method: GET
+      path: /api/schedule/group/irnitu~999999991
+      headers: { Authorization: "Bearer <API_ACCESS_KEY>" }
+    expected:
+      statusCodes: [404]
+      contentType: application/json
+      requiredFields: [error]
+# ДЗ возвращаются по дате пары или срока, с сортировкой по dueAt.
+# includeOverdue=true добавляет прошедшие сроки; период запроса ограничен 62 днями.
+# deadline: {kind: lesson|next|date, local?: YYYY-MM-DDTHH:mm}; local — время вуза.
+# submission: {kind: class|moodle|system|email|other, label?: string, url?: HTTPS}|null.
+# sharedHistory видна группе, personalHistory — только владельцу подписанных initData.
+# restoreVersion создаёт новую общую версию; разрешён только старосте/редактору.
+# Исторические файлы удерживаются в квоте до удаления ДЗ; скачивание требует текущей ссылки.

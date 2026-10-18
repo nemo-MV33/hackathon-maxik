@@ -385,6 +385,7 @@ paths:
               properties:
                 text: { type: string, maxLength: 1500 }
                 remindAt: { type: [string, 'null'], format: date-time }
+        reminderMode: { type: [string, 'null'], enum: [fixed, lesson, due-day, due-morning, null] }
       responses:
         '200': { description: 'Опубликовано, postedToChat — удалось ли написать в чат группы' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -490,18 +491,22 @@ paths:
   /api/homework:
     get:
       operationId: listHomework
-      summary: Общие и личные ДЗ текущего студента
+      summary: Общие и личные ДЗ текущего студента, по возрастанию срока
       parameters:
         - in: query
           name: groupId
           required: true
-          schema: { type: integer, minimum: 1 }
+          schema: { $ref: '#/components/schemas/GroupKey' }
         - in: query
           name: from
           schema: { type: string, format: date }
         - in: query
           name: to
           schema: { type: string, format: date }
+        - in: query
+          name: includeOverdue
+          schema: { type: boolean, default: false }
+          description: Добавить задания с прошедшим сроком; дата пары может быть вне периода.
       responses:
         '200':
           description: ДЗ выбранной группы с личными версиями
@@ -530,7 +535,12 @@ paths:
     put:
       operationId: saveHomework
       summary: Запись, обновление или сброс ДЗ
-      description: Общее ДЗ могут менять староста и редакторы. Личное ДЗ доступно только его владельцу.
+      description: >-
+        Общее ДЗ могут менять староста и редакторы, а при homeworkMode all — участники.
+        Возврат версии доступен только старосте и редакторам. Личная история доступна только владельцу.
+        Неуказанные deadline/submission сохраняют прежние значения; у нового ДЗ срок по умолчанию lesson.
+        due-day — за 24 часа до срока, due-morning — в 08:00 по поясу профиля.
+        Для относительного напоминания нужен ненулевой remindAt; фактическое время вычисляет сервер.
       requestBody:
         required: true
         content:
@@ -550,7 +560,10 @@ paths:
                   items: { type: string, format: uuid }
                 scope: { type: string, enum: [shared, personal, reminder], description: 'reminder — только личное напоминание, text не нужен' }
                 remindAt: { type: [string, 'null'], format: date-time, description: Личное напоминание о ДЗ; null снимает }
-                reminderMode: { type: string, enum: [fixed, lesson], default: fixed }
+                deadline: { $ref: '#/components/schemas/HomeworkDeadline' }
+                submission: { $ref: '#/components/schemas/HomeworkSubmission' }
+                restoreVersion: { type: integer, minimum: 1, description: 'Возврат предыдущей общей версии: только староста и редакторы; новая версия с restoredFrom. text не нужен.' }
+                reminderMode: { type: string, enum: [fixed, lesson, due-day, due-morning], default: fixed }
                 minutesBefore: { type: number, minimum: 0, description: За сколько минут до начала пары при reminderMode lesson }
       responses:
         '200':
@@ -560,7 +573,7 @@ paths:
         '403':
           description: Нет прав на изменение общего ДЗ
         '404':
-          description: Пара не найдена в расписании ИРНИТУ
+          description: Пара не найдена в расписании выбранного вуза
   /api/institutes:
     get:
       operationId: listInstitutes
@@ -877,6 +890,53 @@ components:
         name: { type: string }
         size: { type: integer, minimum: 1, description: Размер в байтах }
         mime: { type: string, description: Определён по содержимому }
+    HomeworkDeadline:
+      type: [object, 'null']
+      description: 'Ввод date: local в поясе вуза; at и timeZone вычисляются сервером. next ищет следующую пару по предмету в ближайшие 8 недель; неизвестная дата возвращает dueAt null.'
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [lesson, next, date], default: lesson }
+        local: { type: string, pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$', description: Обязательно для kind date }
+        at: { type: string, format: date-time, readOnly: true }
+        timeZone: { type: string, readOnly: true }
+    HomeworkSubmission:
+      type: [object, 'null']
+      properties:
+        kind: { type: string, enum: [class, moodle, system, email, other] }
+        label: { type: string, maxLength: 200 }
+        url: { type: [string, 'null'], format: uri, maxLength: 2000, description: Только HTTPS без имени пользователя и пароля }
+      required: [kind]
+    HomeworkSnapshot:
+      type: object
+      properties:
+        text: { type: string }
+        attachments: { type: array, items: { $ref: '#/components/schemas/HomeworkAttachment' } }
+        deadline: { $ref: '#/components/schemas/HomeworkDeadline' }
+        submission: { $ref: '#/components/schemas/HomeworkSubmission' }
+    HomeworkEvent:
+      type: object
+      required: [type, at]
+      properties:
+        type: { type: string, enum: [edited, baseline, attachments, moved, orphaned, restored, merged] }
+        version: { type: integer }
+        originalVersion: { type: integer, description: Номер до слияния историй }
+        at: { type: string, format: date-time }
+        by: { type: [string, integer] }
+        authorName: { type: [string, 'null'] }
+        authorId: { type: integer }
+        restoredFrom: { type: integer }
+        before:
+          oneOf:
+            - { $ref: '#/components/schemas/HomeworkSnapshot' }
+            - { type: 'null' }
+        after: { $ref: '#/components/schemas/HomeworkSnapshot' }
+        added: { type: array, items: { $ref: '#/components/schemas/HomeworkAttachment' } }
+        removed: { type: array, items: { $ref: '#/components/schemas/HomeworkAttachment' } }
+        from: { $ref: '#/components/schemas/LessonSlot' }
+        to:
+          oneOf:
+            - { $ref: '#/components/schemas/LessonSlot' }
+            - { type: 'null' }
     Homework:
       type: object
       required: [groupId, date, lessonNumber, subgroup, subject, lessonTime, sharedText, personalText, text, source, updatedAt, version]
@@ -901,24 +961,26 @@ components:
         authorName: { type: [string, 'null'] }
         version: { type: integer, minimum: 1 }
         remindAt: { type: [string, 'null'], format: date-time }
+        reminderMode: { type: [string, 'null'], enum: [fixed, lesson, due-day, due-morning, null] }
         status: { type: string, enum: [active, orphaned], default: active }
-        history:
-          type: array
-          items:
-            type: object
-            required: [type, from, to, at, by]
-            properties:
-              type: { type: string, enum: [moved, orphaned] }
-              from: { $ref: '#/components/schemas/LessonSlot' }
-              to:
-                oneOf:
-                  - { $ref: '#/components/schemas/LessonSlot' }
-                  - { type: 'null' }
-              at: { type: string, format: date-time }
-              by: { type: string, enum: [schedule, headman] }
+        deadline: { $ref: '#/components/schemas/HomeworkDeadline' }
+        sharedDeadline: { $ref: '#/components/schemas/HomeworkDeadline' }
+        personalDeadline: { $ref: '#/components/schemas/HomeworkDeadline' }
+        dueAt: { type: [string, 'null'], format: date-time }
+        sharedDueAt: { type: [string, 'null'], format: date-time }
+        personalDueAt: { type: [string, 'null'], format: date-time }
+        submission: { $ref: '#/components/schemas/HomeworkSubmission' }
+        sharedSubmission: { $ref: '#/components/schemas/HomeworkSubmission' }
+        personalSubmission: { $ref: '#/components/schemas/HomeworkSubmission' }
+        history: { type: array, items: { $ref: '#/components/schemas/HomeworkEvent' } }
+        sharedHistory: { type: array, items: { $ref: '#/components/schemas/HomeworkEvent' } }
+        personalHistory: { type: array, items: { $ref: '#/components/schemas/HomeworkEvent' }, description: Только история владельца initData }
 
 
 # Дополнения ответа расписания: updatedAt — время успешного запроса к вузу;
 # у пары также markedBy, markedAt, moveId для неподтверждённой отметки.
 # Ответ ДЗ: status (active по умолчанию или orphaned), history — события
 # {type: moved, from: LessonSlot, to: LessonSlot, at: ISO, by: schedule|headman}.
+
+# Демо irnitu~999999991 скрыто от служебного Bearer и MAX ID вне DEMO_MAX_IDS.
+# Запрещённая и отсутствующая группа отвечают 404 not_found; демо нет в статической выгрузке.

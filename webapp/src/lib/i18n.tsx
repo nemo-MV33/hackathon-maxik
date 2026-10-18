@@ -13,6 +13,14 @@ const plural = (count: number, one: string, few: string, many: string) => {
 };
 
 const ru = {
+  deadlineLabel: 'Срок', deadlineUniversityTime: 'Дата и время вуза (Asia/Irkutsk)',
+  deadlineKinds: { lesson: 'К этой паре', next: 'К следующей паре по предмету', date: 'Конкретная дата и время' },
+  submissionLabel: 'Способ сдачи', submissionKinds: { class: 'На паре', moodle: 'Moodle', system: 'Другая система', email: 'Почта', other: 'Другое' },
+  openSubmission: 'Открыть место сдачи', historySchedule: 'Расписание вуза', submissionNote: 'Уточнение (необязательно)', submissionLink: 'Ссылка HTTPS (необязательно)', optionalField: 'Не указано', httpsOnly: 'Нужна ссылка https:// без логина и пароля',
+  overdue: 'Просрочено', dueDay: 'За день до срока', dueMorning: 'Утром в день срока',
+  homeworkHistory: 'История изменений', homeworkHistoryEmpty: 'Изменений пока нет', versionRestored: 'Возврат версии', restoreVersion: 'Вернуть версию',
+  historyBefore: 'Было', historyAfter: 'Стало', historyMoved: 'Перенесено вместе с парой', historyHeadman: 'отмечено старостой', historyAdded: 'Добавлено', historyRemoved: 'Убрано',
+
   attachmentsLabel: 'Вложения', attachFiles: 'Прикрепить', removeAttachment: 'Убрать', uploadingFile: 'Загрузка файла', retryAttachment: 'Повторить',
   openAttachment: 'Открыть / скачать', closeAttachment: 'Закрыть', photoGallery: 'Просмотр фото', previousPhoto: 'Предыдущее', nextPhoto: 'Следующее',
   sourceUnavailable: 'Источник временно недоступен. Показано сохранённое расписание.',
@@ -29,7 +37,7 @@ const ru = {
   moveUndo: 'Отменить отметку',
   moveMarks: 'Отметки переносов',
   beforeLesson: 'За 10 минут до пары',
-  moveErrors: { invalid_target: 'Выбери другую пару той же подгруппы', move_exists: 'Сначала отмени текущую отметку', invalid_lesson: 'Некорректная пара', lesson_not_found: 'Пара не найдена в расписании', homework_forbidden: 'Нет прав на изменение общего ДЗ', invalid_subgroup: 'Подгруппа должна совпадать', move_not_found: 'Отметка не найдена', homework_not_found: 'ДЗ не найдено' },
+  moveErrors: { morning_after_deadline: 'Срок наступает раньше 08:00 в твоём поясе. Выбери другое время напоминания', reminder_in_past: 'Время напоминания уже прошло', invalid_deadline: 'Укажи дату и время вуза', invalid_submission: 'Проверь способ сдачи', invalid_submission_url: 'Нужна ссылка https:// без логина и пароля', deadline_unresolved: 'Дата следующей пары пока неизвестна', version_unavailable: 'Версия недоступна для возврата', version_attachments_removed: 'Файлы этой версии удалены', invalid_version: 'Некорректная версия', invalid_target: 'Выбери другую пару той же подгруппы', move_exists: 'Сначала отмени текущую отметку', invalid_lesson: 'Некорректная пара', lesson_not_found: 'Пара не найдена в расписании', homework_forbidden: 'Нет прав на изменение общего ДЗ', invalid_subgroup: 'Подгруппа должна совпадать', move_not_found: 'Отметка не найдена', homework_not_found: 'ДЗ не найдено' },
   moveRebind: 'Привязать к другой паре',
   orphaned: 'Пара отменена, ДЗ сохранено',
   orphanedList: 'ДЗ отменённых пар',
@@ -468,6 +476,14 @@ const ru = {
 type Dictionary = typeof ru;
 
 const en: Dictionary = {
+  deadlineLabel: 'Due', deadlineUniversityTime: 'University date and time (Asia/Irkutsk)',
+  deadlineKinds: { lesson: 'This lesson', next: 'Next lesson in this subject', date: 'Specific date and time' },
+  submissionLabel: 'Submission', submissionKinds: { class: 'In class', moodle: 'Moodle', system: 'Another system', email: 'Email', other: 'Other' },
+  openSubmission: 'Open submission', historySchedule: 'University schedule', submissionNote: 'Details (optional)', submissionLink: 'HTTPS link (optional)', optionalField: 'Not specified', httpsOnly: 'Use https:// without username or password',
+  overdue: 'Overdue', dueDay: 'A day before due', dueMorning: 'Morning of due date',
+  homeworkHistory: 'Change history', homeworkHistoryEmpty: 'No recorded changes', versionRestored: 'Restored version', restoreVersion: 'Restore version',
+  historyBefore: 'Was', historyAfter: 'Now', historyMoved: 'Moved with lesson', historyHeadman: 'marked by headman', historyAdded: 'Added', historyRemoved: 'Removed',
+
   attachmentsLabel: 'Attachments', attachFiles: 'Attach', removeAttachment: 'Remove', uploadingFile: 'Uploading file', retryAttachment: 'Retry',
   openAttachment: 'Open / download', closeAttachment: 'Close', photoGallery: 'Photo gallery', previousPhoto: 'Previous', nextPhoto: 'Next',
   sourceUnavailable: 'The source is temporarily unavailable. Showing the saved timetable.',
@@ -484,7 +500,7 @@ const en: Dictionary = {
   moveUndo: 'Revoke mark',
   moveMarks: 'Move marks',
   beforeLesson: '10 minutes before lesson',
-  moveErrors: { invalid_target: 'Choose another lesson in the same subgroup', move_exists: 'Revoke the current mark first', invalid_lesson: 'Invalid lesson', lesson_not_found: 'Lesson not found in schedule', homework_forbidden: 'You cannot edit shared homework', invalid_subgroup: 'Subgroup must match', move_not_found: 'Mark not found', homework_not_found: 'Homework not found' },
+  moveErrors: { morning_after_deadline: 'Deadline is before 08:00 in your time zone. Choose another reminder time', reminder_in_past: 'Reminder time has already passed', invalid_deadline: 'Enter university date and time', invalid_submission: 'Check submission details', invalid_submission_url: 'Use https:// without username or password', deadline_unresolved: 'Next lesson date is unknown', version_unavailable: 'Version cannot be restored', version_attachments_removed: 'Files from this version were removed', invalid_version: 'Invalid version', invalid_target: 'Choose another lesson in the same subgroup', move_exists: 'Revoke the current mark first', invalid_lesson: 'Invalid lesson', lesson_not_found: 'Lesson not found in schedule', homework_forbidden: 'You cannot edit shared homework', invalid_subgroup: 'Subgroup must match', move_not_found: 'Mark not found', homework_not_found: 'Homework not found' },
   moveRebind: 'Assign to another lesson',
   orphaned: 'Lesson cancelled, homework saved',
   orphanedList: 'Homework from cancelled lessons',
