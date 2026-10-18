@@ -1,0 +1,77 @@
+User-agent: YandexBot
+Allow: *
+Disallow: /App_Data/
+Disallow: /fonts/
+Disallow: /telek/
+Disallow: /api/
+Disallow: /bratsk/
+Disallow: /mng/
+Disallow: /content/
+Disallow: /img/
+Disallow: /documents/
+Disallow: /scripts/
+Disallow: /sliders/
+Disallow: /ufas/
+Disallow: /priem2019/
+Disallow: /404.aspx
+Disallow: /search.aspx
+Disallow: /about/phonebook.aspx?
+Disallow: /learning-videos
+Disallow: /museum/book/
+Disallow: /rosobr/
+Clean-param: utm
+Clean-param: from
+Clean-param: ref
+Clean-param: f
+Clean-param: idg
+Clean-param: e
+Clean-param: d
+Clean-param: r
+Clean-param: t
+Clean-param: _gl
+Clean-param: clckid
+Clean-param: amp
+Clean-param: id /abitur/bach/rating.aspx
+Clean-param: id /abitur/mag/rating.aspx
+Clean-param: id /abitur/asp/rating.aspx
+Clean-param: id /abitur/spo/rating.aspx
+
+User-agent: Googlebot
+Allow: *
+Disallow: /App_Data/
+Disallow: /mng/
+Disallow: /fonts/
+Disallow: /telek/
+Disallow: /api/
+Disallow: /bratsk/
+Disallow: /content/
+Disallow: /img/
+Disallow: /documents/
+Disallow: /scripts/
+Disallow: /sliders/
+Disallow: /ufas/
+Disallow: /priem2019/
+Disallow: /search.aspx
+Disallow: /404.aspx
+Disallow: /about/phonebook.aspx?
+Disallow: /learning-videos
+Disallow: /museum/book/
+Disallow: /rosobr/
+Clean-param: utm
+Clean-param: from
+Clean-param: ref
+Clean-param: f
+Clean-param: idg
+Clean-param: e
+Clean-param: d
+Clean-param: r
+Clean-param: t
+Clean-param: _gl
+Clean-param: clckid
+Clean-param: amp
+Clean-param: id /abitur/bach/rating.aspx
+Clean-param: id /abitur/mag/rating.aspx
+Clean-param: id /abitur/asp/rating.aspx
+Clean-param: id /abitur/spo/rating.aspx
+
+Sitemap: https://bgu.ru/sitemap.xml

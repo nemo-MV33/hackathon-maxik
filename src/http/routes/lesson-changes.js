@@ -1,9 +1,11 @@
+import { sameGroup } from '../../universities/identity.js';
 import { HttpError } from './me.js';
 
 export const lessonChangesRoute = async ({ user, preferences, community, lessonChanges, method, id, body }) => {
   const profile = await preferences.get(user.id);
   const groupId = profile.selection?.kind === 'group' ? profile.selection.id : null;
   if (!groupId) throw new HttpError(409, 'group_not_selected', 'Сначала выбери учебную группу');
+  if (body?.groupId != null && !sameGroup(body.groupId, groupId)) throw new HttpError(409, 'profile_out_of_sync');
   if (method === 'GET') return { items: await community.lessonChanges(groupId) };
   if (method === 'DELETE' && id) return { item: await lessonChanges.undo(groupId, user, id) };
   if (method === 'POST' && !id) {
@@ -17,6 +19,7 @@ export const orphanedRoute = async ({ user, preferences, community, lessonChange
   const profile = await preferences.get(user.id);
   const groupId = profile.selection?.kind === 'group' ? profile.selection.id : null;
   if (!groupId) throw new HttpError(409, 'group_not_selected');
+  if (body?.groupId != null && !sameGroup(body.groupId, groupId)) throw new HttpError(409, 'profile_out_of_sync');
   await lessonChanges.authorize(groupId, user.id);
   const items = await community.orphanedHomework(groupId);
   if (method === 'GET') return { items: items.map((item) => ({ ...item, date: item.lessonDate })) };

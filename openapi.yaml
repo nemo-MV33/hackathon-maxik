@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: norfly API
-  version: 0.3.0
-  description: Профиль, расписание и домашние задания студента ИРНИТУ.
+  version: 0.4.0
+  description: Профиль, расписание и домашние задания студента ИРНИТУ или БГУ. Даты пар относятся к вузу; startsAt и endsAt — моменты времени.
 servers:
   - url: https://158-160-253-148.sslip.io
     description: Рабочий сервер (Yandex Cloud)
@@ -12,6 +12,21 @@ security:
   - maxInitData: []
   - serviceKey: []
 paths:
+  /api/universities:
+    get:
+      operationId: getUniversities
+      summary: Доступные вузы, часовые пояса, источник и возможности
+      security: [{ serviceKey: [] }, { maxInitData: [] }]
+      responses:
+        '200':
+          description: Конфигурации подключённых провайдеров
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/University' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
   /api/lesson-changes:
     get:
       operationId: getLessonChanges
@@ -161,7 +176,10 @@ paths:
             schema:
               type: object
               properties:
-                groupId: { type: integer, minimum: 1 }
+                universityId: { type: string, enum: [irnitu, bgu] }
+                timeZone: { type: string, example: Europe/Moscow, description: Часовой пояс IANA }
+                quietHours: { anyOf: [{ $ref: '#/components/schemas/QuietHours' }, { type: 'null' }] }
+                groupId: { $ref: '#/components/schemas/GroupInput' }
                 subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
                 remindersEnabled: { type: boolean }
                 lang: { type: string, enum: [ru, en] }
@@ -170,7 +188,7 @@ paths:
                 muted: { type: boolean, description: Выключить все уведомления разом }
                 reminderMinutes: { type: integer, enum: [5, 10, 15, 30], description: За сколько минут до пары напоминать }
                 endMinutes: { type: integer, enum: [5, 10], description: За сколько минут до конца пары напоминать }
-                summaryTime: { type: string, pattern: '^(1[6-9]|2[0-3]):(00|30)$', description: Время сводки на завтра по Иркутску }
+                summaryTime: { type: string, pattern: '^(1[6-9]|2[0-3]):(00|30)$', description: Время сводки на завтра в часовом поясе профиля }
                 controls:
                   type: object
                   description: Формы контроля по дисциплинам; null удаляет отметку
@@ -462,6 +480,8 @@ paths:
       operationId: listInstitutes
       summary: Институты ИРНИТУ
       security: [{ serviceKey: [] }, { maxInitData: [] }]
+      parameters:
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
       responses:
         '200':
           description: Список институтов
@@ -475,6 +495,7 @@ paths:
       summary: Поиск учебной группы
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
         - { name: q, in: query, schema: { type: string }, example: истб-25 }
         - { name: institute, in: query, schema: { type: string } }
         - { name: course, in: query, schema: { type: integer } }
@@ -494,9 +515,9 @@ paths:
                       type: object
                       required: [id, title]
                       properties:
-                        id: { type: integer }
+                        id: { $ref: '#/components/schemas/GroupKey' }
                         title: { type: string }
-                        course: { type: integer }
+                        course: { type: [integer, 'null'] }
                         institute: { type: string }
         '401': { $ref: '#/components/responses/Unauthorized' }
   /api/teachers:
@@ -505,6 +526,7 @@ paths:
       summary: Поиск преподавателя
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
         - { name: q, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 50 } }
       responses:
@@ -520,6 +542,7 @@ paths:
       summary: Поиск аудитории
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
         - { name: q, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 50 } }
       responses:
@@ -535,8 +558,9 @@ paths:
       summary: Расписание группы, преподавателя или аудитории на неделю
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
         - { name: kind, in: path, required: true, schema: { type: string, enum: [group, teacher, auditory] } }
-        - { name: id, in: path, required: true, schema: { type: integer }, example: 478237 }
+        - { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/GroupInput' }, example: irnitu~478237 }
         - { name: week, in: query, description: Любая дата недели, schema: { type: string, format: date } }
         - { name: subgroup, in: query, schema: { type: integer } }
       responses:
@@ -550,13 +574,16 @@ paths:
                 properties:
                   updatedAt: { type: [string, 'null'], format: date-time, description: Время успешного запроса к API вуза }
                   kind: { type: string }
-                  entityId: { type: integer }
+                  entityId: { $ref: '#/components/schemas/GroupKey' }
                   period:
                     type: object
                     required: [from, to]
                     properties:
                       from: { type: string, format: date }
                       to: { type: string, format: date }
+                  universityId: { type: string, enum: [irnitu, bgu] }
+                  timeZone: { type: string, example: Asia/Irkutsk }
+                  stale: { type: boolean, description: Источник недоступен или срок кэша истёк; время updatedAt не меняется }
                   weekEven: { type: boolean }
                   lessons:
                     type: array
@@ -564,6 +591,12 @@ paths:
                       type: object
                       properties:
                         updatedAt: { type: [string, 'null'], format: date-time }
+                        groupId: { $ref: '#/components/schemas/GroupKey' }
+                        date: { type: string, format: date, description: Дата в часовом поясе вуза; ключ хранения }
+                        time: { type: string, description: Местное время пары в вузе }
+                        timeZone: { type: string, description: IANA вуза }
+                        startsAt: { type: string, format: date-time }
+                        endsAt: { type: string, format: date-time }
                         markedBy: { type: string, description: Автор неподтверждённой ручной отметки }
                         markedAt: { type: string, format: date-time }
                         moveId: { type: string }
@@ -587,6 +620,37 @@ components:
     BadRequest:
       description: Некорректные параметры запроса
   schemas:
+    GroupKey:
+      type: string
+      pattern: '^(irnitu|bgu)~[1-9][0-9]*$'
+      example: bgu~32982
+      description: Составной идентификатор вуза и сущности; source id не уникален между вузами
+    GroupInput:
+      description: Новый составной id; старое положительное число относится к ИРНИТУ
+      anyOf:
+        - { $ref: '#/components/schemas/GroupKey' }
+        - { type: integer, minimum: 1 }
+    QuietHours:
+      type: object
+      required: [from, to]
+      description: Личные уведомления в этот период не отправляются; мгновенные не накапливаются; время профиля
+      properties:
+        from: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', example: '23:00' }
+        to: { type: string, pattern: '^(?:[01][0-9]|2[0-3]):[0-5][0-9]$', example: '07:00' }
+    University:
+      type: object
+      required: [id, name, city, timeZone, lessonTimes, parityRule, source, access, capabilities]
+      properties:
+        id: { type: string, enum: [irnitu, bgu] }
+        name: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        fullName: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        city: { type: object, properties: { ru: { type: string }, en: { type: string } } }
+        timeZone: { type: string, example: Asia/Irkutsk }
+        lessonTimes: { type: object, additionalProperties: { type: string } }
+        parityRule: { type: string }
+        source: { type: string, format: uri }
+        access: { type: string, enum: [official_api_token, public_website] }
+        capabilities: { type: object, additionalProperties: { type: boolean } }
     LessonSlot:
       type: object
       required: [date, lessonNumber]
@@ -599,7 +663,7 @@ components:
       required: [id, groupId, from, to, status, at, authorId, authorName]
       properties:
         id: { type: string }
-        groupId: { type: integer }
+        groupId: { $ref: '#/components/schemas/GroupKey' }
         from: { $ref: '#/components/schemas/LessonSlot' }
         to:
           oneOf:
@@ -630,17 +694,20 @@ components:
             type: object
             required: [id]
             properties:
-              id: { type: integer }
+              id: { $ref: '#/components/schemas/GroupKey' }
     Group:
       type: object
       required: [id, title]
       properties:
-        id: { type: integer }
+        id: { $ref: '#/components/schemas/GroupKey' }
         title: { type: string }
     Profile:
       type: object
       required: [group, institute, course, subgroup, remindersEnabled]
       properties:
+        universityId: { type: [string, 'null'], enum: [irnitu, bgu, null] }
+        timeZone: { type: [string, 'null'], description: IANA; null означает часовой пояс вуза }
+        quietHours: { anyOf: [{ $ref: '#/components/schemas/QuietHours' }, { type: 'null' }] }
         group: { anyOf: [{ $ref: '#/components/schemas/Group' }, { type: 'null' }] }
         institute: { type: [string, 'null'] }
         course: { type: [integer, 'null'] }
@@ -704,7 +771,7 @@ components:
       type: object
       required: [groupId, date, lessonNumber, subgroup, subject, lessonTime, sharedText, personalText, text, source, updatedAt, version]
       properties:
-        groupId: { type: integer }
+        groupId: { $ref: '#/components/schemas/GroupKey' }
         date: { type: string, format: date }
         lessonNumber: { type: integer }
         subgroup: { type: [integer, 'null'] }

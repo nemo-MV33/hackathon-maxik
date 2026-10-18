@@ -1,3 +1,4 @@
+import { lessonInTimeZone } from '../lib/timezone.js';
 import { toDateKey } from '../lib/date.js';
 import { lessonTypeLabel, texts } from './i18n.js';
 
@@ -47,6 +48,7 @@ const formatLesson = (language, lesson, scheduleKind, ordinal) => {
   ].filter(Boolean).join('   ');
   return [
     `${numberIcon(ordinal)} **${lesson.time}**`,
+    lesson.universityTime && lesson.universityTime !== lesson.time ? `_${lesson.universityTime} ${language === 'en' ? 'university time' : 'по Иркутску'}_` : '',
     `${kindIcon(lesson.lessonType)} **${lesson.subject}**`,
     details ? `_${capitalize(details)}_` : '',
     where,
@@ -58,7 +60,7 @@ const dayLabel = (language, dateKey, today) => {
   const t = texts(language);
   if (!today) return null;
   const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
   if (dateKey === toDateKey(today)) return t.todayLabel;
   if (dateKey === toDateKey(tomorrow)) return t.tomorrowLabel;
   return null;
@@ -104,7 +106,8 @@ export const formatScheduleWeek = (language, schedule, { title, today = new Date
   return [title, heading, body].filter(Boolean).join('\n\n');
 };
 
-export const formatHomework = (language, items) => {
+export const formatHomework = (language, items, timeZone = 'Asia/Irkutsk') => {
+  items = items.map((item) => { const local = lessonInTimeZone({ date: item.lessonDate, time: item.lessonTime }, timeZone); return { ...item, lessonDate: local.date, lessonTime: local.time }; });
   const t = texts(language);
   if (!items.length) return `${t.homeworkTitle}\n\n${t.homeworkEmpty}`;
   return [t.homeworkTitle, ...items.map((item) => [

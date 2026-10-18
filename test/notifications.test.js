@@ -64,7 +64,7 @@ test('новое ДЗ приходит группе, кроме автора, о
   assert.deepEqual(sent.map((item) => item.userId), [1]);
   assert.match(sent[0].text, /Новое ДЗ.*Физика/);
   assert.match(sent[0].text, /Задачи 1–5/);
-  assert.equal(buttonPayload(sent[0]), `lesson_${TOMORROW}_2_1`);
+  assert.equal(buttonPayload(sent[0]), `lesson_${TOMORROW}_2_1_irnitu~11`);
 
   await notifications.notifyHomework({ groupId: 11, lessonDate: TOMORROW, lessonNumber: 2, subject: 'Физика', text: 'Задачи 1–6', authorId: 2 }, { isUpdate: true });
   assert.match(sent.at(-1).text, /ДЗ изменили/);
@@ -87,7 +87,7 @@ test('сводка на завтра уходит один раз после 20:
   assert.match(sent[0].text, /2 пары, первая в 08:15/);
   assert.match(sent[0].text, /ДЗ задано к 1 из 2/);
   assert.match(sent[0].text, /— Физика/);
-  assert.equal(buttonPayload(sent[0]), `day_${TOMORROW}`);
+  assert.equal(buttonPayload(sent[0]), `day_${TOMORROW}_irnitu~11`);
   assert.equal((await preferences.get(1)).summarySentFor, TOMORROW);
 
   assert.equal(await notifications.sendSummaries(), 0, 'повторно не отправляется');

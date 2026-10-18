@@ -1,10 +1,12 @@
+import { groupKey, sameGroup, migrateGroupReferences } from '../universities/identity.js';
+import { toDateKey } from '../lib/date.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 export class CommunityStore {
   #data = { chats: {}, homework: [], personalHomework: [], notices: [], announcements: [], lessonChanges: [], scheduleOperations: [] };
-  #loaded = false;
+  #loadPromise;
   #writeQueue = Promise.resolve();
 
   constructor(filePath) {
@@ -19,7 +21,7 @@ export class CommunityStore {
   async setChat(chatId, value) {
     await this.#load();
     const current = this.#data.chats[String(chatId)] ?? {};
-    this.#data.chats[String(chatId)] = { ...current, ...value, chatId: Number(chatId) };
+    this.#data.chats[String(chatId)] = { ...current, ...migrateGroupReferences(value), chatId: Number(chatId) };
     await this.#queueSave();
     return this.#data.chats[String(chatId)];
   }
@@ -32,7 +34,7 @@ export class CommunityStore {
 
   async chatsForGroup(groupId) {
     await this.#load();
-    return Object.values(this.#data.chats).filter((chat) => String(chat.group?.id) === String(groupId));
+    return Object.values(this.#data.chats).filter((chat) => sameGroup(chat.group?.id, groupId));
   }
 
   async allChats() {
@@ -54,10 +56,11 @@ export class CommunityStore {
 
   async lessonChanges(groupId) {
     await this.#load();
-    return this.#data.lessonChanges.filter((item) => String(item.groupId) === String(groupId));
+    return this.#data.lessonChanges.filter((item) => sameGroup(item.groupId, groupId));
   }
 
   async saveLessonChange(value) {
+    value = migrateGroupReferences(value);
     await this.#load();
     const current = this.#data.lessonChanges.find((item) => item.id === value.id);
     if (current) Object.assign(current, value);
@@ -70,7 +73,7 @@ export class CommunityStore {
     await this.#load();
     const lessons = new Map();
     for (const item of [...this.#data.homework, ...this.#data.personalHomework]) {
-      if (String(item.groupId) !== String(groupId) || item.status !== 'orphaned') continue;
+      if (!sameGroup(item.groupId, groupId) || item.status !== 'orphaned') continue;
       const from = item.history?.at(-1)?.from;
       if (from) lessons.set(this.#lessonKey(item), from);
     }
@@ -79,7 +82,7 @@ export class CommunityStore {
 
   async orphanedHomework(groupId) {
     await this.#load();
-    return this.#data.homework.filter((item) => String(item.groupId) === String(groupId) && item.status === 'orphaned');
+    return this.#data.homework.filter((item) => sameGroup(item.groupId, groupId) && item.status === 'orphaned');
   }
 
   // Изменение слота и история сохраняются одним атомарным обновлением JSON.
@@ -115,6 +118,7 @@ export class CommunityStore {
   }
 
   async upsertHomework(value) {
+    value = migrateGroupReferences(value);
     await this.#load();
     const now = new Date().toISOString();
     const index = this.#data.homework.findIndex((item) => this.#sameLesson(item, value));
@@ -154,7 +158,7 @@ export class CommunityStore {
     const fromKey = this.#dateKey(from);
     const toKey = to ? this.#dateKey(to) : null;
     const matching = this.#data.homework
-      .filter((item) => String(item.groupId) === String(groupId) && item.lessonDate >= fromKey)
+      .filter((item) => sameGroup(item.groupId, groupId) && item.lessonDate >= fromKey)
       .filter((item) => !toKey || item.lessonDate <= toKey)
       .filter((item) => !subgroup || !item.subgroup || item.subgroup === subgroup);
     const latest = new Map();
@@ -164,6 +168,7 @@ export class CommunityStore {
   }
 
   async setPersonalHomework(userId, value) {
+    value = migrateGroupReferences(value);
     await this.#load();
     const now = new Date().toISOString();
     const target = { ...value, userId: Number(userId) };
@@ -198,7 +203,7 @@ export class CommunityStore {
     const fromKey = this.#dateKey(options.from ?? new Date());
     const toKey = options.to ? this.#dateKey(options.to) : null;
     const personal = this.#data.personalHomework
-      .filter((item) => String(item.groupId) === String(groupId) && String(item.userId) === String(userId))
+      .filter((item) => sameGroup(item.groupId, groupId) && String(item.userId) === String(userId))
       .filter((item) => item.lessonDate >= fromKey && (!toKey || item.lessonDate <= toKey))
       .filter((item) => !options.subgroup || !item.subgroup || item.subgroup === options.subgroup);
     const keys = new Set([...shared, ...personal].map((item) => this.#lessonKey(item)));
@@ -228,6 +233,7 @@ export class CommunityStore {
   }
 
   async addNotice(value) {
+    value = migrateGroupReferences(value);
     await this.#load();
     const item = { id: randomUUID(), createdAt: new Date().toISOString(), status: 'sent', ...value };
     this.#data.notices.push(item);
@@ -263,7 +269,7 @@ export class CommunityStore {
   async noticesForDay(groupId, dateKey, { senderId } = {}) {
     await this.#load();
     return this.#data.notices
-      .filter((item) => String(item.groupId) === String(groupId))
+      .filter((item) => sameGroup(item.groupId, groupId))
       .filter((item) => (item.date ?? item.lesson?.date ?? item.createdAt?.slice(0, 10)) === dateKey)
       .filter((item) => senderId === undefined || String(item.senderId) === String(senderId))
       .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
@@ -281,13 +287,14 @@ export class CommunityStore {
   async noticesForGroup(groupId, { senderId } = {}) {
     await this.#load();
     return this.#data.notices
-      .filter((item) => String(item.groupId) === String(groupId))
+      .filter((item) => sameGroup(item.groupId, groupId))
       .filter((item) => senderId === undefined || String(item.senderId) === String(senderId))
       .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
   }
 
   // Объявления старосты: живут, пока не прошла дата события (или 14 дней без даты).
   async addAnnouncement(value) {
+    value = migrateGroupReferences(value);
     await this.#load();
     const item = { id: randomUUID(), createdAt: new Date().toISOString(), ...value };
     this.#data.announcements.push(item);
@@ -321,7 +328,7 @@ export class CommunityStore {
     await this.#load();
     const keepUntil = (item) => new Date(item.remindAt ?? item.createdAt).getTime() + (item.remindAt ? 86_400_000 : 14 * 86_400_000);
     return this.#data.announcements
-      .filter((item) => String(item.groupId) === String(groupId) && keepUntil(item) > now.getTime())
+      .filter((item) => sameGroup(item.groupId, groupId) && keepUntil(item) > now.getTime())
       .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
   }
 
@@ -357,12 +364,17 @@ export class CommunityStore {
   }
 
   async #load() {
-    if (this.#loaded) return;
-    this.#loaded = true;
+    if (!this.#loadPromise) this.#loadPromise = this.#read().catch((error) => { this.#loadPromise = undefined; throw error; });
+    return this.#loadPromise;
+  }
+
+  async #read() {
     try {
       const contents = await readFile(this.filePath, 'utf8');
-      const parsed = JSON.parse(contents);
+      const parsed = migrateGroupReferences(JSON.parse(contents));
       this.#data = {
+        ...parsed,
+        schemaVersion: 3,
         chats: parsed.chats ?? {},
         homework: parsed.homework ?? [],
         personalHomework: parsed.personalHomework ?? [],
@@ -371,6 +383,7 @@ export class CommunityStore {
         lessonChanges: parsed.lessonChanges ?? [],
         scheduleOperations: parsed.scheduleOperations ?? [],
       };
+      if (JSON.parse(contents).schemaVersion !== 3) await this.#save();
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
@@ -384,28 +397,25 @@ export class CommunityStore {
   async #save() {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temporaryPath = `${this.filePath}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify(this.#data, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(temporaryPath, `${JSON.stringify({ ...migrateGroupReferences(this.#data), schemaVersion: 3 }, null, 2)}\n`, { mode: 0o600 });
     await rename(temporaryPath, this.filePath);
   }
 
   #dateKey(value) {
     if (typeof value === 'string') return value.slice(0, 10);
-    const year = value.getFullYear();
-    const month = String(value.getMonth() + 1).padStart(2, '0');
-    const day = String(value.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return toDateKey(value);
   }
 
   #lessonKey(value) {
     if (value.lessonNumber == null) {
-      return [value.groupId, value.lessonDate, 'legacy', value.lessonTime, value.subgroup ?? 0, value.subject].join(':');
+      return [groupKey(value.groupId), value.lessonDate, 'legacy', value.lessonTime, value.subgroup ?? 0, value.subject].join(':');
     }
-    return [value.groupId, value.lessonDate, value.lessonNumber ?? '', value.subgroup ?? 0].join(':');
+    return [groupKey(value.groupId), value.lessonDate, value.lessonNumber ?? '', value.subgroup ?? 0].join(':');
   }
 
   #sameLesson(left, right) {
     if (left.lessonNumber == null || right.lessonNumber == null) {
-      return String(left.groupId) === String(right.groupId)
+      return sameGroup(left.groupId, right.groupId)
         && left.lessonDate === right.lessonDate
         && left.lessonTime === right.lessonTime
         && left.subject === right.subject

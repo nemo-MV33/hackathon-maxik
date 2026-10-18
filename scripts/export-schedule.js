@@ -1,3 +1,7 @@
+import { zonedDateKey } from '../src/lib/timezone.js';
+import { UniversityService } from '../src/universities/service.js';
+import { BguProvider } from '../src/universities/bgu/provider.js';
+import { groupKey } from '../src/universities/identity.js';
 import 'dotenv/config';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
@@ -19,6 +23,7 @@ const writeJson = async (path, value) => {
 };
 
 const slimLesson = (lesson) => ({
+  startsAt: lesson.startsAt, endsAt: lesson.endsAt, timeZone: lesson.timeZone,
   updatedAt: lesson.updatedAt,
   date: lesson.date,
   lessonNumber: lesson.lessonNumber,
@@ -33,14 +38,14 @@ const slimLesson = (lesson) => ({
   transferred: lesson.transferred || undefined,
 });
 
-const semesterWeeks = (today = new Date()) => {
-  const year = today.getFullYear();
-  const month = today.getMonth();
+const semesterWeeks = (today = new Date(`${zonedDateKey()}T00:00:00Z`)) => {
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth();
   const [from, to] = month >= 7
-    ? [new Date(year, 8, 1), new Date(year + 1, 0, 31)]
+    ? [new Date(Date.UTC(year, 8, 1)), new Date(Date.UTC(year + 1, 0, 31))]
     : month === 0
-      ? [new Date(year - 1, 8, 1), new Date(year, 0, 31)]
-      : [new Date(year, 1, 1), new Date(year, 6, 15)];
+      ? [new Date(Date.UTC(year - 1, 8, 1)), new Date(Date.UTC(year, 0, 31))]
+      : [new Date(Date.UTC(year, 1, 1)), new Date(Date.UTC(year, 6, 15))];
   const result = [];
   for (let week = startOfWeek(from); week <= to; week = addDays(week, 7)) result.push(week);
   return result;
@@ -62,29 +67,39 @@ const runPool = async (tasks, size) => {
   await Promise.all(Array.from({ length: size }, worker));
 };
 
-const service = new ScheduleService(new IrnituClient({
+const service = new UniversityService({ irnitu: new ScheduleService(new IrnituClient({
   ...config.irnitu,
   cacheDir,
   retries: Math.max(config.irnitu.retries, 3),
   timeoutMs: Math.max(config.irnitu.timeoutMs, 15_000),
-}));
+})), bgu: new BguProvider(config.bgu) });
 
 const startedAt = Date.now();
-const allGroups = await service.groups();
+const irnituGroups = config.irnitu.token ? await service.groups() : [];
+const bguGroups = await service.groups('bgu').catch((error) => { console.warn(error.message); return []; });
+const allGroups = [...irnituGroups, ...bguGroups];
+const readStore = async (name) => { try { return JSON.parse(await readFile(resolve(`data/${name}.json`), 'utf8')); } catch (error) { if (error.code === 'ENOENT') return {}; throw error; } };
+const savedPreferences = await readStore('preferences');
+const savedCommunity = await readStore('community');
+const active = new Set([
+  ...Object.values(savedPreferences.profiles ?? savedPreferences).map((prefs) => prefs?.selection?.kind === 'group' ? prefs.selection.id : null),
+  ...Object.values(savedCommunity.chats ?? {}).map((chat) => chat.group?.id),
+].filter(Boolean).map((id) => groupKey(id)));
 const groups = groupLimit > 0 ? allGroups.slice(0, groupLimit) : allGroups;
 const weekStarts = mode === 'full'
   ? semesterWeeks()
-  : Array.from({ length: recentWeeks }, (_, index) => addDays(startOfWeek(), index * 7));
+  : Array.from({ length: recentWeeks }, (_, index) => addDays(startOfWeek(new Date(`${zonedDateKey()}T00:00:00Z`)), index * 7));
 const previous = await readMeta();
 
-await writeJson(join(outDir, 'groups.json'), groups.map(({ id, title, institute, course }) => ({
-  id, title, institute, course,
+await writeJson(join(outDir, 'groups.json'), allGroups.map(({ id, universityId, title, institute, course }) => ({
+  id, universityId, title, institute, course,
 })));
 
 let failed = 0;
-const tasks = groups.flatMap((group) => weekStarts.map((week) => async () => {
+const tasks = groups.filter((group) => group.universityId !== 'bgu' || active.has(group.id)).flatMap((group) => weekStarts.map((week) => async () => {
   try {
     const schedule = await service.groupSchedule(group.id, { week, fresh: true, raw: true });
+    if (schedule.stale) throw new Error('source_stale');
     await writeJson(join(outDir, 'schedule', String(group.id), `${toDateKey(week)}.json`), {
       updatedAt: schedule.updatedAt,
       weekStart: toDateKey(week),

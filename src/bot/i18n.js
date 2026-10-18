@@ -1,4 +1,4 @@
-// Тексты бота на двух языках. Данные ИРНИТУ (предметы, ФИО, аудитории) не переводятся.
+// Тексты бота на двух языках. Данные вузов (предметы, ФИО, аудитории) не переводятся.
 
 export const LANGUAGES = ['ru', 'en'];
 export const DEFAULT_LANGUAGE = 'ru';
@@ -36,7 +36,7 @@ const ru = {
   languagePrompt: 'Выбери язык / Choose language',
   languageSaved: 'Язык: русский',
 
-  welcomeTitle: '👋 **Привет! Я norfly**\nРасписание ИРНИТУ и ДЗ твоей группы в одном чате.',
+  welcomeTitle: '👋 **Привет! Я norfly**\nРасписание и ДЗ твоей группы в одном чате.',
   welcomeNoGroup: 'Напиши название своей группы, например ИСТб-25-1, и я сразу покажу пары.',
   menuTitle: ({ group, subgroup }) => `**${group}**, ${subgroup ? `${subgroup} подгруппа` : 'вся группа'}`,
   menuHint: 'Можно просто написать группу, фамилию преподавателя или аудиторию, и я найду расписание.',
@@ -105,7 +105,7 @@ const ru = {
   profileSaved: (group) => `Готово, группа **${group}** сохранена. В приложении откроется она же.`,
 
   noGroupYet: 'Сначала выбери группу: просто напиши её название, например ИСТб-25-1.',
-  scheduleUnavailable: 'Сайт расписания ИРНИТУ сейчас не отвечает. Попробуй через минуту.',
+  scheduleUnavailable: 'Источник расписания вуза сейчас не отвечает. Попробуй через минуту.',
   noLessonsDay: 'Пар нет, свободный день 🌿',
   noLessonsWeek: 'На этой неделе пар нет.',
   lessonHeading: (number, time) => `**${number} пара**, ${time}`,
@@ -202,7 +202,7 @@ const ru = {
 
   groupWelcome: [
     '👋 **Привет, я norfly**', '',
-    'Буду показывать здесь расписание ИРНИТУ и собирать ДЗ группы.', '',
+    'Буду показывать здесь расписание вуза и собирать ДЗ группы.', '',
     '1. Сделайте меня администратором чата, иначе я не увижу сообщения.',
     '2. Владелец или администратор нажимает «Настроить».',
   ].join('\n'),
@@ -423,7 +423,7 @@ const en = {
   languagePrompt: 'Выбери язык / Choose language',
   languageSaved: 'Language: English',
 
-  welcomeTitle: '👋 **Hi! I’m norfly**\nThe INRTU timetable and your group’s homework in one chat.',
+  welcomeTitle: '👋 **Hi! I’m norfly**\nThe university timetable and your group’s homework in one chat.',
   welcomeNoGroup: 'Send me your group name, for example ИСТб-25-1, and I’ll show your classes.',
   menuTitle: ({ group, subgroup }) => `**${group}**, ${subgroup ? `subgroup ${subgroup}` : 'whole group'}`,
   menuHint: 'You can also send a group, a teacher’s surname or a room, and I’ll find the timetable.',
@@ -492,7 +492,7 @@ const en = {
   profileSaved: (group) => `Done, group **${group}** is saved. The app will open it too.`,
 
   noGroupYet: 'Choose your group first: just send its name, for example ИСТб-25-1.',
-  scheduleUnavailable: 'The INRTU timetable site isn’t responding. Try again in a minute.',
+  scheduleUnavailable: 'The university timetable site isn’t responding. Try again in a minute.',
   noLessonsDay: 'No classes, a free day 🌿',
   noLessonsWeek: 'No classes this week.',
   lessonHeading: (number, time) => `**Class ${number}**, ${time}`,
@@ -599,7 +599,7 @@ const en = {
 
   groupWelcome: [
     '👋 **Hi, I’m norfly**', '',
-    'I’ll show the INRTU timetable here and keep the group’s homework in one place.', '',
+    'I’ll show the university timetable here and keep the group’s homework in one place.', '',
     '1. Make me a chat admin, otherwise I can’t see messages.',
     '2. The owner or an admin taps “Set up”.',
   ].join('\n'),

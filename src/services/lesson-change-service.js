@@ -1,3 +1,5 @@
+import { groupKey, sameGroup } from '../universities/identity.js';
+import { zonedMoment } from '../lib/timezone.js';
 import { randomUUID } from 'node:crypto';
 import { parseDateKey } from '../lib/date.js';
 import { HttpError } from '../http/routes/me.js';
@@ -5,7 +7,7 @@ import { texts } from '../bot/i18n.js';
 
 export const lessonSlot = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 const sameSlot = (left, right) => left && right && lessonSlot(left) === lessonSlot(right);
-const start = (lesson) => new Date(`${lesson.date}T${lesson.time.slice(0, 5)}:00+08:00`).getTime();
+const start = (lesson) => zonedMoment(lesson.date, lesson.time.slice(0, 5), lesson.timeZone).getTime();
 const compact = (lesson) => ({ ...lesson, subgroup: lesson.subgroup ?? null });
 
 export class LessonChangeService {
@@ -42,7 +44,7 @@ export class LessonChangeService {
     const at = this.now().toISOString();
     await this.community.relocateHomework(groupId, from, to, { id, at, by });
     for (const [userId, profile] of await this.preferences.entries()) {
-      if (String(profile.selection?.id) !== String(groupId) || profile.selection?.kind !== 'group') continue;
+      if (!sameGroup(profile.selection?.id, groupId) || profile.selection?.kind !== 'group') continue;
       const reminders = { ...profile.homeworkReminders };
       const old = reminders[lessonSlot(from)];
       if (!old) continue;
@@ -99,6 +101,7 @@ export class LessonChangeService {
 
   official(groupId, change, id) {
     return this.#serial(async () => {
+      id = `${groupKey(groupId)}:${id}`;
       if (await this.community.scheduleOperationApplied(id)) return { silent: true };
       const finish = async (result) => { await this.community.recordScheduleOperation(id); return result; };
       if (change.type === 'added') return finish({});

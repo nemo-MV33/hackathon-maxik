@@ -1,9 +1,10 @@
+import { migrateGroupReferences } from '../universities/identity.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 export class PreferencesStore {
   #items = new Map();
-  #loaded = false;
+  #loadPromise;
   #writeQueue = Promise.resolve();
 
   constructor(filePath) {
@@ -17,6 +18,7 @@ export class PreferencesStore {
 
   async set(userId, value) {
     await this.#load();
+    value = migrateGroupReferences(value);
     this.#items.set(String(userId), value);
     this.#writeQueue = this.#writeQueue.then(() => this.#save());
     await this.#writeQueue;
@@ -38,11 +40,16 @@ export class PreferencesStore {
   }
 
   async #load() {
-    if (this.#loaded) return;
-    this.#loaded = true;
+    if (!this.#loadPromise) this.#loadPromise = this.#read().catch((error) => { this.#loadPromise = undefined; throw error; });
+    return this.#loadPromise;
+  }
+
+  async #read() {
     try {
       const contents = await readFile(this.filePath, 'utf8');
-      this.#items = new Map(Object.entries(JSON.parse(contents)));
+      const parsed = JSON.parse(contents);
+      this.#items = new Map(Object.entries(migrateGroupReferences(parsed.profiles ?? parsed)).filter(([key]) => key !== 'schemaVersion'));
+      if (parsed.schemaVersion !== 3) await this.#save();
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
@@ -51,7 +58,7 @@ export class PreferencesStore {
   async #save() {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temporaryPath = `${this.filePath}.tmp`;
-    const contents = JSON.stringify(Object.fromEntries(this.#items), null, 2);
+    const contents = JSON.stringify({ schemaVersion: 3, profiles: Object.fromEntries(this.#items) }, null, 2);
     await writeFile(temporaryPath, `${contents}\n`, { mode: 0o600 });
     await rename(temporaryPath, this.filePath);
   }

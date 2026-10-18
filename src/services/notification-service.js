@@ -1,3 +1,6 @@
+import { userDayLessons } from './user-schedule.js';
+import { sameGroup, groupKey } from '../universities/identity.js';
+import { universityTimeZone, zonedClock, zonedDateKey, zonedMinutes, profileTimeZone, lessonInTimeZone, zonedMoment } from '../lib/timezone.js';
 import { startOfWeek, toDateKey } from '../lib/date.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
@@ -5,22 +8,23 @@ import { Keyboard } from '@maxhub/max-bot-api';
 import { CONTROL_TYPES } from '../bot/create-bot.js';
 import { formatDate } from '../bot/format.js';
 import { lessonTypeLabel, texts } from '../bot/i18n.js';
-import { dateFromKey, irkutskClock, irkutskDateKey, irkutskMinutes } from '../lib/irkutsk.js';
-import { notificationEnabled, summaryTime, timeToMinutes } from '../lib/settings.js';
+import { dateFromKey } from '../lib/irkutsk.js';
+import { isQuiet, notificationEnabled, summaryTime, timeToMinutes } from '../lib/settings.js';
 
 // Сводка и напоминания о контрольных приходят во время, которое выбрал пользователь (по умолчанию 20:00).
-const summaryDue = (prefs, now) => irkutskMinutes(now) >= timeToMinutes(summaryTime(prefs));
+const summaryDue = (prefs, now) => !isQuiet(prefs, now) && zonedMinutes(now, profileTimeZone(prefs)) >= timeToMinutes(summaryTime(prefs));
 const EXAM_REMINDER_DAYS = [3, 1];
 const CHANGES_WINDOW_DAYS = 14;
 const MINUTE = 60_000;
 
 const lessonKey = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
-const appPayload = (lesson) => `lesson_${lesson.date}_${lesson.lessonNumber}_${lesson.subgroup ?? 0}`;
+const appPayload = (lesson, groupId) => `lesson_${lesson.universityDate ?? lesson.date}_${lesson.lessonNumber}_${lesson.subgroup ?? 0}${groupId ? `_${groupKey(groupId)}` : ''}`;
 const forSubgroup = (subgroup, lessonSubgroup) => !subgroup || !lessonSubgroup || lessonSubgroup === subgroup;
 const shortDate = (lang, key) => formatDate(lang, key, { weekday: 'short', day: 'numeric', month: 'short' });
 const sameList = (left = [], right = []) => left.join('|') === right.join('|');
 
 const slim = (lesson) => ({
+  timeZone: lesson.timeZone, startsAt: lesson.startsAt, endsAt: lesson.endsAt,
   date: lesson.date,
   lessonNumber: lesson.lessonNumber,
   subgroup: lesson.subgroup ?? null,
@@ -42,7 +46,7 @@ export const diffSchedules = (before, after, { from, to }) => {
     && sameList([...(left.teachers ?? [])].sort(), [...(right.teachers ?? [])].sort());
   const removed = [...previous].filter(([key, lesson]) => !next.has(key) || !identity(lesson, next.get(key))).map(([, lesson]) => lesson);
   const added = [...next].filter(([key, lesson]) => !previous.has(key) || !identity(lesson, previous.get(key))).map(([, lesson]) => lesson);
-  const moment = (lesson) => new Date(`${lesson.date}T${String(lesson.time || '00:00').slice(0, 5)}:00+08:00`).getTime();
+  const moment = (lesson) => zonedMoment(lesson.date, String(lesson.time || '00:00').slice(0, 5), lesson.timeZone).getTime();
   const movedFrom = new Set();
   const movedTo = new Set();
   for (const lesson of removed) {
@@ -84,12 +88,12 @@ class SnapshotStore {
 
   async get(groupId) {
     await this.#load();
-    return this.#data[String(groupId)] ?? null;
+    return this.#data[groupKey(groupId)] ?? null;
   }
 
   async set(groupId, value) {
     await this.#load();
-    this.#data[String(groupId)] = value;
+    this.#data[groupKey(groupId)] = value;
     this.#writeQueue = this.#writeQueue.then(() => this.#save());
     await this.#writeQueue;
   }
@@ -97,7 +101,9 @@ class SnapshotStore {
   async #load() {
     if (this.#data) return;
     try {
-      this.#data = JSON.parse(await readFile(this.filePath, 'utf8'));
+      const parsed = JSON.parse(await readFile(this.filePath, 'utf8'));
+      this.#data = Object.fromEntries(Object.entries(parsed).filter(([key]) => key !== 'schemaVersion').map(([key, value]) => [groupKey(key), value]));
+      if (parsed.schemaVersion !== 3) await this.#save();
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
       this.#data = {};
@@ -107,7 +113,7 @@ class SnapshotStore {
   async #save() {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temporaryPath = `${this.filePath}.tmp`;
-    await writeFile(temporaryPath, JSON.stringify(this.#data), { mode: 0o600 });
+    await writeFile(temporaryPath, JSON.stringify({ ...this.#data, schemaVersion: 3 }), { mode: 0o600 });
     await rename(temporaryPath, this.filePath);
   }
 }
@@ -159,8 +165,8 @@ export class NotificationService {
 
   async #recipients(groupId, kind) {
     return (await this.preferences.entries())
-      .filter(([, prefs]) => prefs.selection?.kind === 'group' && String(prefs.selection.id) === String(groupId))
-      .filter(([, prefs]) => notificationEnabled(prefs, kind))
+      .filter(([, prefs]) => prefs.selection?.kind === 'group' && sameGroup(prefs.selection.id, groupId))
+      .filter(([, prefs]) => notificationEnabled(prefs, kind) && !isQuiet(prefs, this.now()))
       .map(([id, prefs]) => ({ id: Number(id), prefs }));
   }
 
@@ -193,10 +199,11 @@ export class NotificationService {
       .filter(({ prefs }) => forSubgroup(prefs.subgroup, item.subgroup));
     for (const { id, prefs } of recipients) {
       const t = texts(prefs.lang);
-      const when = `${shortDate(prefs.lang, item.lessonDate)}, ${item.lessonTime?.slice(0, 5) ?? ''}`.replace(/, $/, '');
+      const local = item.lessonTime ? lessonInTimeZone({ date: item.lessonDate, time: item.lessonTime }, profileTimeZone(prefs)) : null;
+      const when = `${shortDate(prefs.lang, local?.date ?? item.lessonDate)}, ${local?.time.slice(0, 5) ?? ''}`.replace(/, $/, '');
       const title = isUpdate ? t.updatedHomework(item.subject, when) : t.newHomework(item.subject, when);
       try {
-        await this.#send(id, prefs.lang, `${title}\n\n${item.text}`, appPayload(lesson), t.openLesson);
+        await this.#send(id, prefs.lang, `${title}\n\n${item.text}`, appPayload(lesson, prefs.selection.id), t.openLesson);
       } catch (error) {
         console.error(`Homework notification failed for user ${id}:`, error.message);
       }
@@ -210,23 +217,23 @@ export class NotificationService {
     let sent = 0;
     try {
       const now = this.now();
-      const tomorrow = irkutskDateKey(now, 1);
       const schedules = new Map();
       const users = (await this.preferences.entries())
         .filter(([, prefs]) => prefs.selection?.kind === 'group' && notificationEnabled(prefs, 'summary'))
-        .filter(([, prefs]) => summaryDue(prefs, now) && prefs.summarySentFor !== tomorrow);
+        .filter(([, prefs]) => summaryDue(prefs, now) && prefs.summarySentFor !== zonedDateKey(now, profileTimeZone(prefs), 1));
 
       for (const [id, prefs] of users) {
+        const tomorrow = zonedDateKey(now, profileTimeZone(prefs), 1);
         const groupId = prefs.selection.id;
-        const cacheKey = `${groupId}:${prefs.subgroup ?? 0}`;
+        const cacheKey = `${groupId}:${prefs.subgroup ?? 0}:${tomorrow}:${profileTimeZone(prefs)}`;
         try {
           if (!schedules.has(cacheKey)) {
-            schedules.set(cacheKey, this.service.groupSchedule(groupId, { week: dateFromKey(tomorrow), subgroup: prefs.subgroup ?? null }));
+            schedules.set(cacheKey, userDayLessons(this.service, groupId, tomorrow, profileTimeZone(prefs), prefs.subgroup));
           }
-          const lessons = (await schedules.get(cacheKey)).lessons.filter((lesson) => lesson.date === tomorrow);
+          const lessons = await schedules.get(cacheKey);
           if (lessons.length) {
-            const homework = await this.community.homeworkForUser(groupId, id, { from: tomorrow, to: tomorrow, subgroup: prefs.subgroup });
-            await this.#send(Number(id), prefs.lang, this.#summaryText(prefs.lang, tomorrow, lessons, homework), `day_${tomorrow}`, texts(prefs.lang).openDay);
+            const homework = await this.community.homeworkForUser(groupId, id, { from: lessons[0].date, to: lessons.at(-1).date, subgroup: prefs.subgroup });
+            await this.#send(Number(id), prefs.lang, this.#summaryText(prefs.lang, tomorrow, lessons.map((lesson) => lessonInTimeZone(lesson, profileTimeZone(prefs))), homework), `day_${tomorrow}_${groupKey(groupId)}`, texts(prefs.lang).openDay);
             sent += 1;
           }
           await this.preferences.set(id, { ...await this.preferences.get(id), summarySentFor: tomorrow });
@@ -244,9 +251,9 @@ export class NotificationService {
   async sendExamReminders() {
     const now = this.now();
     const schedules = new Map();
-    const scheduleFor = (groupId, subgroup, dateKey) => {
-      const key = `${groupId}:${subgroup ?? 0}:${dateKey}`;
-      if (!schedules.has(key)) schedules.set(key, this.service.groupSchedule(groupId, { week: dateFromKey(dateKey), subgroup }));
+    const scheduleFor = (groupId, subgroup, dateKey, zone) => {
+      const key = `${groupId}:${subgroup ?? 0}:${dateKey}:${zone}`;
+      if (!schedules.has(key)) schedules.set(key, userDayLessons(this.service, groupId, dateKey, zone, subgroup));
       return schedules.get(key);
     };
     let sent = 0;
@@ -257,17 +264,18 @@ export class NotificationService {
       const reminded = new Set(prefs.examReminders ?? []);
       const fresh = [];
       for (const days of EXAM_REMINDER_DAYS) {
-        const dateKey = irkutskDateKey(now, days);
+        const dateKey = zonedDateKey(now, profileTimeZone(prefs), days);
         try {
-          const lessons = (await scheduleFor(prefs.selection.id, prefs.subgroup ?? null, dateKey)).lessons
+          const lessons = (await scheduleFor(prefs.selection.id, prefs.subgroup ?? null, dateKey, profileTimeZone(prefs)))
+            .map((lesson) => lessonInTimeZone(lesson, profileTimeZone(prefs)))
             .filter((lesson) => lesson.date === dateKey && CONTROL_TYPES.includes(String(lesson.lessonType).toLowerCase()));
           for (const lesson of lessons) {
-            const key = `${lessonKey(lesson)}:${days}`;
+            const key = `${groupKey(prefs.selection.id)}|${lessonKey(lesson)}:${days}`;
             if (reminded.has(key)) continue;
             const t = texts(prefs.lang);
             const text = t.examReminder(t.examIn(days), lessonTypeLabel(prefs.lang, lesson.lessonType), lesson.subject,
               `${shortDate(prefs.lang, lesson.date)}, ${lesson.time.slice(0, 5)}`, (lesson.auditories ?? []).join(', '));
-            await this.#send(Number(id), prefs.lang, text, appPayload(lesson), t.openLesson);
+            await this.#send(Number(id), prefs.lang, text, appPayload(lesson, prefs.selection.id), t.openLesson);
             fresh.push(key);
             sent += 1;
           }
@@ -290,7 +298,7 @@ export class NotificationService {
     for (const { id, prefs } of recipients) {
       const t = texts(prefs.lang);
       try {
-        await this.#send(id, prefs.lang, t.announcementNew(item, this.#when(prefs.lang, item.remindAt)), 'plan', t.openPlanner);
+        await this.#send(id, prefs.lang, t.announcementNew(item, this.#when(prefs.lang, item.remindAt, profileTimeZone(prefs))), 'plan', t.openPlanner);
       } catch (error) {
         console.error(`Announcement notification failed for user ${id}:`, error.message);
       }
@@ -298,10 +306,10 @@ export class NotificationService {
     return recipients.length;
   }
 
-  #when(lang, iso) {
+  #when(lang, iso, zone = 'Asia/Irkutsk') {
     if (!iso) return null;
     const date = new Date(iso);
-    return `${shortDate(lang, irkutskDateKey(date))}, ${irkutskClock(date)}`;
+    return `${shortDate(lang, zonedDateKey(date, zone))}, ${zonedClock(date, zone)}`;
   }
 
   // Напоминания «на время»: об объявлениях старосты и о ДЗ из планера.
@@ -311,25 +319,25 @@ export class NotificationService {
     let sent = 0;
     const announcements = await this.community.allAnnouncements();
     for (const [id, prefs] of await this.preferences.entries()) {
-      if (prefs.selection?.kind !== 'group') continue;
+      if (prefs.selection?.kind !== 'group' || isQuiet(prefs, now)) continue;
       const done = new Set(prefs.sentScheduled ?? []);
       const fresh = [];
       const t = texts(prefs.lang);
       const due = [];
       if (notificationEnabled(prefs, 'announcements')) {
         for (const item of announcements) {
-          if (String(item.groupId) !== String(prefs.selection.id)) continue;
+          if (!sameGroup(item.groupId, prefs.selection.id)) continue;
           const own = prefs.announcementReminders?.[item.id];
           const at = own === undefined ? item.remindAt : own;
           if (!at || new Date(at) > now || now - new Date(at) > 6 * 60 * MINUTE) continue;
-          const key = `a:${item.id}:${at}`;
+          const key = `${groupKey(prefs.selection.id)}|a:${item.id}:${at}`;
           if (!done.has(key)) due.push({ key, text: t.announcementReminder(item), payload: 'plan', label: t.openPlanner });
         }
       }
       if (notificationEnabled(prefs, 'homework')) {
         for (const [lessonKey, reminder] of Object.entries(prefs.homeworkReminders ?? {})) {
           if (reminder?.suspended || !reminder?.at || new Date(reminder.at) > now || now - new Date(reminder.at) > 6 * 60 * MINUTE) continue;
-          const key = `h:${lessonKey}:${reminder.at}`;
+          const key = `${groupKey(prefs.selection.id)}|h:${lessonKey}:${reminder.at}`;
           if (done.has(key)) continue;
           const [date, lessonNumber, subgroup] = lessonKey.split(':');
           const lesson = { date, lessonNumber: Number(lessonNumber), subgroup: Number(subgroup) || null };
@@ -338,7 +346,7 @@ export class NotificationService {
           due.push({
             key,
             text: t.homeworkReminder(reminder.subject ?? homework?.subject ?? '', `${shortDate(prefs.lang, date)}, ${reminder.time ?? ''}`.replace(/, $/, ''), homework?.text),
-            payload: appPayload(lesson),
+            payload: appPayload(lesson, prefs.selection.id),
             label: t.openLesson,
           });
         }
@@ -381,8 +389,6 @@ export class NotificationService {
     let notified = 0;
     try {
       const now = this.now();
-      const from = irkutskDateKey(now);
-      const to = irkutskDateKey(now, CHANGES_WINDOW_DAYS - 1);
       const users = (await this.preferences.entries())
         .filter(([, prefs]) => prefs.selection?.kind === 'group');
       const groups = new Map();
@@ -396,15 +402,19 @@ export class NotificationService {
         if (chat.group && !groups.has(chat.group.id)) groups.set(chat.group.id, { title: chat.group.title, users: [] });
       }
       for (const [groupId, group] of groups) {
-        const recipients = group.users.filter(({ prefs }) => notificationEnabled(prefs, 'changes'));
+        const sourceZone = universityTimeZone(groupId);
+        const from = zonedDateKey(now, sourceZone);
+        const to = zonedDateKey(now, sourceZone, CHANGES_WINDOW_DAYS - 1);
+        const recipients = group.users.filter(({ prefs }) => notificationEnabled(prefs, 'changes') && !isQuiet(prefs, now));
 
         const previous = await this.snapshots.get(groupId);
         const legacySnapshot = previous?.lessons.some((lesson) => typeof lesson.lessonType !== 'string');
         let lessons;
         try {
-          const keys = near && previous && !legacySnapshot ? [from, irkutskDateKey(now, 1)] : [from, irkutskDateKey(now, 7), to];
-          const weeks = await Promise.all([...new Set(keys.map((key) => { const date = dateFromKey(key); date.setDate(date.getDate() - (date.getDay() + 6) % 7); return date.toISOString(); }))].map((key) =>
+          const keys = near && previous && !legacySnapshot ? [from, zonedDateKey(now, sourceZone, 1)] : [from, zonedDateKey(now, sourceZone, 7), to];
+          const weeks = await Promise.all([...new Set(keys.map((key) => { return startOfWeek(dateFromKey(key)).toISOString(); }))].map((key) =>
             this.service.groupSchedule(groupId, { week: new Date(key), raw: true, fresh: true })));
+          if (weeks.some((week) => week.stale)) throw new Error('source_stale');
           const seen = new Set();
           lessons = weeks.flatMap((week) => week.lessons)
             .filter((lesson) => lesson.date >= from && lesson.date <= to)
@@ -416,7 +426,7 @@ export class NotificationService {
         }
 
         if (near && previous && !legacySnapshot) {
-          const weeks = new Set([from, irkutskDateKey(now, 1)].map((key) => toDateKey(startOfWeek(dateFromKey(key)))));
+          const weeks = new Set([from, zonedDateKey(now, sourceZone, 1)].map((key) => toDateKey(startOfWeek(dateFromKey(key)))));
           lessons = [...previous.lessons.filter((lesson) => !weeks.has(toDateKey(startOfWeek(dateFromKey(lesson.date)))) && lesson.date >= from && lesson.date <= to), ...lessons];
         }
         // Старый формат не сохранял тип занятия: сравнение сочло бы все пары заменёнными.
@@ -431,7 +441,7 @@ export class NotificationService {
         // Дополнительные недели читаем только при таком изменении.
         if (near && changes.some((change) => ['cancelled', 'subject'].includes(change.type))) {
           try {
-            const keys = [...new Set([from, irkutskDateKey(now, 7), to].map((key) => toDateKey(startOfWeek(dateFromKey(key)))))];
+            const keys = [...new Set([from, zonedDateKey(now, sourceZone, 7), to].map((key) => toDateKey(startOfWeek(dateFromKey(key)))))];
             const weeks = await Promise.all(keys.map((key) => this.service.groupSchedule(groupId, { week: dateFromKey(key), raw: true, fresh: true })));
             const unique = new Map(weeks.flatMap((week) => week.lessons).filter((lesson) => lesson.date >= from && lesson.date <= to)
               .map((lesson) => [lessonKey(lesson), slim(lesson)]));
@@ -462,7 +472,7 @@ export class NotificationService {
           const own = visible.filter((change) => forSubgroup(prefs.subgroup, change.lesson.subgroup));
           if (!own.length) continue;
           try {
-            await this.#send(id, prefs.lang, this.#changesText(prefs.lang, group.title, own), `day_${own[0].lesson.date}`, texts(prefs.lang).openDay);
+            await this.#send(id, prefs.lang, this.#changesText(prefs.lang, group.title, own.map((change) => ({ ...change, lesson: lessonInTimeZone(change.lesson, profileTimeZone(prefs)), previous: change.previous ? lessonInTimeZone(change.previous, profileTimeZone(prefs)) : undefined }))), `day_${lessonInTimeZone(own[0].lesson, profileTimeZone(prefs)).date}_${groupKey(groupId)}`, texts(prefs.lang).openDay);
             notified += 1;
           } catch (error) {
             console.error(`Changes notification failed for user ${id}:`, error.message);

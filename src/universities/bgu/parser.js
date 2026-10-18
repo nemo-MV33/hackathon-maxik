@@ -1,0 +1,122 @@
+import { addDays, startOfWeek, toDateKey } from '../../lib/date.js';
+export class BguSourceError extends Error {
+  constructor(code) { super(code); this.name = 'BguSourceError'; this.code = code; }
+}
+export const htmlText = (value) => value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/g, ' ')
+  .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+export const parseGroups = (html) => {
+  const groups = new Map();
+  for (const match of html.matchAll(/<a\b[^>]*href=['"]\?idg=(\d+)['"][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const title = htmlText(match[2]);
+    if (title) groups.set(Number(match[1]), { id: Number(match[1]), title, institute: '', course: null });
+  }
+  if (!groups.size) throw new BguSourceError('bgu_directory_unrecognized');
+  return [...groups.values()];
+};
+export const parseParity = (html) => {
+  const content = htmlText(html);
+  const date = content.match(/Сегодня\s*-\s*(\d+)\s+([а-я]+)\s+(\d{4})/i);
+  const parity = content.match(/Неделя\s+(нечетная|нечётная|четная|чётная)/i);
+  const months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  if (!date || !parity || !months.includes(date[2])) throw new BguSourceError('bgu_parity_unrecognized');
+  return { date: `${date[3]}-${String(months.indexOf(date[2]) + 1).padStart(2, '0')}-${date[1].padStart(2, '0')}`,
+    weekEven: !parity[1].toLowerCase().startsWith('не') };
+};
+export const bguLessonTimes = {
+  1: '08:30–10:00', 2: '10:15–11:45', 3: '12:00–13:30', 4: '14:00–15:30',
+  5: '15:45–17:15', 6: '17:30–19:00', 7: '19:15–20:45',
+};
+const DAYS = ['ПОНЕДЕЛЬНИК', 'ВТОРНИК', 'СРЕДА', 'ЧЕТВЕРГ', 'ПЯТНИЦА', 'СУББОТА', 'ВОСКРЕСЕНЬЕ'];
+const dateKey = (value) => { const [day, month, year] = value.split('.'); return `${year}-${month}-${day}`; };
+const clock = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+export const parseTeachers = (html) => {
+  const teachers = new Map();
+  for (const match of html.matchAll(/<a\b[^>]*href=['"]\?idp=(\d+)['"][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const fullName = htmlText(match[2]);
+    if (fullName) teachers.set(Number(match[1]), { id: Number(match[1]), name: fullName, fullName });
+  }
+  if (!teachers.size) throw new BguSourceError('bgu_directory_unrecognized');
+  return [...teachers.values()];
+};
+export const parseSchedule = (html, { week = new Date(), groupId, teacherId } = {}) => {
+  if (/расписание\s+занятий\s+временно\s+недоступно/iu.test(htmlText(html))) throw new BguSourceError('bgu_temporarily_unavailable');
+  const area = html.slice(html.indexOf('id="MainContent_divTT"')).split('<footer')[0];
+  if (!area.includes('<table')) throw new BguSourceError('bgu_schedule_unrecognized');
+  const anchor = parseParity(html);
+  const from = startOfWeek(week);
+  const delta = Math.round((from - startOfWeek(new Date(`${anchor.date}T00:00:00Z`))) / 604800000);
+  const weekEven = Math.abs(delta) % 2 ? !anchor.weekEven : anchor.weekEven;
+  const periods = new Map([...area.matchAll(/<a\b[^>]*href=['"]#([^'"]+)['"][^>]*>([\s\S]*?)<\/a>/gi)].map((match) => {
+    const dates = htmlText(match[2]).match(/\d{2}\.\d{2}\.\d{4}/g) ?? [];
+    return [match[1], dates.map(dateKey)];
+  }));
+  const panes = [...area.matchAll(/<div\b[^>]*class=['"][^'"]*tab-pane[^'"]*['"][^>]*id=['"]([^'"]+)['"][^>]*>/gi)];
+  if (!panes.length || !periods.size) throw new BguSourceError('bgu_period_unrecognized');
+  const lessons = [];
+  let recognized = 0;
+  for (let index = 0; index < panes.length; index += 1) {
+    const pane = panes[index];
+    const [begin, end] = periods.get(pane[1]) ?? [];
+    if (!begin || !end) throw new BguSourceError('bgu_period_unrecognized');
+    const section = area.slice(pane.index, panes[index + 1]?.index);
+    for (const table of section.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)) {
+      let day = null;
+      let explicitDate = null;
+      let columns;
+      for (const row of table[1].matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+        const cells = [...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi)].map((cell) => cell[1]);
+        const labels = cells.map(htmlText);
+        if (labels.some((label) => label === 'Начало')) {
+          columns = { time: labels.indexOf('Начало'), subject: labels.indexOf('Предмет'), room: labels.indexOf('Аудитория'), teacher: labels.indexOf('Преподаватель'), date: labels.indexOf('Дата'), group: labels.indexOf('Группа') };
+          if ([columns.time, columns.subject, columns.room, ...(teacherId ? [] : [columns.teacher])].some((column) => column < 0)) throw new BguSourceError('bgu_columns_unrecognized');
+          recognized += 1;
+          continue;
+        }
+        if (cells.length === 1) {
+          const heading = labels[0].toUpperCase();
+          const dayIndex = DAYS.findIndex((value) => heading.includes(value));
+          const date = heading.match(/\d{2}\.\d{2}\.\d{4}/)?.[0];
+          day = dayIndex >= 0 ? dayIndex : null;
+          explicitDate = date ? dateKey(date) : null;
+          continue;
+        }
+        if (!cells.length || labels.every((label) => !label)) continue;
+        if (!columns) throw new BguSourceError('bgu_columns_unrecognized');
+        const timeCell = cells[columns.time];
+        const starts = htmlText(timeCell).match(/^(\d{1,2}):(\d{2})/);
+        const rowDate = columns.date >= 0 ? labels[columns.date]?.match(/\d{2}\.\d{2}\.\d{4}/)?.[0] : null;
+        if (rowDate) explicitDate = dateKey(rowDate);
+        if (!starts || (day === null && !explicitDate)) throw new BguSourceError('bgu_row_unrecognized');
+        const sourceDate = explicitDate ?? toDateKey(addDays(from, day));
+        if (sourceDate < begin || sourceDate > end || sourceDate < toDateKey(from) || sourceDate > toDateKey(addDays(from, 6))) continue;
+        const everyWeek = /fa-circle-o/.test(timeCell);
+        const even = !everyWeek && /text-primary/.test(timeCell);
+        const odd = !everyWeek && /text-danger/.test(timeCell);
+        if (!everyWeek && !even && !odd && !explicitDate) throw new BguSourceError('bgu_row_parity_unrecognized');
+        if ((even && !weekEven) || (odd && weekEven)) continue;
+        const start = `${starts[1].padStart(2, '0')}:${starts[2]}`;
+        const known = Object.entries(bguLessonTimes).find(([, time]) => time.startsWith(start));
+        const minutes = Number(starts[1]) * 60 + Number(starts[2]);
+        if (Number(starts[1]) > 23 || Number(starts[2]) > 59) throw new BguSourceError('bgu_time_unrecognized');
+        const subjectCell = cells[columns.subject];
+        const subject = htmlText(subjectCell.match(/<span\b[^>]*class=['"][^'"]*h5[^'"]*['"][^>]*>([\s\S]*?)<\/span>/i)?.[1] ?? '');
+        const kind = htmlText(subjectCell.match(/<small\b[^>]*>([\s\S]*?)<\/small>/i)?.[1] ?? '');
+        if (!subject) throw new BguSourceError('bgu_subject_unrecognized');
+        const subgroup = htmlText(subjectCell).match(/(?:подгруппа|п\/г)\s*([12])|([12])\s*(?:-?я\s*)?подгруппа/i);
+        const lessonNumber = known ? Number(known[0]) : minutes + 1000;
+        lessons.push({
+          id: `${groupId ?? teacherId}:${sourceDate}:${lessonNumber}:${subgroup?.[1] ?? subgroup?.[2] ?? 0}:${lessons.length}`,
+          date: sourceDate, lessonNumber, time: known?.[1] ?? `${start}–${clock(minutes + 90)}`,
+          endEstimated: !known, subject, lessonType: /практическое/i.test(kind) ? 'практика' : /лаборатор/i.test(kind) ? 'лабораторная' : /лекц/i.test(kind) ? 'лекция' : /экзам/i.test(kind) ? 'экзамен' : /зач[её]т/i.test(kind) ? 'зачёт' : /консульт/i.test(kind) ? 'консультация' : kind.toLowerCase() || 'занятие',
+          subgroup: Number(subgroup?.[1] ?? subgroup?.[2]) || null,
+          teachers: labels[columns.teacher] ? [labels[columns.teacher]] : [], teacherIds: teacherId ? [teacherId] : [],
+          auditories: labels[columns.room] ? [labels[columns.room]] : [], auditoryIds: [],
+          groups: columns.group >= 0 ? [labels[columns.group]].filter(Boolean) : [], groupIds: groupId ? [groupId] : [],
+          comment: '', link: '', sourceType: 'bgu_html', transferred: false,
+        });
+      }
+    }
+  }
+  if (!recognized) throw new BguSourceError('bgu_schedule_unrecognized');
+  return { weekEven, lessons: lessons.sort((a, b) => a.date.localeCompare(b.date) || a.lessonNumber - b.lessonNumber) };
+};

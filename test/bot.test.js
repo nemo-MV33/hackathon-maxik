@@ -59,7 +59,7 @@ const service = {
   auditorySchedule: schedule('auditory'),
 };
 
-const setup = async (t) => {
+const setup = async (t, scheduleService = service) => {
   const directory = await mkdtemp(join(tmpdir(), 'norfly-bot-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const preferences = new PreferencesStore(join(directory, 'preferences.json'));
@@ -68,8 +68,8 @@ const setup = async (t) => {
   const unreachable = new Set();
   const make = () => {
     let changes;
-    const bot = createBot({ token: 'test', service, preferences, community, getLessonChanges: () => changes });
-    changes = new LessonChangeService({ community, preferences, service, bot });
+    const bot = createBot({ token: 'test', service: scheduleService, preferences, community, getLessonChanges: () => changes });
+    changes = new LessonChangeService({ community, preferences, service: scheduleService, bot });
     bot.botInfo = BOT;
     bot.catch((error) => { throw error; });
     Object.assign(bot.api, {
@@ -145,7 +145,9 @@ test('первый запуск: язык, поиск группы, подгру
 
   const [welcome] = await press(STUDENT, 'lang:en');
   assert.equal(welcome.to, 'callback');
-  assert.match(welcome.text, /Send me your group name/);
+  assert.match(welcome.text, /Choose your university/);
+  const [university] = await press(STUDENT, 'uni:own:irnitu');
+  assert.match(university.text, /Send a group|group|Group/);
 
   const [results] = await say(STUDENT, 'истб 25');
   assert.deepEqual(payloads(results).filter((p) => p.startsWith('mine:')), ['mine:11', 'mine:12']);
@@ -171,7 +173,7 @@ test('первый запуск: язык, поиск группы, подгру
   assert.equal(saved.notifications.exams, true);
   assert.equal(saved.lang, 'en');
   assert.equal(saved.subgroup, 1);
-  assert.equal(saved.selection.id, 11);
+  assert.equal(saved.selection.id, 'irnitu~11');
 });
 
 test('выбор группы через институт и курс', async (t) => {
@@ -184,7 +186,7 @@ test('выбор группы через институт и курс', async (t
   const [groups] = await press(STUDENT, 'grp:0:1:0');
   assert.ok(payloads(groups).includes('mine:11'));
   const [menu] = await say(STUDENT, '/start');
-  assert.match(menu.text, /Напиши название своей группы/);
+  assert.match(menu.text, /Выберите вуз/);
 });
 
 test('команды с упоминанием бота и неизвестные команды', async (t) => {
@@ -196,7 +198,7 @@ test('команды с упоминанием бота и неизвестны�
   assert.match(today.text, /Сегодня/);
   const [week] = await say(STUDENT, '@t692_hakaton_max_bot /WEEK');
   assert.match(week.text, /неделя/);
-  assert.ok(payloads(week).includes('s:group:11:w1'));
+  assert.ok(payloads(week).includes('s:group:irnitu~11:w1'));
   const [unknown] = await say(STUDENT, '/foo');
   assert.match(unknown.text, /Такой команды нет/);
   const [alias] = await say(STUDENT, '/schedule');
@@ -247,14 +249,15 @@ test('чат группы: настройка, староста, редакто�
   assert.match(denied.text, /владелец или администратор/);
 
   const [prompt] = await say(ADMIN, '/setup', inGroup);
-  assert.match(prompt.text, /Напиши название группы/);
+  assert.match(prompt.text, /Выберите вуз/);
+  await press(ADMIN, 'uni:link:irnitu', inGroup);
   const [results] = await say(ADMIN, 'ИСТб-25', inGroup);
   assert.ok(payloads(results).includes('link:11'));
   const [subgroups] = await press(ADMIN, 'link:11', inGroup);
   assert.ok(payloads(subgroups).includes('lsub:11:all'));
   const [linked] = await press(ADMIN, 'lsub:11:all', inGroup);
   assert.match(linked.text, /привязан к группе/);
-  assert.equal((await community.getChat(GROUP_CHAT.chat_id)).group.id, 11);
+  assert.equal((await community.getChat(GROUP_CHAT.chat_id)).group.id, 'irnitu~11');
 
   const [forbidden] = await say(STUDENT, '/add', inGroup);
   assert.match(forbidden.text, /староста и редакторы/);
@@ -427,15 +430,16 @@ test('всё управление кнопками: без единой кома
   assert.equal(denied.notification, 'Это может сделать администратор чата');
 
   const [setupPrompt] = await press(ADMIN, 'm:setup', inGroup);
-  assert.match(setupPrompt.text, /Напиши название группы/);
+  assert.match(setupPrompt.text, /Выберите вуз/);
+  await press(ADMIN, 'uni:link:irnitu', inGroup);
   await run({ update_type: 'message_created', message: { sender: ADMIN, recipient: GROUP_CHAT, body: { mid: 'x', text: 'ИСТб-25-1' } } });
   const [linked] = await press(ADMIN, 'lsub:11:all', inGroup);
-  assert.deepEqual(payloads(linked), ['g:d0', 'g:d1', 'g:w0', 'hw:list', 'g:more']);
+  assert.deepEqual(payloads(linked), ['g:d0|irnitu~11', 'g:d1|irnitu~11', 'g:w0|irnitu~11', 'hw:list', 'g:more|irnitu~11']);
   const [groupMore] = await press(ADMIN, 'g:more', inGroup);
-  assert.deepEqual(payloads(groupMore), ['gh:pick', 'team', 'manage', 'help']);
+  assert.deepEqual(payloads(groupMore), ['gh:pick|irnitu~11', 'team', 'manage', 'help']);
 
   const [managed] = await press(ADMIN, 'manage', inGroup);
-  assert.deepEqual(payloads(managed), ['m:setup', 'mv:orphans', 'mv:pick', 'mv:marks', 'm:head:0', 'm:ed:0', 'm:acc', 'invite', 'm:lang', 'help']);
+  assert.deepEqual(payloads(managed), ['m:setup', 'mv:orphans|irnitu~11', 'mv:pick|irnitu~11', 'mv:marks|irnitu~11', 'm:head:0', 'm:ed:0', 'm:acc', 'invite', 'm:lang', 'help']);
   const [members] = await press(ADMIN, 'm:head:0', inGroup);
   assert.deepEqual(payloads(members), ['hs:2', 'hs:3', 'hs:1', 'manage'], 'бот в списке не показывается');
   const assigned = await press(ADMIN, 'hs:3', inGroup);
@@ -474,9 +478,9 @@ test('всё управление кнопками: без единой кома
   noBrokenNavigation(find);
   const [settings] = await press(STUDENT, 'settings');
   const [study] = await press(STUDENT, 'set:study');
-  assert.deepEqual(payloads(study), ['set:group', 'set:sub:11', 'invite', 'settings']);
+  assert.deepEqual(payloads(study), ['set:group', 'set:sub:irnitu~11', 'invite', 'settings']);
   const [invite] = await press(STUDENT, 'invite');
-  assert.match(invite.text, /https:\/\/max\.ru\/t692_hakaton_max_bot\?start=group_11_1/);
+  assert.match(invite.text, /https:\/\/max\.ru\/t692_hakaton_max_bot\?start=group_irnitu~11_1/);
   assert.ok(menu);
 });
 
@@ -516,7 +520,7 @@ test('староста: «Принято», сводка опозданий, Д�
 
   const [headmanMenu] = await press(HEADMAN, 'more');
   assert.ok(payloads(headmanMenu).includes('late:0'));
-  assert.ok(payloads(headmanMenu).includes('gp:pick'));
+  assert.ok(payloads(headmanMenu).includes('gp:pick|irnitu~11'));
   assert.ok(payloads(headmanMenu).includes('ann:new'));
   const [lateness] = await press(HEADMAN, 'late:0');
   assert.match(lateness.text, /Опоздают \(1\)/);
@@ -641,15 +645,55 @@ test('староста отмечает перенос кнопками груп
   await community.upsertHomework({ groupId: group.id, lessonDate: from.date, lessonNumber: from.lessonNumber,
     lessonTime: from.time, subgroup: null, subject: from.subject, text: 'Задачи 1–5' });
   const [menu] = await press(HEADMAN, `gh:${from.date}:1:0`, { chat: GROUP_CHAT });
-  assert.ok(payloads(menu).includes(`mv:${from.date}:1:0`));
+  assert.ok(payloads(menu).includes(`mv:${from.date}:1:0|irnitu~11`));
   await press(HEADMAN, `mv:${from.date}:1:0`, { chat: GROUP_CHAT });
   await press(HEADMAN, 'mv:date', { chat: GROUP_CHAT });
   const [picker] = await say(HEADMAN, targetDate, { chat: GROUP_CHAT });
-  assert.ok(payloads(picker).includes(`mt:${targetDate}:1:0`));
+  assert.ok(payloads(picker).includes(`mt:${targetDate}:1:0|irnitu~11`));
   const result = await press(HEADMAN, `mt:${targetDate}:1:0`, { chat: GROUP_CHAT });
   assert.ok(result.some((item) => item.to === 'chat' && /перенесена с/.test(item.text)));
   const homework = await community.homeworkForUser(group.id, STUDENT.user_id, { from: targetDate, to: targetDate });
   assert.equal(homework[0].text, 'Задачи 1–5');
   assert.equal(homework[0].lessonDate, targetDate);
   assert.equal(sent.filter((item) => item.to === 'chat' && /перенесена с/.test(item.text)).length, 1);
+});
+
+
+test('БГУ: выбор вуза в личном чате и /setup, поиск и старые payload ИРНИТУ', async (t) => {
+  const { UniversityService } = await import('../src/universities/service.js');
+  const bgu = { ...service, groups: async () => [{ id: 11, title: 'ГМУ-25-1', institute: '', course: null }],
+    searchGroups: async () => [{ id: 11, title: 'ГМУ-25-1', institute: '', course: null }] };
+  const multi = new UniversityService({ irnitu: service, bgu });
+  const { say, press, payloads, preferences, community } = await setup(t, multi);
+  const [universities] = await press(STUDENT, 'lang:ru');
+  assert.deepEqual(payloads(universities), ['uni:own:irnitu', 'uni:own:bgu']);
+  await press(STUDENT, 'uni:own:bgu');
+  const [subgroup] = await say(STUDENT, 'ГМУ-25-1');
+  assert.ok(payloads(subgroup).includes('sub:bgu~11:all'));
+  await press(STUDENT, 'sub:bgu~11:all');
+  assert.equal((await preferences.get(STUDENT.user_id)).selection.id, 'bgu~11');
+  const inGroup = { chat: GROUP_CHAT };
+  const [setupPrompt] = await say(ADMIN, '/setup', inGroup);
+  assert.ok(payloads(setupPrompt).includes('uni:link:bgu'));
+  await press(ADMIN, 'uni:link:bgu', inGroup);
+  await say(ADMIN, 'ГМУ-25-1', inGroup);
+  await press(ADMIN, 'lsub:bgu~11:all', inGroup);
+  assert.equal((await community.getChat(GROUP_CHAT.chat_id)).group.id, 'bgu~11');
+  // Числовая кнопка из старого сообщения по-прежнему выбирает именно ИРНИТУ.
+  await press(STUDENT, 'sub:11:all');
+  assert.equal((await preferences.get(STUDENT.user_id)).selection.id, 'irnitu~11');
+});
+
+test('кнопка пары с вузом отвергается после смены группы; старая кнопка работает', async (t) => {
+  const { press, say, payloads, preferences } = await setup(t);
+  await preferences.set(STUDENT.user_id, { lang: 'ru', selection: { kind: 'group', id: 11, title: 'ИСТб-25-1' } });
+  const [picker] = await press(STUDENT, 'ph:pick');
+  const payload = payloads(picker).find((item) => item.startsWith('ph:'));
+  assert.match(payload, /\|irnitu~11$/);
+  const [opened] = await press(STUDENT, payload);
+  assert.match(opened.text, /Математический анализ/);
+  await preferences.set(STUDENT.user_id, { lang: 'ru', selection: { kind: 'group', id: 'bgu~11', title: 'ГМУ-25-1' } });
+  const [expired] = await press(STUDENT, payload);
+  assert.ok(expired.notification);
+  await say(STUDENT, 'Не должно попасть в другую группу');
 });

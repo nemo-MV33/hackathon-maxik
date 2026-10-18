@@ -1,3 +1,5 @@
+import { zonedDateKey, profileTimeZone } from '../../lib/timezone.js';
+import { parseDateKey } from '../../lib/date.js';
 import { HttpError } from './me.js';
 import { noticeMinutes } from '../../lib/settings.js';
 
@@ -8,10 +10,9 @@ const MAX_TEXT_LENGTH = 500;
 const LATE_MINUTES = [5, 10, 15, 20, 30, 45, 60];
 
 const findLesson = async (service, group, subgroup, date, lessonNumber) => {
-  const [year, month, day] = date.split('-').map(Number);
-  const schedule = await service.groupSchedule(group.id, { week: new Date(year, month - 1, day, 12), subgroup });
+  const schedule = await service.groupSchedule(group.id, { week: parseDateKey(date), subgroup });
   const lesson = schedule.lessons.find((item) => item.date === date && item.lessonNumber === lessonNumber);
-  if (!lesson) throw new HttpError(404, 'lesson_not_found', 'Пара не найдена в расписании ИРНИТУ');
+  if (!lesson) throw new HttpError(404, 'lesson_not_found', 'Пара не найдена в расписании вуза');
   return lesson;
 };
 
@@ -127,17 +128,13 @@ export const getAbsenceHistory = async ({ user, preferences, community, url }) =
   };
 };
 
-const irkutskToday = () => new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'Asia/Irkutsk', year: 'numeric', month: '2-digit', day: '2-digit',
-}).format(new Date());
-
 // Старосте — все сообщения группы за день, студенту — только его собственные (без чужих имён).
 export const getAbsences = async ({ user, preferences, community, url }) => {
-  const date = url.searchParams.get('date') ?? irkutskToday();
+  const prefs = await preferences.get(user.id);
+  const date = url.searchParams.get('date') ?? zonedDateKey(new Date(), profileTimeZone(prefs));
   if (!DATE_PATTERN.test(date)) throw new HttpError(400, 'invalid_date', 'Дата должна быть в формате YYYY-MM-DD');
   const headmanChat = (await community.chatsWithRole(user.id))
     .find((chat) => String(chat.headman?.userId) === String(user.id));
-  const prefs = await preferences.get(user.id);
   const groupId = headmanChat?.group.id ?? (prefs.selection?.kind === 'group' ? prefs.selection.id : null);
   if (!groupId) return { role: 'student', date, items: [] };
   const notices = await community.noticesForDay(groupId, date, headmanChat ? {} : { senderId: user.id });

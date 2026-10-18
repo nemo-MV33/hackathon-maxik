@@ -1,3 +1,4 @@
+import { groupKey } from '../universities/identity.js';
 import { createServer } from 'node:http';
 import { parseDateKey, toDateKey } from '../lib/date.js';
 import { serveStatic } from './static.js';
@@ -174,14 +175,17 @@ const route = async (request, response, options) => {
     return sendJson(response, 401, { error: 'unauthorized' });
   }
 
+  if (url.pathname === '/api/universities') return sendJson(response, 200, { items: service.universities?.() ?? [] });
+
   if (url.pathname === '/api/institutes') {
-    return sendJson(response, 200, { items: await service.institutes() });
+    return sendJson(response, 200, { items: await service.institutes(url.searchParams.get('universityId') || undefined) });
   }
 
   if (url.pathname === '/api/groups') {
     const items = await service.searchGroups(url.searchParams.get('q'), {
       institute: url.searchParams.get('institute') || undefined,
       course: url.searchParams.get('course') || undefined,
+      universityId: url.searchParams.get('universityId') || undefined,
       limit: positiveInteger(url.searchParams.get('limit'), 50),
     });
     return sendJson(response, 200, { items });
@@ -189,6 +193,7 @@ const route = async (request, response, options) => {
 
   if (url.pathname === '/api/teachers') {
     const items = await service.searchTeachers(url.searchParams.get('q'), {
+      universityId: url.searchParams.get('universityId') || undefined,
       limit: positiveInteger(url.searchParams.get('limit'), 50),
     });
     return sendJson(response, 200, { items });
@@ -196,6 +201,7 @@ const route = async (request, response, options) => {
 
   if (url.pathname === '/api/auditories') {
     const items = await service.searchAuditories(url.searchParams.get('q'), {
+      universityId: url.searchParams.get('universityId') || undefined,
       limit: positiveInteger(url.searchParams.get('limit'), 50),
     });
     return sendJson(response, 200, { items });
@@ -203,11 +209,12 @@ const route = async (request, response, options) => {
 
   if (parts[0] === 'api' && parts[1] === 'schedule' && parts.length === 4) {
     const kind = parts[2];
-    const id = positiveInteger(parts[3]);
+    let id;
+    try { id = kind === 'group' || parts[3].includes('~') ? groupKey(decodeURIComponent(parts[3])) : positiveInteger(parts[3]); } catch {}
     if (!id || !['group', 'teacher', 'auditory'].includes(kind)) {
       return sendJson(response, 400, { error: 'invalid_schedule_target' });
     }
-    const schedule = await service[`${kind}Schedule`](id, scheduleOptions(url));
+    const schedule = await service[`${kind}Schedule`](id, { ...scheduleOptions(url), universityId: url.searchParams.get('universityId') || undefined });
     return sendJson(response, 200, serializeSchedule(schedule));
   }
 
@@ -217,13 +224,14 @@ const route = async (request, response, options) => {
 export const createHttpServer = (options) =>
   createServer((request, response) => {
     route(request, response, options).catch((error) => {
+      if (error.code === 'capability_not_supported') return sendJson(response, 501, { error: error.code });
       if (error instanceof HttpError) {
         return sendJson(response, error.status, { error: error.error, message: error.message });
       }
       console.error('HTTP request failed:', error);
       sendJson(response, 502, {
         error: 'schedule_unavailable',
-        message: 'Не удалось получить расписание ИРНИТУ',
+        message: 'Не удалось получить расписание вуза',
       });
     });
   });

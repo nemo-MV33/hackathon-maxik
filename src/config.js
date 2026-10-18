@@ -14,6 +14,12 @@ export const config = {
   miniAppButton: process.env.MINI_APP_BUTTON?.trim() === 'link' ? 'link' : 'app',
   changesIntervalMs: numberFromEnv('CHANGES_INTERVAL_MS', 15 * 60 * 1000),
   recentIntervalMs: numberFromEnv('RECENT_CHANGES_INTERVAL_MS', 3 * 60 * 60 * 1000),
+  bgu: {
+    cacheDir: process.env.BGU_CACHE_DIR?.trim() ?? './data/bgu-cache',
+    intervalMs: Math.max(1500, numberFromEnv('BGU_REQUEST_DELAY_MS', 1500)),
+    ttlMs: numberFromEnv('SCHEDULE_CACHE_TTL_MS', 15 * 60 * 1000),
+    directoryTtlMs: numberFromEnv('DIRECTORY_CACHE_TTL_MS', 3 * 60 * 60 * 1000),
+  },
   irnitu: {
     concurrency: numberFromEnv('IRNITU_CONCURRENCY', 4),
     baseUrl: process.env.IRNITU_API_URL?.trim() ?? 'https://schedule.istu.edu/api/',

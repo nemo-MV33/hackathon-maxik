@@ -1,4 +1,4 @@
-schemaVersion: '1.0'
+schemaVersion: '1.1'
 solution: norfly
 baseUrl: https://158-160-253-148.sslip.io
 authentication:
@@ -16,6 +16,38 @@ authentication:
         мини-приложения из бота, поэтому личные методы (профиль, ДЗ, опоздания, объявления)
         проверяются через мини-приложение в MAX. Контракт этих методов описан в openapi.yaml.
 checks:
+  - name: universities
+    role: service
+    request:
+      method: GET
+      path: /api/universities
+      headers: { Authorization: "Bearer <API_ACCESS_KEY>" }
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [items, "items[].id", "items[].timeZone", "items[].capabilities"]
+  - name: bgu-group-search
+    role: service
+    request:
+      method: GET
+      path: /api/groups
+      query: { universityId: bgu, q: ГМУ-25-1 }
+      headers: { Authorization: "Bearer <API_ACCESS_KEY>" }
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [items, "items[].id", "items[].title"]
+  - name: bgu-week
+    role: service
+    request:
+      method: GET
+      path: /api/schedule/group/bgu~32982
+      query: { week: '2026-10-19' }
+      headers: { Authorization: "Bearer <API_ACCESS_KEY>" }
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [universityId, timeZone, updatedAt, lessons, "lessons[].startsAt", "lessons[].endsAt"]
   - name: health
     role: anonymous
     request:
@@ -78,7 +110,7 @@ checks:
     role: service
     request:
       method: GET
-      path: /api/schedule/group/478237
+      path: /api/schedule/group/irnitu~478237
       query:
         week: '2026-09-28'
       headers:
@@ -178,3 +210,8 @@ checks:
 # DELETE /api/homework/orphaned: {id}, удаление общего ДЗ без удаления личных версий.
 # Все личные методы: Authorization: tma <initData>; служебный Bearer не заменяет роль.
 # Расписание возвращает updatedAt, у ручной отметки пары — markedBy, markedAt, moveId.
+
+# Составные id включают вуз: irnitu~478237 и bgu~32982. Числовые id входящих
+# запросов совместимы с ИРНИТУ. week, lesson.date и ключи ДЗ — даты вуза.
+# startsAt/endsAt — ISO-моменты. Отображение, сводка и тихие часы используют IANA
+# из профиля; PUT /api/me принимает timeZone, quietHours и groupId.

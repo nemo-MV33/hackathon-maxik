@@ -290,7 +290,7 @@ test('старый снимок без типа занятия обновляе�
   assert.equal((await homework(community))[0].lessonDate, FROM.date);
   assert.equal((await homework(community))[0].status, 'active');
   assert.equal((await homework(community))[0].history, undefined);
-  assert.equal(JSON.parse(await readFile(snapshotsPath, 'utf8'))['1'].schemaVersion, 2);
+  assert.equal(JSON.parse(await readFile(snapshotsPath, 'utf8'))['irnitu~1'].schemaVersion, 2);
   state.lessons = [TO];
   await notifications.checkChanges();
   assert.equal((await homework(community))[0].lessonDate, TO.date);

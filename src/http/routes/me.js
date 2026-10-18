@@ -1,3 +1,6 @@
+import { sameGroup, splitGroupKey } from '../../universities/identity.js';
+import { university } from '../../universities/config.js';
+import { validTimeZone } from '../../lib/timezone.js';
 import {
   END_MINUTES, NOTIFICATION_KINDS, REMINDER_MINUTES, SUMMARY_TIME_PATTERN,
   endMinutes, notificationEnabled, reminderMinutes, summaryTime,
@@ -19,6 +22,9 @@ const publicProfile = (saved) => ({
   group: saved.selection?.kind === 'group'
     ? { id: saved.selection.id, title: saved.selection.title }
     : null,
+  universityId: saved.selection?.id ? splitGroupKey(saved.selection.id).universityId : saved.universityId ?? null,
+  timeZone: saved.timeZone ?? null,
+  quietHours: saved.quietHours ?? null,
   institute: saved.institute ?? null,
   course: saved.course ?? null,
   subgroup: saved.subgroup ?? null,
@@ -79,19 +85,41 @@ export const updateMe = async ({ user, preferences, service, body }) => {
   const patch = name && name !== saved.name ? { name } : {};
 
   if ('groupId' in body) {
-    const groups = await service.groups();
-    const group = groups.find((item) => item.id === Number(body.groupId));
-    if (!group) throw new HttpError(400, 'unknown_group', 'Такой группы нет в расписании ИРНИТУ');
+    let universityId;
+    try { universityId = splitGroupKey(body.groupId).universityId; } catch { throw new HttpError(400, 'unknown_group'); }
+    const groups = await service.groups(universityId);
+    const group = groups.find((item) => sameGroup(item.id, body.groupId));
+    if (!group) throw new HttpError(400, 'unknown_group', 'Такой группы нет в расписании выбранного вуза');
+    patch.universityId = universityId;
     patch.selection = { kind: 'group', id: group.id, title: group.title };
     patch.institute = group.institute;
     patch.course = group.course;
     patch.subgroup = null;
     // Новая группа — новый набор дисциплин: старые формы контроля и напоминания к парам не переносим.
-    if (String(saved.selection?.id) !== String(group.id)) {
+    if (!sameGroup(saved.selection?.id, group.id)) {
+      patch.sentReminders = [];
+      patch.examReminders = [];
+      patch.sentScheduled = [];
+      patch.summarySentFor = null;
       patch.controls = {};
       patch.homeworkReminders = {};
       patch.announcementReminders = {};
     }
+  }
+  if ('quietHours' in body) {
+    const value = body.quietHours;
+    const valid = (time) => typeof time === 'string' && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time);
+    if (value !== null && (!value || !valid(value.from) || !valid(value.to) || value.from === value.to)) throw new HttpError(400, 'invalid_quiet_hours');
+    patch.quietHours = value === null ? null : { from: value.from, to: value.to };
+  }
+  if ('timeZone' in body) {
+    if (!validTimeZone(body.timeZone)) throw new HttpError(400, 'invalid_time_zone', 'Неизвестный часовой пояс IANA');
+    patch.timeZone = body.timeZone;
+    patch.summarySentFor = null;
+  }
+  if ('universityId' in body) {
+    try { university(body.universityId); } catch { throw new HttpError(400, 'unknown_university'); }
+    patch.universityId = body.universityId;
   }
   if ('subgroup' in body) patch.subgroup = parseSubgroup(body.subgroup);
   for (const key of ['remindersEnabled', 'muted', 'onboarded']) {

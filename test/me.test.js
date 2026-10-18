@@ -69,10 +69,10 @@ test('profile saved from the mini app is shared with the bot storage', async (t)
     user, method: 'PUT', body: JSON.stringify({ groupId: 478237, subgroup: 2 }),
   });
   assert.equal(saved.status, 200);
-  assert.deepEqual((await saved.json()).profile.group, { id: 478237, title: 'ИСТб-25-1' });
+  assert.deepEqual((await saved.json()).profile.group, { id: 'irnitu~478237', title: 'ИСТб-25-1' });
 
   const stored = await preferences.get(42);
-  assert.deepEqual(stored.selection, { kind: 'group', id: 478237, title: 'ИСТб-25-1' });
+  assert.deepEqual(stored.selection, { kind: 'group', id: 'irnitu~478237', universityId: 'irnitu', title: 'ИСТб-25-1' });
   assert.equal(stored.subgroup, 2);
 
   const english = await request('/api/me', { user, method: 'PUT', body: JSON.stringify({ lang: 'en' }) });

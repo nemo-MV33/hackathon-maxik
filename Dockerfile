@@ -1,4 +1,4 @@
-FROM node:22-alpine AS webapp
+FROM node:20-alpine AS webapp
 WORKDIR /build
 COPY webapp/package.json webapp/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -6,9 +6,8 @@ COPY webapp/ ./
 ARG GITHUB_SHA=
 RUN npm run build
 
-FROM node:22-alpine
+FROM node:20-alpine
 ENV NODE_ENV=production \
-    TZ=Asia/Irkutsk \
     NODE_EXTRA_CA_CERTS=/app/certs/russian_trusted_root_ca.pem
 WORKDIR /app
 COPY package.json package-lock.json ./

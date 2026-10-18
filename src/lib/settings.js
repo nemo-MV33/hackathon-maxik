@@ -1,3 +1,4 @@
+import { profileTimeZone, zonedMinutes } from './timezone.js';
 // Настройки уведомлений общие для бота, мини-приложения и сервисов рассылки.
 
 export const NOTIFICATION_KINDS = ['summary', 'homework', 'changes', 'exams', 'announcements', 'lessonEnd'];
@@ -42,4 +43,12 @@ export const noticeMinutes = (notice) => {
   if (notice.kind === 'absent') return LESSON_MINUTES;
   if (Number.isInteger(notice.minutes) && notice.minutes > 0) return notice.minutes;
   return LEGACY_LATE_MINUTES[notice.reasonCode] ?? 10;
+};
+
+export const isQuiet = (prefs, now = new Date()) => {
+  if (!prefs?.quietHours) return false;
+  const { from, to } = prefs.quietHours;
+  const minute = zonedMinutes(now, profileTimeZone(prefs));
+  const start = timeToMinutes(from), end = timeToMinutes(to);
+  return start < end ? minute >= start && minute < end : minute >= start || minute < end;
 };

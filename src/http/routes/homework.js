@@ -1,3 +1,5 @@
+import { sameGroup, groupKey } from '../../universities/identity.js';
+import { zonedMoment } from '../../lib/timezone.js';
 import { addDays, parseDateKey, toDateKey } from '../../lib/date.js';
 import { HttpError } from './me.js';
 
@@ -78,7 +80,7 @@ const findLesson = async (service, groupId, input) => {
 };
 
 const serialize = (item, reminders = {}) => ({
-  groupId: Number(item.groupId),
+  groupId: groupKey(item.groupId),
   date: item.lessonDate,
   lessonNumber: item.lessonNumber,
   subgroup: item.subgroup ?? null,
@@ -98,13 +100,10 @@ const serialize = (item, reminders = {}) => ({
 
 export const getHomework = async ({ user, preferences, community, url }) => {
   const { profile, group } = await profileGroup(user, preferences);
-  const requestedGroupId = Number(url.searchParams.get('groupId'));
-  if (!Number.isInteger(requestedGroupId) || requestedGroupId < 1) {
-    throw new HttpError(400, 'invalid_group', 'Некорректная учебная группа');
-  }
-  if (requestedGroupId !== Number(group.id)) {
-    throw new HttpError(409, 'profile_out_of_sync', 'Группа в профиле ещё не синхронизирована');
-  }
+  let requestedGroupId;
+  try { requestedGroupId = groupKey(url.searchParams.get('groupId')); }
+  catch { throw new HttpError(400, 'invalid_group', 'Некорректная учебная группа'); }
+  if (!sameGroup(requestedGroupId, group.id)) throw new HttpError(409, 'profile_out_of_sync', 'Группа в профиле ещё не синхронизирована');
   const from = dateFrom(url.searchParams.get('from'), new Date());
   const to = dateFrom(url.searchParams.get('to'), addDays(from, 14));
   if (to < from || (to.getTime() - from.getTime()) / 86_400_000 > 62) {
@@ -128,7 +127,7 @@ const saveReminder = async (preferences, userId, lesson, remindAt, body = {}) =>
   const profile = await preferences.get(userId);
   const reminders = { ...profile.homeworkReminders };
   const key = reminderKey({ lessonDate: lesson.date, lessonNumber: lesson.lessonNumber, subgroup: lesson.subgroup });
-  if (remindAt && body.reminderMode === 'lesson') remindAt = new Date(new Date(`${lesson.date}T${lesson.time.slice(0, 5)}:00+08:00`).getTime() - (body.minutesBefore ?? 0) * 60_000).toISOString();
+  if (remindAt && body.reminderMode === 'lesson') remindAt = new Date(zonedMoment(lesson.date, lesson.time.slice(0, 5), lesson.timeZone).getTime() - (body.minutesBefore ?? 0) * 60_000).toISOString();
   if (remindAt) reminders[key] = { at: remindAt, subject: lesson.subject, time: lesson.time.slice(0, 5), mode: body.reminderMode === 'lesson' ? 'lesson' : 'fixed', minutesBefore: Number.isFinite(body.minutesBefore) ? body.minutesBefore : 0 };
   else delete reminders[key];
   await preferences.set(userId, { ...profile, homeworkReminders: reminders });
@@ -138,6 +137,7 @@ const saveReminder = async (preferences, userId, lesson, remindAt, body = {}) =>
 export const putHomework = async ({ user, preferences, community, service, body, onHomeworkSaved }) => {
   const { group } = await profileGroup(user, preferences);
   const input = lessonInput(body);
+  if (body.groupId != null && !sameGroup(body.groupId, group.id)) throw new HttpError(409, 'profile_out_of_sync');
   if (input.scope === 'shared' && await community.homeworkRoleForGroup(group.id, user.id) === 'student') {
     throw new HttpError(403, 'homework_forbidden', 'Нет прав на изменение общего ДЗ');
   }
