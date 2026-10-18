@@ -33,12 +33,12 @@ export const inventory = async (root) => {
   return { files, counts };
 };
 
-export const encryptArchive = async (root, destination, key, manifestPath) => {
+export const encryptArchive = async (root, destination, key) => {
   const nonce = randomBytes(12);
   const cipher = createCipheriv('aes-256-gcm', keyBytes(key), nonce);
   cipher.setAAD(MAGIC);
   await writeFile(destination, Buffer.concat([MAGIC, nonce]), { mode: 0o600, flag: 'wx' });
-  const tar = spawn('tar', ['-czf', '-', '-C', root, '.', ...(manifestPath ? ['-C', dirname(manifestPath), 'manifest.json'] : [])], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, COPYFILE_DISABLE: '1' } });
+  const tar = spawn('tar', ['-czf', '-', '-C', root, '.'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, COPYFILE_DISABLE: '1' } });
   let errorText = '';
   tar.stderr.on('data', (chunk) => { errorText += chunk; });
   const finished = new Promise((done, reject) => { tar.on('error', reject); tar.on('close', (code) => code === 0 ? done() : reject(new Error(`backup_tar_failed: ${errorText.slice(0, 100)}`))); });

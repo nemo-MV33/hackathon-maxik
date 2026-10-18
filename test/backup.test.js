@@ -68,7 +68,7 @@ test('storage signs HTTPS requests and paginates XML with escaped continuation t
 
 test('quiesced source is archived without copying plaintext and uploads through the prepared path', async (t) => {
   const options = await setup(t); const workspace = join(options.root, 'work'); await mkdir(workspace);
-  const prepared = await prepareBackup({ root: join(options.root, 'source'), archive: join(workspace, 'backup.enc'), manifestPath: join(workspace, 'manifest.json'), key: options.key, snapshotAt: '2026-10-18T10:00:00.000Z' });
+  const prepared = await prepareBackup({ root: join(options.root, 'source'), archive: join(workspace, 'backup.enc'), key: options.key, snapshotAt: '2026-10-18T10:00:00.000Z' });
   const result = await backup({ ...options, capture: undefined, prepared }); assert.equal(result.ok, true);
   const restored = await restoreLatest({ ...options, destination: join(options.root, 'restored') }); assert.equal(restored.files, 3);
 });

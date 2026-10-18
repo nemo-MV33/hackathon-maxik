@@ -12,7 +12,7 @@ const run = async () => {
   }
   const key = (await readFile(process.env.BACKUP_KEY_FILE, 'utf8')).trim();
   if (process.argv[2] === 'snapshot') {
-    const prepared = await prepareBackup({ root: '/snapshot', archive: '/work/backup.enc', manifestPath: '/work/manifest.json', key });
+    const prepared = await prepareBackup({ root: '/snapshot', archive: '/work/backup.enc', key });
     const { writeFile } = await import('node:fs/promises');
     await writeFile('/work/prepared.json', JSON.stringify(prepared), { mode: 0o600 }); return;
   }

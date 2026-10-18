@@ -14,7 +14,7 @@ cleanup() {
   rm -rf "$work"
   if [ "$result" != 0 ]; then
     mkdir -p /var/lib/norfly-backup
-    docker compose run --rm --no-deps -v /var/lib/norfly-backup:/backup --entrypoint node norfly scripts/backup.js alert || true
+    docker compose run --rm --no-deps -v /var/lib/norfly-backup:/backup --entrypoint node norfly --tls-max-v1.2 scripts/backup.js alert || true
   fi
   exit "$result"
 }

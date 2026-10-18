@@ -29,13 +29,14 @@ export const writeBackupStatus = async (statusPath, value) => {
   }
 };
 
-export const prepareBackup = async ({ root, archive, manifestPath, key, snapshotAt = new Date().toISOString() }) => {
+export const prepareBackup = async ({ root, archive, key, snapshotAt = new Date().toISOString() }) => {
   const manifest = { format: 1, snapshotAt, inventory: await inventory(root) };
   const space = await statfs(join(archive, '..'));
   const budget = manifest.inventory.files.reduce((total, file) => total + file.size, 0) * 1.02 + 512 * 1024 * 1024;
   if (space.bavail * space.bsize < budget) throw new Error('backup_disk_full');
-  await writeFile(manifestPath, JSON.stringify(manifest), { mode: 0o600 });
-  await encryptArchive(root, archive, key, manifestPath);
+  // /snapshot itself is disposable; its three data subdirectories are read-only mounts.
+  await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest), { mode: 0o600 });
+  await encryptArchive(root, archive, key);
   return { archive, manifest };
 };
 
