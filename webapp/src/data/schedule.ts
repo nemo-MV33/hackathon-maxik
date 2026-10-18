@@ -64,11 +64,12 @@ export const invalidateSchedule = () => cache.clear();
 
 // Динамический API применяет отметки старосты и запускает обновление устаревшей недели.
 // Статическая выгрузка остаётся доступной при недоступности сервера.
-const loadSourceWeek = async (groupId: string | number, weekStart: string): Promise<WeekSchedule> => {
+const loadSourceWeek = async (groupId: string | number, weekStart: string, kind: 'group' | 'teacher' | 'auditory' = 'group'): Promise<WeekSchedule> => {
   try {
-    const result = await apiRequest<WeekSchedule>(`/api/schedule/group/${groupId}?week=${weekStart}`);
+    const result = await apiRequest<WeekSchedule>(`/api/schedule/${kind}/${groupId}?week=${weekStart}`);
     return { ...result, weekStart, lessons: result.lessons.map((lesson) => ({ ...lesson, stale: result.stale, updatedAt: lesson.updatedAt ?? result.updatedAt })) };
-  } catch {
+  } catch (error) {
+    if (kind !== 'group') throw error;
     try { return await load<WeekSchedule>(`schedule/${groupId}/${weekStart}.json`); }
     catch (error) {
       if (String(groupId).startsWith('irnitu~')) return load<WeekSchedule>(`schedule/${String(groupId).split('~')[1]}/${weekStart}.json`);
@@ -78,10 +79,12 @@ const loadSourceWeek = async (groupId: string | number, weekStart: string): Prom
 };
 
 // Границы пользовательской недели могут пересекать соседнюю неделю вуза.
-export const loadWeek = async (groupId: string | number, weekStart: string): Promise<WeekSchedule> => {
-  const primary = await loadSourceWeek(groupId, weekStart);
+export const loadWeek = async (groupId: string | number, weekStart: string, kind: 'group' | 'teacher' | 'auditory' = 'group'): Promise<WeekSchedule> => {
+  const primary = await loadSourceWeek(groupId, weekStart, kind);
   if (userTimeZone() === 'Asia/Irkutsk') return primary;
-  const adjacent = await Promise.all([-7, 7].map((offset) => loadSourceWeek(groupId, toDateKey(addDays(fromDateKey(weekStart), offset))).catch(() => null)));
-  const unique = new Map([primary, ...adjacent].flatMap((week) => week?.lessons ?? []).map((lesson) => [`${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}:${lesson.subject}`, lesson]));
+  const adjacent = await Promise.all([-7, 7].map((offset) => loadSourceWeek(groupId, toDateKey(addDays(fromDateKey(weekStart), offset)), kind).catch(() => null)));
+  const unique = new Map([primary, ...adjacent].flatMap((week) => week?.lessons ?? []).map((lesson) => [
+    JSON.stringify([lesson.date, lesson.lessonNumber, lesson.subgroup, lesson.subject, lesson.lessonType, lesson.teachers, lesson.auditories]), lesson,
+  ]));
   return { ...primary, lessons: [...unique.values()].sort((a, b) => `${lessonDate(a)} ${a.startsAt ?? a.time}`.localeCompare(`${lessonDate(b)} ${b.startsAt ?? b.time}`)) };
 };

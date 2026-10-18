@@ -11,6 +11,7 @@ export const universities = [
     fullName: { ru: 'Байкальский государственный университет', en: 'Baikal State University' },
     city: { ru: 'Иркутск', en: 'Irkutsk' }, timeZone: 'Asia/Irkutsk', lessonTimes: bguLessonTimes,
     parityRule: 'source.current_date_and_parity', source: 'https://bgu.ru/student/timetable.aspx', access: 'public_website',
+    scheduleSource: 'https://bgu.ru/telek/timetable.aspx', teacherSource: 'https://bgu.ru/telek/timetable-pps.aspx',
     capabilities: { groups: true, institutes: false, teachers: true, auditories: false, exams: true, controls: false } },
 ];
 export const university = (id = 'irnitu') => {

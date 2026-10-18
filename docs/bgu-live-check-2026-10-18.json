@@ -1,0 +1,50 @@
+{
+  "checkedAt": "2026-10-18T05:21:05.397Z",
+  "groups": 719,
+  "checked": [
+    {
+      "entity": "ГМУ-25-1 (bgu~32982)",
+      "from": "2026-10-19",
+      "updatedAt": "2026-10-18T05:20:54.728Z",
+      "stale": false,
+      "lessons": 15,
+      "assessments": 0,
+      "example": {
+        "university": "14:00–15:30",
+        "Moscow": "09:00–10:30"
+      }
+    },
+    {
+      "entity": "БИ-26-1 (bgu~33340)",
+      "from": "2026-10-19",
+      "updatedAt": "2026-10-18T05:20:57.507Z",
+      "stale": false,
+      "lessons": 19,
+      "assessments": 0
+    },
+    {
+      "entity": "ЗНБ-23-1 (bgu~32143)",
+      "from": "2026-10-19",
+      "updatedAt": "2026-10-18T05:21:00.344Z",
+      "stale": false,
+      "lessons": 15,
+      "assessments": 2
+    },
+    {
+      "entity": "Хаитов Григорий Александрович (bgu~10165)",
+      "from": "2026-10-19",
+      "updatedAt": "2026-10-18T05:21:03.712Z",
+      "stale": false,
+      "lessons": 8,
+      "assessments": 1
+    },
+    {
+      "entity": "Хаитов Григорий Александрович (bgu~10165)",
+      "from": "2026-10-26",
+      "updatedAt": "2026-10-18T05:21:05.390Z",
+      "stale": false,
+      "lessons": 13,
+      "assessments": 1
+    }
+  ]
+}

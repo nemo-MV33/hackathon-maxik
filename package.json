@@ -9,7 +9,8 @@
     "test": "node --test",
     "dev:web": "npm --prefix webapp run dev",
     "build:web": "npm --prefix webapp run build",
-    "export:schedule": "node scripts/export-schedule.js"
+    "export:schedule": "node scripts/export-schedule.js",
+    "check:bgu": "node scripts/check-bgu.js"
   },
   "dependencies": {
     "@maxhub/max-bot-api": "^0.2.2",

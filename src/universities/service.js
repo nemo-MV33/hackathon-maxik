@@ -39,7 +39,9 @@ export class UniversityService {
   async auditorySchedule(id, options = {}) { return this.#entity('auditory', id, options); }
   async #entity(kind, id, { universityId = 'irnitu', ...options }) {
     if (String(id).includes('~')) { const ref = splitGroupKey(id); universityId = ref.universityId; id = ref.sourceId; }
-    const result = await this.provider(universityId)[`${kind}Schedule`](id, options);
+    const config = university(universityId);
+    const week = options.week ?? new Date(`${zonedDateKey(new Date(), config.timeZone)}T00:00:00Z`);
+    const result = await this.provider(universityId)[`${kind}Schedule`](id, { ...options, week });
     return { ...result, entityId: groupKey(id, universityId), universityId, timeZone: university(universityId).timeZone,
       lessons: result.lessons.map((lesson) => ({ ...lessonMoments(lesson, university(universityId).timeZone), groupIds: (lesson.groupIds ?? []).map((id) => groupKey(id, universityId)) })) };
   }

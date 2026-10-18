@@ -572,7 +572,7 @@ paths:
                 type: object
                 required: [kind, entityId, period, weekEven, lessons]
                 properties:
-                  updatedAt: { type: [string, 'null'], format: date-time, description: Время успешного запроса к API вуза }
+                  updatedAt: { type: [string, 'null'], format: date-time, description: Время успешной загрузки источника вуза }
                   kind: { type: string }
                   entityId: { $ref: '#/components/schemas/GroupKey' }
                   period:
@@ -592,6 +592,15 @@ paths:
                       properties:
                         updatedAt: { type: [string, 'null'], format: date-time }
                         groupId: { $ref: '#/components/schemas/GroupKey' }
+                        groupIds: { type: array, items: { $ref: '#/components/schemas/GroupKey' } }
+                        groups: { type: array, items: { type: string }, description: Названия групп для расписания преподавателя }
+                        lessonNumber: { type: integer, minimum: 1 }
+                        subject: { type: string }
+                        lessonType: { type: string }
+                        subgroup: { type: [integer, 'null'], description: Явный номер подгруппы из источника; null при отсутствии подписи }
+                        teachers: { type: array, items: { type: string } }
+                        auditories: { type: array, items: { type: string } }
+                        endEstimated: { type: boolean, description: Для нестандартного времени БГУ конец рассчитан по обычной длительности пары }
                         date: { type: string, format: date, description: Дата в часовом поясе вуза; ключ хранения }
                         time: { type: string, description: Местное время пары в вузе }
                         timeZone: { type: string, description: IANA вуза }
@@ -649,6 +658,8 @@ components:
         lessonTimes: { type: object, additionalProperties: { type: string } }
         parityRule: { type: string }
         source: { type: string, format: uri }
+        scheduleSource: { type: string, format: uri, description: Адрес загрузки расписания групп при отличии от страницы справочника. }
+        teacherSource: { type: string, format: uri, description: Адрес загрузки расписания преподавателей. }
         access: { type: string, enum: [official_api_token, public_website] }
         capabilities: { type: object, additionalProperties: { type: boolean } }
     LessonSlot:

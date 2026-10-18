@@ -54,9 +54,16 @@ export const devData = (): Plugin => ({
     const backend = (path: string) => import(/* @vite-ignore */ new URL(path, import.meta.url).href);
     const { universities } = await backend('../src/universities/config.js');
     const { parseSchedule } = await backend('../src/universities/bgu/parser.js');
-    const { lessonMoments } = await backend('../src/lib/timezone.js');
+    const { lessonMoments, universityTimeZone, zonedDateKey } = await backend('../src/lib/timezone.js');
     const bguSaved = JSON.parse(await readFile(new URL('../src/universities/bgu/saved/32982.json', import.meta.url), 'utf8'));
     const bguHtml = await readFile(new URL('../test/fixtures/bgu/gmu-25-1-working.html', import.meta.url), 'utf8');
+    const sources = JSON.parse(await readFile(new URL('../test/fixtures/bgu/sources.json', import.meta.url), 'utf8'));
+    const bguSources: Record<string, { html: string; updatedAt: string }> = {
+      'bgu~32982': { html: bguHtml, updatedAt: new Date(bguSaved.savedAt).toISOString() },
+    };
+    for (const [id, name] of [['bgu~33340', 'telek-bi-26-1.html'], ['bgu~32143', 'telek-znb-23-1.html']]) {
+      bguSources[id] = { html: await readFile(new URL(`../test/fixtures/bgu/${name}`, import.meta.url), 'utf8'), updatedAt: sources[name].savedAt };
+    }
     const { CommunityStore } = await backend('../src/storage/community.js');
     const { PreferencesStore } = await backend('../src/storage/preferences.js');
     const { LessonChangeService } = await backend('../src/services/lesson-change-service.js');
@@ -69,6 +76,8 @@ export const devData = (): Plugin => ({
       { id: 'irnitu~1', universityId: 'irnitu', title: 'ДЕМО-25-1', institute: 'Демо-институт', course: 1 },
       { id: 'irnitu~2', universityId: 'irnitu', title: 'ДЕМО-24-2', institute: 'Демо-институт', course: 2 },
       { id: 'bgu~32982', universityId: 'bgu', title: 'ГМУ-25-1', institute: '', course: null },
+      { id: 'bgu~33340', universityId: 'bgu', title: 'БИ-26-1', institute: '', course: null },
+      { id: 'bgu~32143', universityId: 'bgu', title: 'ЗНБ-23-1', institute: '', course: null },
     ];
     const group = { ...groups[0], kind: 'group' };
     await community.setChat(-1, { group, headman: { userId: 1, name: 'Тест' }, editors: [{ userId: 3, name: 'Редактор' }], lang: 'ru' });
@@ -92,9 +101,10 @@ export const devData = (): Plugin => ({
         start.setUTCDate(start.getUTCDate() - (start.getUTCDay() + 6) % 7);
         const key = dateKey(start);
         const value = weeks.find((item) => item.weekStart === key);
-        const end = new Date(start); end.setUTCDate(end.getDate() + 6);
-        const bgu = String(id).startsWith('bgu~') ? parseSchedule(bguHtml, { week: start, groupId: 32982 }) : null;
-        const sourceUpdatedAt = bgu ? new Date(bguSaved.savedAt).toISOString() : updatedAt;
+        const end = new Date(start); end.setUTCDate(end.getUTCDate() + 6);
+        const source = bguSources[String(id)];
+        const bgu = source ? parseSchedule(source.html, { week: start, groupId: Number(String(id).split('~')[1]) }) : null;
+        const sourceUpdatedAt = source?.updatedAt ?? updatedAt;
         let lessons = bgu?.lessons ?? value?.lessons ?? [];
         if (!raw) lessons = await lessonChanges.overlay(id, lessons, key, dateKey(end));
         return { kind: 'group', entityId: id, period: { from: start, to: end }, weekEven: bgu?.weekEven ?? value?.weekEven ?? false,
@@ -110,7 +120,12 @@ export const devData = (): Plugin => ({
       user: { user_id: number; first_name?: string }; kind: string; reasonCode: string | null;
       text: string | null; minutes: number | null; lesson?: { date: string; lessonNumber: number; subject: string; time: string };
     }) => {
-      await community.addNotice({ groupId: 1, chatId: -1, date: input.lesson?.date ?? dateKey(new Date()),
+      const prefs = await preferences.get(input.user.user_id);
+      const groupId = prefs.selection?.kind === 'group' ? prefs.selection.id : null;
+      if (!groupId) return { status: 'no_group' };
+      const chat = (await community.chatsForGroup(groupId))[0];
+      if (!chat?.headman) return { status: 'no_headman' };
+      await community.addNotice({ groupId, chatId: chat.chatId, date: input.lesson?.date ?? zonedDateKey(new Date(), universityTimeZone(groupId)),
         senderId: input.user.user_id, senderName: input.user.first_name ?? 'Тест', kind: input.kind,
         reasonCode: input.reasonCode, text: input.text, minutes: input.minutes, lesson: input.lesson ?? null });
       return { status: 'sent' };
@@ -136,12 +151,13 @@ export const devData = (): Plugin => ({
         return;
       }
       if (url.pathname === '/data/groups.json') return send(groups);
-      if (url.pathname === '/data/meta.json') return send({ updatedAt, weeks: weeks.map((item) => item.weekStart), groups: 3, failed: 0 });
-      const match = url.pathname.match(/^\/data\/schedule\/(?:irnitu~\d+|bgu~\d+)\/(\d{4}-\d{2}-\d{2})\.json$/);
+      if (url.pathname === '/data/meta.json') return send({ updatedAt, weeks: weeks.map((item) => item.weekStart), groups: groups.length, failed: 0 });
+      const match = url.pathname.match(/^\/data\/schedule\/((?:irnitu|bgu)~\d+)\/(\d{4}-\d{2}-\d{2})\.json$/);
       if (match) {
-        const value = weeks.find((item) => item.weekStart === match[1]);
-        if (!value) { response.statusCode = 404; response.end(); return; }
-        return send({ ...value, updatedAt });
+        if (!groups.some((group) => group.id === match[1])) { response.statusCode = 404; response.end(); return; }
+        void service.groupSchedule(match[1], { week: new Date(`${match[2]}T00:00:00Z`) }).then((value) => send({ ...value, weekStart: match[2] }))
+          .catch(() => { response.statusCode = 503; send({ error: 'schedule_unavailable' }); });
+        return;
       }
       next();
     });

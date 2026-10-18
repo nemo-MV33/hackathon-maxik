@@ -1,0 +1,42 @@
+{
+  "telek-gmu-25-1.html": {
+    "url": "https://bgu.ru/telek/timetable.aspx?idg=32982",
+    "savedAt": "2026-10-18T05:10:51.876Z",
+    "origin": "http_get"
+  },
+  "telek-znb-23-1.html": {
+    "url": "https://bgu.ru/telek/timetable.aspx?idg=32143",
+    "savedAt": "2026-10-18T05:10:53.589Z",
+    "origin": "http_get"
+  },
+  "telek-bi-26-1.html": {
+    "url": "https://bgu.ru/telek/timetable.aspx?idg=33340",
+    "savedAt": "2026-10-18T05:11:35.904Z",
+    "origin": "http_get"
+  },
+  "telek-f-25-1.html": {
+    "url": "https://bgu.ru/telek/timetable.aspx?idg=32988",
+    "savedAt": "2026-10-18T05:11:37.870Z",
+    "origin": "http_get"
+  },
+  "telek-l-25-1.html": {
+    "url": "https://bgu.ru/telek/timetable.aspx?idg=32972",
+    "savedAt": "2026-10-18T05:11:06.236Z",
+    "origin": "http_get"
+  },
+  "telek-l-26-1.html": {
+    "url": "https://bgu.ru/telek/timetable.aspx?idg=33350",
+    "savedAt": "2026-10-18T05:11:40.863Z",
+    "origin": "http_get"
+  },
+  "telek-teacher-10165.html": {
+    "url": "https://bgu.ru/telek/timetable-pps.aspx?idp=10165&d=19.10.2026",
+    "savedAt": "2026-10-18T05:10:51.876Z",
+    "origin": "http_get"
+  },
+  "telek-teacher-10165-next.html": {
+    "url": "https://bgu.ru/telek/timetable-pps.aspx?idp=10165&d=26.10.2026",
+    "savedAt": "2026-10-18T05:13:02.391Z",
+    "origin": "http_get"
+  }
+}

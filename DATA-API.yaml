@@ -48,6 +48,28 @@ checks:
       statusCodes: [200]
       contentType: application/json
       requiredFields: [universityId, timeZone, updatedAt, lessons, "lessons[].startsAt", "lessons[].endsAt"]
+  - name: bgu-session
+    role: service
+    request:
+      method: GET
+      path: /api/schedule/group/bgu~32143
+      query: { week: '2026-10-19' }
+      headers: { Authorization: "Bearer <API_ACCESS_KEY>" }
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [universityId, lessons, "lessons[].lessonType", "lessons[].startsAt"]
+  - name: bgu-teacher
+    role: service
+    request:
+      method: GET
+      path: /api/schedule/teacher/bgu~10165
+      query: { week: '2026-10-19' }
+      headers: { Authorization: "Bearer <API_ACCESS_KEY>" }
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [universityId, updatedAt, lessons, "lessons[].groups", "lessons[].startsAt"]
   - name: health
     role: anonymous
     request:

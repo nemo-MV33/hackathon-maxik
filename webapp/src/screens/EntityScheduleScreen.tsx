@@ -1,7 +1,6 @@
 import { lessonDate } from '../lib/timezone';
 import { useState } from 'react';
-import type { Lesson } from '../data/schedule';
-import { apiRequest } from '../lib/api';
+import { loadWeek } from '../data/schedule';
 import { addDays, formatRange, fromDateKey, startOfWeek, toDateKey } from '../lib/date';
 import { useI18n } from '../lib/i18n';
 import { useAsync } from '../lib/useAsync';
@@ -11,19 +10,18 @@ import { DayTimeline } from '../components/Timeline';
 import { Empty, ErrorState, ScheduleSkeleton } from '../components/Status';
 import { ChevronLeft, ChevronRight } from '../components/Icon';
 import { DayHeading } from './Schedule';
+import { ScheduleFreshness } from '../components/ScheduleFreshness';
 
 export type EntityTarget = { kind: 'group' | 'teacher' | 'auditory'; id: string | number; title: string };
 
-type Response = { weekEven: boolean; lessons: Lesson[] };
-
-// Расписание найденного преподавателя, аудитории или чужой группы — по неделям, прямо из ИРНИТУ.
+// Расписание найденного преподавателя, аудитории или чужой группы из выбранного вуза.
 export const EntityScheduleScreen = ({ target, onBack }: { target: EntityTarget; onBack: () => void }) => {
   const { t } = useI18n();
   const now = useNow();
   const todayKey = toDateKey(now);
   const [weekStart, setWeekStart] = useState(() => toDateKey(startOfWeek(now)));
   const [week, retry] = useAsync(
-    () => apiRequest<Response>(`/api/schedule/${target.kind}/${target.id}?week=${weekStart}`),
+    () => loadWeek(target.id, weekStart, target.kind),
     [target.kind, target.id, weekStart],
   );
   const days = Array.from({ length: 7 }, (_, index) => toDateKey(addDays(fromDateKey(weekStart), index)));
@@ -42,6 +40,7 @@ export const EntityScheduleScreen = ({ target, onBack }: { target: EntityTarget;
         </span>
         <button type="button" className="icon-button" aria-label={t.nextWeek} onClick={() => shift(1)}><ChevronRight size={18} /></button>
       </div>
+      {week.status === 'ready' && <ScheduleFreshness at={week.data.updatedAt} stale={week.data.stale} />}
       {week.status === 'loading' && <ScheduleSkeleton rows={4} />}
       {week.status === 'error' && <ErrorState message={week.message} onRetry={retry} />}
       {week.status === 'ready' && busyDays.length === 0 && <Empty title={t.emptyWeekTitle}>{t.emptyWeekText}</Empty>}

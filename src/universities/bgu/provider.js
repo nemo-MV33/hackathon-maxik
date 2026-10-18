@@ -99,8 +99,9 @@ export class BguProvider {
   }
   async teacherSchedule(id, { week = new Date(), fresh = false } = {}) {
     const from = startOfWeek(week);
-    const entry = await this.#cached(`teacher:${id}`, async () => {
-      const html = await this.#request(`/personal/timetable.aspx?idp=${id}`);
+    const date = toDateKey(from).split('-').reverse().join('.');
+    const entry = await this.#cached(`teacher:${id}:${toDateKey(from)}`, async () => {
+      const html = await this.#request(`/telek/timetable-pps.aspx?idp=${id}&d=${date}`);
       parseSchedule(html, { week: from, teacherId: id });
       return html;
     }, fresh);
@@ -111,7 +112,7 @@ export class BguProvider {
     const from = startOfWeek(week);
     const key = `group:${id}`;
     const entry = await this.#cached(key, async () => {
-      const html = await this.#request(`/student/timetable.aspx?idg=${id}`);
+      const html = await this.#request(`/telek/timetable.aspx?idg=${id}`);
       parseSchedule(html, { week: from, groupId: id });
       return html;
     }, fresh);

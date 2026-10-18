@@ -263,10 +263,8 @@ export const createBot = ({
     let schedule;
     try {
       schedule = await service[`${kind}Schedule`](id, { week: date, subgroup, universityId: await selectedUniversity(ctx) });
-      if (kind === 'group') {
-        const from = mode === 'w' ? startOfWeek(date) : date;
-        schedule.lessons = await userDayLessons(service, id, toDateKey(from), profileTimeZone(ctx.prefs), subgroup, mode === 'w' ? toDateKey(addDays(from, 6)) : toDateKey(from));
-      }
+      const from = mode === 'w' ? startOfWeek(date) : date;
+      schedule.lessons = await userDayLessons(service, id, toDateKey(from), profileTimeZone(ctx.prefs), subgroup, mode === 'w' ? toDateKey(addDays(from, 6)) : toDateKey(from), kind);
     } catch (error) {
       console.error('Schedule request failed:', error.message);
       return show(ctx, t.scheduleUnavailable, [[button(t.menu, 'menu')]]);

@@ -16,6 +16,7 @@ import { NotificationService } from '../src/services/notification-service.js';
 import { ReminderService } from '../src/services/reminder-service.js';
 import { userDayLessons } from '../src/services/user-schedule.js';
 import { updateMe } from '../src/http/routes/me.js';
+import { createHttpServer } from '../src/http/server.js';
 
 const fixture = (name) => readFile(new URL(`./fixtures/bgu/${name}`, import.meta.url), 'utf8');
 const html = await fixture('gmu-25-1-working.html');
@@ -69,6 +70,89 @@ test('БГУ: конец семестра ограничивает повтор�
   const result = parseSchedule(html, { week: new Date('2026-12-07T00:00:00Z') });
   assert.ok(result.lessons.every((item) => item.date <= '2026-12-08'));
   assert.equal(parseSchedule(html, { week: new Date('2026-12-14T00:00:00Z') }).lessons.length, 0);
+});
+test('БГУ: живая облегчённая страница и сохранённая основная страница дают одинаковые пары', async () => {
+  const live = await fixture('telek-gmu-25-1.html');
+  for (const week of [evenWeek, oddWeek]) {
+    assert.deepEqual(parseSchedule(live, { week, groupId: 32982 }), parseSchedule(html, { week, groupId: 32982 }));
+  }
+});
+test('БГУ: настоящая сессия ЗНБ содержит датированные экзамены и зачёты без повторения по неделям', async () => {
+  const session = await fixture('telek-znb-23-1.html');
+  const prior = parseSchedule(session, { week: oddWeek, groupId: 32143 }).lessons;
+  assert.equal(prior.find((item) => item.subject === 'Криминалистика' && item.lessonType === 'экзамен').date, '2026-10-12');
+  const current = parseSchedule(session, { week: evenWeek, groupId: 32143 }).lessons;
+  assert.equal(current.find((item) => item.subject === 'Финансовое право').lessonType, 'зачёт');
+  assert.ok(current.every((item) => item.date >= '2026-10-19' && item.date <= '2026-10-25'));
+  assert.equal(current.some((item) => item.lessonType === 'экзамен'), false);
+  assert.equal(parseSchedule(session, { week: new Date('2026-11-02T00:00Z'), groupId: 32143 }).lessons.length, 0);
+});
+test('БГУ: настоящая таблица преподавателя из HTTP и Safari, группы и аудитории', async () => {
+  const options = { week: evenWeek, teacherId: 10165 };
+  const live = parseSchedule(await fixture('telek-teacher-10165.html'), options);
+  const saved = parseSchedule(await fixture('teacher-10165-working.html'), options);
+  assert.deepEqual(live.lessons, saved.lessons);
+  assert.equal(live.lessons.length, 8);
+  assert.equal(live.weekEven, true);
+  const credit = live.lessons.find((item) => item.lessonType === 'зачёт');
+  assert.equal(credit.date, '2026-10-20');
+  assert.deepEqual(credit.groupIds, [32143, 32147, 32190, 32568]);
+  assert.deepEqual(credit.auditories, ['4-402']);
+  assert.deepEqual(credit.teachers, ['Хаитов Григорий Александрович']);
+  assert.deepEqual(live.lessons[0].groups, ['ГМУ-25-1']);
+});
+test('БГУ: кэш преподавателя разделяет недели и сохраняет исходную неделю при ошибке', async (t) => {
+  const cacheDir = await temporary(t), calls = [];
+  const provider = new BguProvider({ cacheDir, intervalMs: 0, fetcher: async (url) => {
+    calls.push(String(url));
+    return { ok: true, text: () => fixture(String(url).includes('26.10.2026') ? 'telek-teacher-10165-next.html' : 'telek-teacher-10165.html') };
+  } });
+  const nextWeek = new Date('2026-10-26T00:00Z');
+  const first = await provider.teacherSchedule(10165, { week: evenWeek, fresh: true });
+  const next = await provider.teacherSchedule(10165, { week: nextWeek, fresh: true });
+  assert.equal(first.lessons.length, 8); assert.equal(next.lessons.length, 13);
+  assert.equal(next.weekEven, false);
+  assert.equal((await provider.teacherSchedule(10165, { week: evenWeek })).lessons.length, 8);
+  assert.equal(calls.length, 2);
+  assert.equal(new URL(calls[0]).pathname, '/telek/timetable-pps.aspx');
+  const offline = new BguProvider({ cacheDir, intervalMs: 0, ttlMs: 0, fetcher: async () => { throw new Error('offline'); } });
+  const cached = await offline.teacherSchedule(10165, { week: nextWeek, fresh: true });
+  assert.equal(cached.updatedAt, next.updatedAt); assert.equal(cached.stale, true); assert.equal(cached.lessons.length, 13);
+});
+test('БГУ: ответ преподавателя с чужой неделей отклоняется', async () => {
+  const response = await fixture('telek-teacher-10165.html');
+  assert.throws(() => parseSchedule(response, { teacherId: 10165, week: new Date('2026-10-26T00:00Z') }), /bgu_teacher_week_mismatch/);
+  const broken = response.replace('19.10.2026<br', 'неизвестная дата<br');
+  assert.throws(() => parseSchedule(broken, { teacherId: 10165, week: evenWeek }), /bgu_teacher_dates_unrecognized/);
+});
+test('БГУ: проверены другие реальные группы и общий адрес загрузки', async (t) => {
+  for (const [name, count] of [['telek-bi-26-1.html', 19], ['telek-f-25-1.html', 15], ['telek-l-25-1.html', 18], ['telek-l-26-1.html', 16]]) {
+    assert.equal(parseSchedule(await fixture(name), { week: evenWeek }).lessons.length, count);
+  }
+  const provider = new BguProvider({ cacheDir: await temporary(t), intervalMs: 0, fetcher: async (url) => {
+    assert.equal(new URL(url).pathname, '/telek/timetable.aspx');
+    assert.equal(new URL(url).searchParams.get('idg'), '33340');
+    return { ok: true, text: () => fixture('telek-bi-26-1.html') };
+  } });
+  const result = await provider.groupSchedule(33340, { week: evenWeek, fresh: true });
+  assert.equal(result.stale, false); assert.equal(result.lessons.length, 19);
+});
+test('HTTP БГУ: настоящие сессия и преподаватель нормализованы с часовым поясом и составными id', async (t) => {
+  const provider = new BguProvider({ cacheDir: await temporary(t), intervalMs: 0, fetcher: async (url) => ({ ok: true,
+    text: () => fixture(String(url).includes('timetable-pps') ? 'telek-teacher-10165.html' : 'telek-znb-23-1.html') }) });
+  const server = createHttpServer({ service: new UniversityService({ bgu: provider }), apiAccessKey: 'test-key' });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const get = (kind, id) => fetch(`${base}/api/schedule/${kind}/bgu~${id}?week=2026-10-19`, { headers: { Authorization: 'Bearer test-key' } });
+  const session = await get('group', 32143); assert.equal(session.status, 200);
+  const s = await session.json(); assert.equal(s.timeZone, 'Asia/Irkutsk'); assert.equal(s.stale, false);
+  assert.equal(s.lessons.find((item) => item.subject === 'Финансовое право').lessonType, 'зачёт');
+  const teacher = await get('teacher', 10165); assert.equal(teacher.status, 200);
+  const body = await teacher.json(); assert.equal(body.entityId, 'bgu~10165');
+  assert.deepEqual(body.lessons[0].groupIds, ['bgu~32982']);
+  assert.equal(body.lessons[0].startsAt, '2026-10-19T06:00:00.000Z');
+  assert.equal((await get('auditory', 1)).status, 501);
 });
 test('БГУ: подгруппа распознаётся в контролируемом варианте реальной разметки', () => {
   // Подгрупп нет в сохранённой группе. Это явно синтетическая вариация настоящей строки.
@@ -200,6 +284,23 @@ test('напоминание БГУ за 10 минут использует мо
 test('день пользователя включает раннюю пару следующей даты вуза', async () => {
   const lessons = await userDayLessons({ groupSchedule: async () => ({ lessons: [lesson('2026-10-19', '01:15–02:45')] }) }, 'bgu~11', '2026-10-18', 'Europe/Moscow');
   assert.equal(lessons.length, 1); assert.equal(lessons[0].date, '2026-10-19');
+});
+test('московский день и сводка БГУ сохраняют одновременные занятия с разными преподавателями', async () => {
+  const response = await fixture('telek-bi-26-1.html');
+  const service = { groupSchedule: async (_id, { week }) => ({ lessons: parseSchedule(response, { week, groupId: 33340 }).lessons.map((item) => lessonMoments(item)) }) };
+  const lessons = await userDayLessons(service, 'bgu~33340', '2026-10-19', 'Europe/Moscow', null, '2026-10-25');
+  assert.equal(lessons.length, 19);
+  assert.deepEqual(lessons.filter((item) => item.date === '2026-10-19' && item.subject === 'История России').map((item) => item.teachers[0]),
+    ['Синиченко Владимир Викторович', 'Ларионова Татьяна Андреевна']);
+});
+test('поиск преподавателя в боте учитывает переход пользовательской даты между неделями', async () => {
+  const calls = [];
+  const service = { teacherSchedule: async (_id, { week }) => {
+    calls.push(week.toISOString().slice(0, 10));
+    return { lessons: [lessonMoments(lesson('2026-10-19', '01:15–02:45'))] };
+  } };
+  const lessons = await userDayLessons(service, 'bgu~10165', '2026-10-18', 'Europe/Moscow', null, '2026-10-18', 'teacher');
+  assert.equal(lessons.length, 1); assert.deepEqual(calls, ['2026-10-12', '2026-10-19']);
 });
 test('перенос БГУ сохраняет ДЗ и напоминание; ИРНИТУ с тем же id не меняется', async (t) => {
   const { community, preferences } = await stores(t); const sent = [];
