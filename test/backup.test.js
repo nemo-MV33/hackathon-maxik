@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, writeFile, cp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { backup, restoreLatest, retentionKeys, prepareBackup } from '../src/backup/service.js';
 import { restoreArchive } from '../src/backup/archive.js';
 import { ObjectStorage } from '../src/backup/object-storage.js';
@@ -36,6 +37,22 @@ test('wrong encryption key and changed ciphertext fail before extraction', async
   await assert.rejects(restoreLatest({ ...options, key: randomBytes(32).toString('hex'), destination: join(options.root, 'wrong') }));
   const [name, bytes] = [...options.objects][0]; bytes[50] ^= 1; options.objects.set(name, bytes);
   await assert.rejects(restoreLatest({ ...options, destination: join(options.root, 'corrupt') }));
+});
+test('restore accepts authenticated tar padding and still verifies extracted bytes', async (t) => {
+  const options = await setup(t); await backup(options);
+  const encrypted = [...options.objects.values()][0];
+  const key = Buffer.from(options.key, 'hex');
+  const decipher = createDecipheriv('aes-256-gcm', key, encrypted.subarray(8, 20));
+  decipher.setAAD(encrypted.subarray(0, 8)); decipher.setAuthTag(encrypted.subarray(-16));
+  const archive = gunzipSync(Buffer.concat([decipher.update(encrypted.subarray(20, -16)), decipher.final()]));
+  const nonce = randomBytes(12); const cipher = createCipheriv('aes-256-gcm', key, nonce);
+  cipher.setAAD(encrypted.subarray(0, 8));
+  const padded = gzipSync(Buffer.concat([archive, Buffer.alloc(2 * 1024 * 1024)]));
+  const path = join(options.root, 'padded.enc');
+  await writeFile(path, Buffer.concat([encrypted.subarray(0, 8), nonce, cipher.update(padded), cipher.final(), cipher.getAuthTag()]));
+  const result = await restoreArchive(path, join(options.root, 'padded-restore'), options.key);
+  assert.equal(result.verified, true); assert.equal(result.files, 3);
+  assert.deepEqual(await readFile(join(options.root, 'padded-restore', 'attachments', 'photo')), await readFile(join(options.root, 'source', 'attachments', 'photo')));
 });
 test('rotation keeps 14 daily and 8 weekly recovery points; unrelated keys untouched', () => {
   const keys = Array.from({ length: 100 }, (_, index) => `norfly/${new Date(Date.UTC(2026, 6, index + 1)).toISOString().replace(/[:.]/g, '-')}.enc`);

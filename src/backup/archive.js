@@ -153,7 +153,11 @@ export const restoreArchive = async (source, destination, key) => {
     const tar = spawn('tar', ['-xzf', '-', '-C', workspace], { stdio: ['pipe', 'ignore', 'pipe'] });
     let errorText = ''; tar.stderr.on('data', (chunk) => { errorText += chunk; });
     const finished = new Promise((done, reject) => { tar.on('error', reject); tar.on('close', (code) => code === 0 ? done() : reject(new Error(`restore_tar_failed: ${errorText.slice(0, 100)}`))); });
-    await Promise.all([pipeline(input, tar.stdin), finished]);
+    const [pumped, extracted] = await Promise.allSettled([pipeline(input, tar.stdin), finished]);
+    if (extracted.status === 'rejected') throw extracted.reason;
+    // BSD tar может завершиться на конечных нулевых блоках до EOF входа.
+    // Архив уже аутентифицирован; ниже обязательно сверяются извлечённые файлы.
+    if (pumped.status === 'rejected' && pumped.reason.code !== 'EPIPE') throw pumped.reason;
     // Verify bytes actually written, as well as the downloaded archive.
     const actual = await inventory(workspace); const manifest = JSON.parse(await readFile(join(workspace, 'manifest.json'), 'utf8'));
     if (canonical(actual) !== canonical(manifest.inventory)) throw new Error('backup_verification_failed');
