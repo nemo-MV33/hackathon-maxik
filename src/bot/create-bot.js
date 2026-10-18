@@ -1,4 +1,4 @@
-import { demoContext, assertDemoAccess, isDemo, demoAllowed } from '../services/demo-service.js';
+import { demoContext, assertDemoAccess, isDemo, demoAllowed, DEMO_GROUP } from '../services/demo-service.js';
 import { detailsInput, withDeadline, detailsText, dueReminderAt } from '../lib/homework-details.js';
 import { historyText } from './homework-history.js';
 import { HomeworkAttachmentBatch, incomingHomeworkAttachments, downloadMaxAttachment, attachmentSummary } from './homework-attachments.js';
@@ -390,7 +390,10 @@ export const createBot = ({
     button(ctx.t.subgroupNumber(2), `${prefix}:${group.id}:2`),
   ], [button(ctx.t.subgroupAll, `${prefix}:${group.id}:all`)]]);
 
-  const findGroup = async (id) => (await service.groups(splitGroupKey(id).universityId)).find((group) => sameGroup(group.id, id));
+  const findGroup = async (id) => {
+    if (isDemo(id)) { assertDemoAccess(id); return DEMO_GROUP; }
+    return (await service.groups(splitGroupKey(id).universityId)).find((group) => sameGroup(group.id, id));
+  };
 
   const pagedRows = (t, items, page, toButton, pagePrefix, backPayload) => {
     const total = Math.max(1, Math.ceil(items.length / PAGE_SIZE));

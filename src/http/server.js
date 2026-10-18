@@ -1,4 +1,4 @@
-import { demoContext, assertDemoAccess } from '../services/demo-service.js';
+import { demoContext, assertDemoAccess, isDemo } from '../services/demo-service.js';
 import { uploadAttachment, sendAttachment } from './routes/attachments.js';
 import { groupKey, sameGroup } from '../universities/identity.js';
 import { createServer } from 'node:http';
@@ -246,7 +246,7 @@ const route = async (request, response, options) => {
     if (!id || !['group', 'teacher', 'auditory'].includes(kind)) {
       return sendJson(response, 400, { error: 'invalid_schedule_target' });
     }
-    if (kind === 'group' && service.groups) {
+    if (kind === 'group' && service.groups && !isDemo(id)) {
       assertDemoAccess(id, actor?.id);
       const known = await service.groups(id.split('~')[0]).catch(() => null);
       if (known && !known.some((group) => sameGroup(group.id, id))) throw new HttpError(404, 'not_found');

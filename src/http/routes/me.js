@@ -1,4 +1,4 @@
-import { assertDemoAccess } from '../../services/demo-service.js';
+import { assertDemoAccess, isDemo, DEMO_GROUP } from '../../services/demo-service.js';
 import { sameGroup, splitGroupKey } from '../../universities/identity.js';
 import { university } from '../../universities/config.js';
 import { validTimeZone } from '../../lib/timezone.js';
@@ -90,7 +90,7 @@ export const updateMe = async ({ user, preferences, service, body }) => {
     assertDemoAccess(body.groupId, user.id);
     let universityId;
     try { universityId = splitGroupKey(body.groupId).universityId; } catch { throw new HttpError(400, 'unknown_group'); }
-    const groups = await service.groups(universityId);
+    const groups = isDemo(body.groupId) ? [DEMO_GROUP] : await service.groups(universityId);
     const group = groups.find((item) => sameGroup(item.id, body.groupId));
     if (!group) throw new HttpError(400, 'unknown_group', 'Такой группы нет в расписании выбранного вуза');
     patch.universityId = universityId;

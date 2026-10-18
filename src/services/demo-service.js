@@ -22,9 +22,11 @@ export const installDemo = (service) => {
   const groups = service.groups.bind(service); const search = service.searchGroups.bind(service); const schedule = service.groupSchedule.bind(service);
   service.groups = async (universityId = 'irnitu') => [...await groups(universityId).catch((error) => { if (demoAllowed()) return []; throw error; }), ...(universityId === 'irnitu' && demoAllowed() ? [DEMO_GROUP] : [])];
   service.searchGroups = async (query, options = {}) => {
+    const matchesDemo = (options.universityId ?? 'irnitu') === 'irnitu' && demoAllowed() && (!query || DEMO_GROUP.title.toLowerCase().includes(query.toLowerCase()))
+      && (!options.institute || options.institute === DEMO_GROUP.institute) && (!options.course || Number(options.course) === 1);
+    if (query && matchesDemo) return [DEMO_GROUP];
     const items = await search(query, options).catch((error) => { if (demoAllowed()) return []; throw error; });
-    if ((options.universityId ?? 'irnitu') === 'irnitu' && demoAllowed() && (!query || DEMO_GROUP.title.toLowerCase().includes(query.toLowerCase()))
-      && (!options.institute || options.institute === DEMO_GROUP.institute) && (!options.course || Number(options.course) === 1)) return [DEMO_GROUP, ...items].slice(0, options.limit ?? 50);
+    if (matchesDemo) return [DEMO_GROUP, ...items].slice(0, options.limit ?? 50);
     return items;
   };
   service.groupSchedule = async (id, options = {}) => {
