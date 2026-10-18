@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { parseGroups, parseParity, parseSchedule, parseTeachers } from '../src/universities/bgu/parser.js';
+import { htmlText, parseGroups, parseParity, parseSchedule, parseTeachers } from '../src/universities/bgu/parser.js';
 import { BguProvider } from '../src/universities/bgu/provider.js';
 import { UniversityService } from '../src/universities/service.js';
 import { groupKey, sameGroup } from '../src/universities/identity.js';
@@ -36,6 +36,16 @@ test('БГУ: настоящий список групп и отдельный �
 });
 test('БГУ: дата и нечётность взяты из настоящей страницы', () => {
   assert.deepEqual(parseParity(html), { date: '2026-10-18', weekEven: false });
+});
+test('БГУ: эквивалентная запись HTML сохраняет расписание без зависимости от Safari', () => {
+  // Safari сериализует DOM при сохранении. Эти варианты проверяют допустимый исходный HTML, не новую фикстуру сайта.
+  const variant = html.replace(/<div\b([^>]*?)class="([^"]*tab-pane[^"]*)"\s+id="([^"]+)"/g,
+    "<div$1id='$3' class='$2'").replace('id="MainContent_divTT"', "id = 'MainContent_divTT'")
+    .replace('18 октября', '18 Октября').replace('>Конституционное право</span>', '>Конституционное &#1087;раво</span>');
+  assert.notEqual(variant, html);
+  assert.deepEqual(parseSchedule(variant, { week: evenWeek, groupId: 32982 }), parseSchedule(html, { week: evenWeek, groupId: 32982 }));
+  assert.equal(htmlText('&laquo;Право&raquo; &amp; &#x411;&#1043;&#1059; &lt;1&gt;'), '«Право» & БГУ <1>');
+  assert.equal(htmlText('&#1114112; &#xD800; &amp;lt;'), '&#1114112; &#xD800; &lt;');
 });
 test('БГУ: чётная неделя, тип, преподаватель, аудитория и пустой вторник', () => {
   const result = parseSchedule(html, { week: evenWeek, groupId: 32982 });

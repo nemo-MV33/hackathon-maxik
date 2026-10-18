@@ -2,8 +2,13 @@ import { addDays, startOfWeek, toDateKey } from '../../lib/date.js';
 export class BguSourceError extends Error {
   constructor(code) { super(code); this.name = 'BguSourceError'; this.code = code; }
 }
-export const htmlText = (value) => value.replace(/<[^>]*>/g, ' ').replace(/&nbsp;|&#160;/g, ' ')
-  .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\s+/g, ' ').trim();
+const entities = { nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', ndash: '–', mdash: '—', laquo: '«', raquo: '»' };
+export const htmlText = (value) => value.replace(/<[^>]*>/g, ' ').replace(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (encoded, entity) => {
+  if (!entity.startsWith('#')) return entities[entity.toLowerCase()] ?? encoded;
+  const point = entity.slice(1, 2).toLowerCase() === 'x' ? parseInt(entity.slice(2), 16) : Number(entity.slice(1));
+  return point > 0 && point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff) ? String.fromCodePoint(point) : encoded;
+}).replace(/\s+/g, ' ').trim();
+const attributes = (tag) => Object.fromEntries([...tag.matchAll(/\s([\w-]+)\s*=\s*(["'])(.*?)\2/gs)].map((match) => [match[1].toLowerCase(), match[3]]));
 export const parseGroups = (html) => {
   const groups = new Map();
   for (const match of html.matchAll(/<a\b[^>]*href=['"]\?idg=(\d+)['"][^>]*>([\s\S]*?)<\/a>/gi)) {
@@ -18,8 +23,8 @@ export const parseParity = (html) => {
   const date = content.match(/Сегодня\s*-\s*(\d+)\s+([а-я]+)\s+(\d{4})/i);
   const parity = content.match(/Неделя\s+(нечетная|нечётная|четная|чётная)/i);
   const months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
-  if (!date || !parity || !months.includes(date[2])) throw new BguSourceError('bgu_parity_unrecognized');
-  return { date: `${date[3]}-${String(months.indexOf(date[2]) + 1).padStart(2, '0')}-${date[1].padStart(2, '0')}`,
+  if (!date || !parity || !months.includes(date[2].toLowerCase())) throw new BguSourceError('bgu_parity_unrecognized');
+  return { date: `${date[3]}-${String(months.indexOf(date[2].toLowerCase()) + 1).padStart(2, '0')}-${date[1].padStart(2, '0')}`,
     weekEven: !parity[1].toLowerCase().startsWith('не') };
 };
 export const bguLessonTimes = {
@@ -40,8 +45,10 @@ export const parseTeachers = (html) => {
 };
 export const parseSchedule = (html, { week = new Date(), groupId, teacherId } = {}) => {
   if (/расписание\s+занятий\s+временно\s+недоступно/iu.test(htmlText(html))) throw new BguSourceError('bgu_temporarily_unavailable');
-  const area = html.slice(html.indexOf('id="MainContent_divTT"')).split('<footer')[0];
-  if (!area.includes('<table')) throw new BguSourceError('bgu_schedule_unrecognized');
+  const container = [...html.matchAll(/<div\b[^>]*>/gi)].find((match) => attributes(match[0]).id === 'MainContent_divTT');
+  if (!container) throw new BguSourceError('bgu_schedule_unrecognized');
+  const area = html.slice(container.index).split(/<footer\b/i)[0];
+  if (!/<table\b/i.test(area)) throw new BguSourceError('bgu_schedule_unrecognized');
   const anchor = parseParity(html);
   const from = startOfWeek(week);
   const delta = Math.round((from - startOfWeek(new Date(`${anchor.date}T00:00:00Z`))) / 604800000);
@@ -50,13 +57,14 @@ export const parseSchedule = (html, { week = new Date(), groupId, teacherId } = 
     const dates = htmlText(match[2]).match(/\d{2}\.\d{2}\.\d{4}/g) ?? [];
     return [match[1], dates.map(dateKey)];
   }));
-  const panes = [...area.matchAll(/<div\b[^>]*class=['"][^'"]*tab-pane[^'"]*['"][^>]*id=['"]([^'"]+)['"][^>]*>/gi)];
+  const panes = [...area.matchAll(/<div\b[^>]*>/gi)].map((match) => ({ ...attributes(match[0]), index: match.index }))
+    .filter((item) => item.class?.split(/\s+/).includes('tab-pane'));
   if (!panes.length || !periods.size) throw new BguSourceError('bgu_period_unrecognized');
   const lessons = [];
   let recognized = 0;
   for (let index = 0; index < panes.length; index += 1) {
     const pane = panes[index];
-    const [begin, end] = periods.get(pane[1]) ?? [];
+    const [begin, end] = periods.get(pane.id) ?? [];
     if (!begin || !end) throw new BguSourceError('bgu_period_unrecognized');
     const section = area.slice(pane.index, panes[index + 1]?.index);
     for (const table of section.matchAll(/<table\b[^>]*>([\s\S]*?)<\/table>/gi)) {
