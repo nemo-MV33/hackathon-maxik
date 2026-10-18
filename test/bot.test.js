@@ -482,7 +482,7 @@ test('всё управление кнопками: без единой кома
   const [study] = await press(STUDENT, 'set:study');
   assert.deepEqual(payloads(study), ['set:group', 'set:sub:irnitu~11', 'invite', 'settings']);
   const [invite] = await press(STUDENT, 'invite');
-  assert.match(invite.text, /https:\/\/max\.ru\/t692_hakaton_max_bot\?start=group_irnitu~11_1/);
+  assert.match(invite.text, /https:\/\/max\.ru\/t692_hakaton_max_bot\?start=group_irnitu-11_1/);
   assert.ok(menu);
 });
 
@@ -798,4 +798,19 @@ test('/id: ID группы видят только администратор и
   const [reply] = await say(HEADMAN, '/id', { chat: GROUP_CHAT });
   assert.match(reply.text, /администратор чата/);
   assert.doesNotMatch(reply.text, /-500/);
+});
+
+
+test('MAX: кнопки и ссылки кодируют ключ вуза без запрещённого символа ~', async (t) => {
+  const { getBot, run, press, preferences } = await setup(t);
+  for (const group of ['irnitu~11', 'bgu~12']) {
+    const payload = `lesson_2026-10-19_2_0_${group}`;
+    const item = getBot().appButton({ openApp: 'Открыть' }, payload);
+    assert.match(item.payload, /^[A-Za-z0-9_-]+$/);
+    assert.equal(item.payload, payload.replace('~', '-'));
+  }
+  const [invite] = await run({ update_type: 'bot_started', chat_id: PRIVATE_CHAT(STUDENT).chat_id, user: STUDENT, payload: 'group_irnitu-11_1' });
+  assert.match(invite.text, /ИСТб-25-1/);
+  await press(STUDENT, 'sub:irnitu~11:1');
+  assert.equal((await preferences.get(STUDENT.user_id)).selection.id, 'irnitu~11');
 });

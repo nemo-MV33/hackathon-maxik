@@ -139,6 +139,8 @@ export const createBot = ({
 
   // payload приходит в мини-приложение как start_param: так кнопка открывает нужный день или пару.
   const appButton = (t, payload, text = t.openApp) => {
+    // MAX разрешает в start-параметре буквы, цифры, дефис и подчёркивание.
+    payload = payload?.replace(/~/g, '-');
     if (miniAppButton === 'link') {
       if (!miniAppUrl) return null;
       return Keyboard.button.link(text, payload ? `${miniAppUrl}?startapp=${payload}` : miniAppUrl);
@@ -1002,7 +1004,7 @@ export const createBot = ({
 
   // Приглашение: ссылка на бота с payload, новичок сразу попадает в свою группу
 
-  const inviteLink = (group, subgroup) => `${botLink()}?start=group_${group.id}_${subgroup ?? 0}`;
+  const inviteLink = (group, subgroup) => `${botLink()}?start=group_${String(group.id).replace(/~/g, '-')}_${subgroup ?? 0}`;
 
   const showInvite = async (ctx) => {
     const { t } = ctx;
@@ -1014,7 +1016,7 @@ export const createBot = ({
   };
 
   const invitePrompt = async (ctx, payload) => {
-    const match = /^group_((?:(?:irnitu|bgu)~)?\d+)_([012])$/.exec(payload ?? '');
+    const match = /^group_((?:(?:irnitu|bgu)~)?\d+)_([012])$/.exec((payload ?? '').replace(/(irnitu|bgu)-(?=\d)/g, '$1~'));
     if (!match) return null;
     const group = await findGroup(match[1]);
     if (!group) return null;

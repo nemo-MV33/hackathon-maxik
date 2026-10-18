@@ -41,11 +41,11 @@ export const currentUser = (): MaxUser | undefined => window.WebApp?.initDataUns
 
 export const startParam = (): string | undefined => {
   const fromMax = window.WebApp?.initDataUnsafe?.start_param;
-  if (fromMax) return fromMax;
-  return new URLSearchParams(window.location.search).get('startapp') ?? undefined;
+  const value = fromMax || new URLSearchParams(window.location.search).get('startapp');
+  return value?.replace(/(irnitu|bgu)-(?=\d)/g, '$1~') ?? undefined;
 };
 
-export const miniAppLink = (payload: string) => `https://max.ru/${BOT_NAME}?startapp=${payload}`;
+export const miniAppLink = (payload: string) => `https://max.ru/${BOT_NAME}?startapp=${payload.replace(/~/g, '-')}`;
 
 export const openExternal = (url: string) => {
   const app = window.WebApp;
