@@ -570,13 +570,15 @@ paths:
                 minutesBefore: { type: number, minimum: 0, description: За сколько минут до начала пары при reminderMode lesson }
       responses:
         '200':
-          description: ДЗ сохранено или удалено
+          description: ДЗ сохранено/удалено, напоминание или личное выполнение обновлено. Для scope completion ответ содержит completed boolean.
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403':
           description: Нет прав на изменение общего ДЗ
         '404':
-          description: Пара не найдена в расписании выбранного вуза
+          description: Пара или ДЗ не найдены в выбранной группе
+        '409':
+          description: Профиль изменился либо revision не соответствует текущему ДЗ (homework_changed); перечитать GET перед повтором отметки.
   /api/institutes:
     get:
       operationId: listInstitutes
