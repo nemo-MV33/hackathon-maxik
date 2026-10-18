@@ -1,5 +1,6 @@
+import { demoContext, assertDemoAccess } from '../services/demo-service.js';
 import { uploadAttachment, sendAttachment } from './routes/attachments.js';
-import { groupKey } from '../universities/identity.js';
+import { groupKey, sameGroup } from '../universities/identity.js';
 import { createServer } from 'node:http';
 import { parseDateKey, toDateKey } from '../lib/date.js';
 import { serveStatic } from './static.js';
@@ -84,6 +85,8 @@ const route = async (request, response, options) => {
   if (request.method === 'OPTIONS') return sendJson(response, 204, null);
 
   const url = new URL(request.url, 'http://localhost');
+  const actor = authenticate(request, options);
+  if (actor && preferences && !(url.pathname === '/api/me' && ['PUT', 'DELETE'].includes(request.method))) { const profile = await preferences.get(actor.id); assertDemoAccess(profile.selection?.id, actor.id); }
   const parts = url.pathname.split('/').filter(Boolean);
 
   if (url.pathname === '/health') {
@@ -174,7 +177,7 @@ const route = async (request, response, options) => {
     const user = authenticate(request, options);
     if (!user) return sendJson(response, 401, { error: 'unauthorized' });
     if (request.method === 'GET') {
-      return sendJson(response, 200, await getHomework({ user, preferences, community, url }));
+      return sendJson(response, 200, await getHomework({ user, preferences, community, service, url }));
     }
     if (request.method === 'PUT') {
       const body = await readJson(request);
@@ -243,6 +246,11 @@ const route = async (request, response, options) => {
     if (!id || !['group', 'teacher', 'auditory'].includes(kind)) {
       return sendJson(response, 400, { error: 'invalid_schedule_target' });
     }
+    if (kind === 'group' && service.groups) {
+      assertDemoAccess(id, actor?.id);
+      const known = await service.groups(id.split('~')[0]).catch(() => null);
+      if (known && !known.some((group) => sameGroup(group.id, id))) throw new HttpError(404, 'not_found');
+    }
     const schedule = await service[`${kind}Schedule`](id, { ...scheduleOptions(url), universityId: url.searchParams.get('universityId') || undefined });
     return sendJson(response, 200, serializeSchedule(schedule));
   }
@@ -252,7 +260,7 @@ const route = async (request, response, options) => {
 
 export const createHttpServer = (options) =>
   createServer((request, response) => {
-    route(request, response, options).catch((error) => {
+    demoContext.run({ userId: authenticate(request, options)?.id ?? null }, () => route(request, response, options)).catch((error) => {
       if (error.code === 'capability_not_supported') return sendJson(response, 501, { error: error.code });
       if (error instanceof HttpError) {
         return sendJson(response, error.status, { error: error.error, message: error.message });

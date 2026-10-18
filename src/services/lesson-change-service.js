@@ -1,3 +1,4 @@
+import { withDeadline, dueReminderAt } from '../lib/homework-details.js';
 import { groupKey, sameGroup } from '../universities/identity.js';
 import { zonedMoment } from '../lib/timezone.js';
 import { randomUUID } from 'node:crypto';
@@ -40,9 +41,9 @@ export class LessonChangeService {
     return compact(found);
   }
 
-  async apply(groupId, from, to, id, by = 'schedule') {
+  async apply(groupId, from, to, id, by = 'schedule', actor = {}) {
     const at = this.now().toISOString();
-    await this.community.relocateHomework(groupId, from, to, { id, at, by });
+    await this.community.relocateHomework(groupId, from, to, { id, at, by, authorId: actor.authorId, authorName: actor.authorName });
     for (const [userId, profile] of await this.preferences.entries()) {
       if (!sameGroup(profile.selection?.id, groupId) || profile.selection?.kind !== 'group') continue;
       const reminders = { ...profile.homeworkReminders };
@@ -51,8 +52,9 @@ export class LessonChangeService {
       delete reminders[lessonSlot(from)];
       if (to) {
         const relative = old.mode === 'lesson' || old.relativeTo === 'lesson';
-        const nextAt = relative ? new Date(start(to) - (old.minutesBefore ?? 0) * 60_000).toISOString() : old.at;
-        if (new Date(nextAt) > this.now()) reminders[lessonSlot(to)] = { ...old, at: nextAt, time: to.time.slice(0, 5), suspended: false };
+        const due = old.mode?.startsWith('due-') ? (await this.community.homeworkForUser(groupId, userId, { from: to.date, to: to.date })).find((item) => item.lessonNumber === to.lessonNumber && (item.subgroup ?? null) === (to.subgroup ?? null)) : null;
+        const nextAt = old.mode?.startsWith('due-') ? dueReminderAt(due ? (await withDeadline(due, this.service)).dueAt : null, old.mode, profile) : relative ? new Date(start(to) - (old.minutesBefore ?? 0) * 60_000).toISOString() : old.at;
+        if (old.mode?.startsWith('due-') || new Date(nextAt) > this.now()) reminders[lessonSlot(to)] = { ...old, at: nextAt, time: to.time.slice(0, 5), suspended: false };
       } else reminders[lessonSlot(from)] = { ...old, suspended: true };
       await this.preferences.set(userId, { ...profile, homeworkReminders: reminders });
     }
@@ -79,7 +81,7 @@ export class LessonChangeService {
       }
       const item = { id: randomUUID(), groupId, from: source, to: target, status: 'pending', at: this.now().toISOString(),
         authorId: user.id, authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || String(user.id) };
-      const homework = await this.apply(groupId, source, target, item.id, 'headman');
+      const homework = await this.apply(groupId, source, target, item.id, 'headman', item);
       await this.community.saveLessonChange(item);
       await this.notifyChats(groupId, [{ type: target ? 'moved' : 'cancelled', previous: source, lesson: target ? { ...source, ...target, subject: source.subject } : source, homework }], item);
       return item;
@@ -92,7 +94,7 @@ export class LessonChangeService {
       const item = (await this.community.lessonChanges(groupId)).find((value) => value.id === id);
       if (!item) throw new HttpError(404, 'move_not_found', 'Отметка не найдена');
       if (item.status !== 'pending') return item;
-      await this.apply(groupId, item.to ?? item.from, item.from, `${id}:undo`, 'headman');
+      await this.apply(groupId, item.to ?? item.from, item.from, `${id}:undo`, 'headman', { authorId: user.id, authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || String(user.id) });
       await this.community.saveLessonChange({ ...item, status: 'revoked' });
       await this.notifyChats(groupId, [], { ...item, status: 'revoked' });
       return { ...item, status: 'revoked' };

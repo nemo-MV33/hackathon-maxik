@@ -1,3 +1,4 @@
+import { assertDemoAccess } from '../services/demo-service.js';
 import { mkdir, readFile, writeFile, rename, readdir, unlink, statfs } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
@@ -93,7 +94,7 @@ export class AttachmentStore {
     return this.exclusive(async () => {
       const item = await this.metadata(id);
       const records = await this.community.attachmentRecords();
-      if (item.userId !== String(userId) || records.some((record) => record.attachments?.some((file) => file.id === id))) throw new HttpError(403, 'attachment_forbidden');
+      if (item.userId !== String(userId) || records.some((record) => [...(record.attachments ?? []), ...(record.history ?? []).flatMap((event) => event.after?.attachments ?? [])].some((file) => file.id === id))) throw new HttpError(403, 'attachment_forbidden');
       await unlink(this.path(id));
       await unlink(this.path(id, '.json'));
     });
@@ -109,6 +110,7 @@ export class AttachmentStore {
   }
   async authorize(id, userId) {
     const item = await this.metadata(id);
+    assertDemoAccess(item.groupId, userId);
     const records = await this.community.attachmentRecords();
     const record = records.find((record) => record.attachments?.some((file) => file.id === id));
     const profile = await this.preferences.get(userId);
@@ -132,15 +134,15 @@ export class AttachmentStore {
     await this.authorize(id, user);
     return user;
   }
-  async reconcile({ removeUser } = {}) {
+  async reconcile({ removeUser, removeGroup } = {}) {
     return this.exclusive(async () => {
       const records = await this.community.attachmentRecords();
-      const used = new Set(records.flatMap((record) => (record.attachments ?? []).map((file) => file.id)));
+      const used = new Set(records.flatMap((record) => [...(record.attachments ?? []), ...(record.history ?? []).flatMap((event) => [...(event.before?.attachments ?? []), ...(event.after?.attachments ?? [])])].map((file) => file.id)));
       const items = await this.catalog();
       for (const item of items) {
         if (used.has(item.id)) {
           if (!item.bound) await this.writeMetadata({ ...item, bound: true });
-        } else if (item.bound || item.createdAt < this.now() - 3600_000 || (removeUser && item.userId === String(removeUser) && item.scope === 'personal')) {
+        } else if ((removeGroup && sameGroup(item.groupId, removeGroup)) || item.bound || item.createdAt < this.now() - 3600_000 || (removeUser && item.userId === String(removeUser) && item.scope === 'personal')) {
           await unlink(this.path(item.id)).catch((error) => { if (error.code !== 'ENOENT') throw error; });
           await unlink(this.path(item.id, '.json'));
         }

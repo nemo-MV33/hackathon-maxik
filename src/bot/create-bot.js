@@ -1,3 +1,6 @@
+import { demoContext, assertDemoAccess, isDemo, demoAllowed } from '../services/demo-service.js';
+import { detailsInput, withDeadline, detailsText, dueReminderAt } from '../lib/homework-details.js';
+import { historyText } from './homework-history.js';
 import { HomeworkAttachmentBatch, incomingHomeworkAttachments, downloadMaxAttachment, attachmentSummary } from './homework-attachments.js';
 import { userDayLessons } from '../services/user-schedule.js';
 import { groupKey, sameGroup, splitGroupKey } from '../universities/identity.js';
@@ -458,14 +461,14 @@ export const createBot = ({
     if (isGroupChat(ctx)) {
       const config = await community.getChat(ctx.chatId);
       if (!config?.group) return show(ctx, t.groupNotConfigured, [[button(t.setup, 'setup', 'positive')]]);
-      const items = await community.homeworkForGroup(config.group.id, { subgroup: config.subgroup ?? null });
-      return show(ctx, formatHomework(lang, items, profileTimeZone(prefs)), [[...(appButton(t, undefined, t.openInApp) ? [appButton(t, undefined, t.openInApp)] : [])], [button(t.addHomework, 'gh:pick'), button(t.team, 'team')]], await bot.homeworkMedia({ attachments: items.flatMap((item) => item.attachments ?? []) }));
+      const items = await Promise.all((await community.homeworkForGroup(config.group.id, { from: addDays(new Date(), -14), subgroup: config.subgroup ?? null })).map((item) => withDeadline(item, service)));
+      return show(ctx, formatHomework(lang, items, profileTimeZone(prefs)), [...items.slice(0, 5).map((item) => [button(`${ctx.lang === 'en' ? 'History' : 'История'}: ${item.subject}`, `hh:${item.id}`)]), [...(appButton(t, undefined, t.openInApp) ? [appButton(t, undefined, t.openInApp)] : [])], [button(t.addHomework, 'gh:pick'), button(t.team, 'team')]], await bot.homeworkMedia({ attachments: items.flatMap((item) => item.attachments ?? []) }));
     }
     const group = ownGroup(prefs);
     if (!group) return show(ctx, t.noGroupYet);
-    const items = await community.homeworkForUser(group.id, userId(ctx), { subgroup: prefs.subgroup });
+    const items = await Promise.all((await community.homeworkForUser(group.id, userId(ctx), { from: addDays(new Date(), -14), subgroup: prefs.subgroup })).map((item) => withDeadline(item, service)));
     const app = appButton(t, items[0] ? `day_${items[0].lessonDate}_${groupKey(group.id)}` : undefined, t.openInApp);
-    return show(ctx, formatHomework(lang, items, profileTimeZone(prefs)), [[button(t.addPersonal, 'ph:pick')], [...(app ? [app] : []), button(t.menu, 'menu')]], await bot.homeworkMedia({ attachments: items.flatMap((item) => item.attachments ?? []) }));
+    return show(ctx, formatHomework(lang, items, profileTimeZone(prefs)), [...items.slice(0, 5).map((item) => [button(`${ctx.lang === 'en' ? 'History' : 'История'}: ${item.subject}`, `hh:${item.id}`), button(ctx.lang === 'en' ? 'Due and reminder' : 'Срок и напоминание', `hd:${item.id}`)]), [button(t.addPersonal, 'ph:pick')], [...(app ? [app] : []), button(t.menu, 'menu')]], await bot.homeworkMedia({ attachments: items.flatMap((item) => item.attachments ?? []) }));
   };
 
   const beginAdd = async (ctx) => {
@@ -1120,9 +1123,11 @@ export const createBot = ({
   bot.syncCommands = () => bot.api.setMyCommands(COMMANDS);
 
   // Язык и профиль нужны почти каждому обработчику — читаем один раз на апдейт.
+  bot.use((ctx, next) => demoContext.run({ userId: userId(ctx) }, () => next()));
   bot.use(async (ctx, next) => {
     const id = userId(ctx);
     ctx.prefs = id ? await preferences.get(id) : {};
+    if (isDemo(ctx.prefs.selection?.id) && !demoAllowed(id)) ctx.prefs = { ...ctx.prefs, selection: null };
     let lang = normalizeLanguage(ctx.prefs.lang);
     if (ctx.chatId && isGroupChat(ctx)) lang = normalizeLanguage((await community.getChat(ctx.chatId))?.lang) ?? lang;
     ctx.lang = lang ?? DEFAULT_LANGUAGE;
@@ -1142,7 +1147,8 @@ export const createBot = ({
       if (!sameGroup(group?.id, scoped[2])) return toast(ctx, ctx.t.selectionExpired);
       callback.payload = base;
     }
-    return next();
+    if (isGroupChat(ctx)) assertDemoAccess((await community.getChat(ctx.chatId))?.group?.id, id);
+    return demoContext.run({ userId: id }, () => next());
   });
 
   bot.on('bot_started', start);
@@ -1371,6 +1377,69 @@ export const createBot = ({
   });
 
   bot.action('absence', beginAbsence);
+  const detailItem = async (ctx, id, edit = false) => {
+    const group = isGroupChat(ctx) ? (await community.getChat(ctx.chatId))?.group : ownGroup(ctx.prefs);
+    const item = (await community.attachmentRecords()).find((item) => item.id === id && sameGroup(item.groupId, group?.id)
+      && (item.userId == null || (!isGroupChat(ctx) && String(item.userId) === String(userId(ctx)))));
+    if (!item) throw new Error(ctx.t.selectionExpired);
+    assertDemoAccess(item.groupId, userId(ctx));
+    if (edit && item.userId == null && await community.homeworkRoleForGroup(item.groupId, userId(ctx)) === 'student') throw new Error(ctx.t.homeworkForbidden);
+    return item;
+  };
+  const updateDetails = async (ctx, item, patch) => {
+    const value = { ...item, ...detailsInput(patch, item.groupId), authorId: userId(ctx), authorName: displayName(ctx.user ?? ctx.message?.sender ?? ctx.update.callback.user) };
+    if (item.userId == null) { const saved = await community.upsertHomework(value); onHomeworkSaved?.(saved); return saved; }
+    return community.setPersonalHomework(userId(ctx), value);
+  };
+  const showDetails = async (ctx, id) => {
+    const item = await detailItem(ctx, id); const en = ctx.lang === 'en';
+    const editable = item.userId != null || await community.homeworkRoleForGroup(item.groupId, userId(ctx)) !== 'student';
+    return show(ctx, detailsText(await withDeadline(item, service), ctx.lang, profileTimeZone(ctx.prefs)), [
+      ...(editable ? [[button(en ? 'This lesson' : 'К этой паре', `hdc:${id}:lesson`), button(en ? 'Next subject lesson' : 'К следующей паре', `hdc:${id}:next`)],
+      [button(en ? 'Date and time' : 'Дата и время', `hdc:${id}:date`)],
+      ...[['class', en ? 'In class' : 'На паре'], ['moodle', 'Moodle'], ['system', en ? 'Another system' : 'Другая система'], ['email', en ? 'Email' : 'Почта'], ['other', en ? 'Other' : 'Другое']].map(([kind, label]) => [button(label, `hds:${id}:${kind}`)]),
+      [button(en ? 'Add HTTPS link' : 'Добавить HTTPS-ссылку', `hdi:${id}:link`), button(en ? 'Details' : 'Уточнение', `hdi:${id}:label`)]] : []),
+      ...(!isGroupChat(ctx) ? [[button(en ? 'A day before due' : 'За день до срока', `hdr:${id}:due-day`), button(en ? 'Morning of due date' : 'Утром в день срока', `hdr:${id}:due-morning`)]] : []),
+      [button(ctx.t.homework, 'hw:list')],
+    ]);
+  };
+  bot.action(/^hd:([a-f0-9-]+)$/, (ctx) => showDetails(ctx, ctx.match[1]));
+  bot.action(/^hdc:([a-f0-9-]+):(lesson|next|date)$/, async (ctx) => {
+    const [, id, kind] = ctx.match; const item = await detailItem(ctx, id, true);
+    if (kind === 'date') {
+      setSession(ctx, { step: 'homework-date', id });
+      return show(ctx, ctx.lang === 'en' ? 'Enter YYYY-MM-DD HH:mm in university time (Asia/Irkutsk)' : 'Введи ГГГГ-ММ-ДД ЧЧ:мм по времени вуза (Asia/Irkutsk)', [[button(ctx.t.cancel, 'cancel')]]);
+    }
+    await updateDetails(ctx, item, { deadline: { kind } }); return showDetails(ctx, id);
+  });
+  bot.action(/^hds:([a-f0-9-]+):(class|moodle|system|email|other)$/, async (ctx) => {
+    const item = await detailItem(ctx, ctx.match[1], true);
+    await updateDetails(ctx, item, { submission: { ...item.submission, kind: ctx.match[2] } }); return showDetails(ctx, item.id);
+  });
+  bot.action(/^hdi:([a-f0-9-]+):(link|label)$/, async (ctx) => {
+    await detailItem(ctx, ctx.match[1], true); setSession(ctx, { step: `homework-${ctx.match[2]}`, id: ctx.match[1] });
+    return show(ctx, ctx.lang === 'en' ? 'Send HTTPS link or submission details' : 'Отправь HTTPS-ссылку или уточнение способа сдачи', [[button(ctx.t.cancel, 'cancel')]]);
+  });
+  bot.action(/^hdr:([a-f0-9-]+):(due-day|due-morning)$/, async (ctx) => {
+    if (isGroupChat(ctx)) return toast(ctx, ctx.lang === 'en' ? 'Open private chat' : 'Открой личный чат');
+    const item = await detailItem(ctx, ctx.match[1]);
+    const at = dueReminderAt((await withDeadline(item, service)).dueAt, ctx.match[2], ctx.prefs);
+    if (!at || Date.parse(at) <= Date.now()) return toast(ctx, ctx.lang === 'en' ? 'Reminder time has passed or due date is unknown' : 'Время напоминания прошло или срок неизвестен');
+    await savePrefs(ctx, { homeworkReminders: { ...ctx.prefs.homeworkReminders, [`${item.lessonDate}:${item.lessonNumber}:${item.subgroup ?? 0}`]: { at, mode: ctx.match[2], subject: item.subject } } });
+    return toast(ctx, ctx.lang === 'en' ? 'Reminder saved' : 'Напоминание сохранено');
+  });
+  bot.action(/^hh:([a-f0-9-]+)$/, async (ctx) => {
+    const item = await detailItem(ctx, ctx.match[1]);
+    const role = await community.homeworkRoleForGroup(item.groupId, userId(ctx));
+    const versions = item.userId == null && ['headman', 'editor'].includes(role) ? (item.history ?? []).filter((event) => event.after && event.version < item.version).slice(-4) : [];
+    return show(ctx, `${ctx.lang === 'en' ? 'Change history' : 'История изменений'}
+${historyText(item.history, ctx.lang, profileTimeZone(ctx.prefs))}`, [...versions.map((event) => [button(`${ctx.lang === 'en' ? 'Restore' : 'Вернуть'} v${event.version}`, `hhr:${item.id}:${event.version}`)]), [button(ctx.t.homework, 'hw:list')]]);
+  });
+  bot.action(/^hhr:([a-f0-9-]+):(\d+)$/, async (ctx) => {
+    const item = await detailItem(ctx, ctx.match[1], true);
+    const saved = await community.restoreHomework(item.groupId, userId(ctx), item, Number(ctx.match[2]), displayName(ctx.user ?? ctx.update.callback.user));
+    onHomeworkSaved?.(saved); return showDetails(ctx, saved.id);
+  });
   bot.action('hw:list', showHomework);
   bot.action('ph:pick', beginAdd);
   bot.action('gh:pick', beginAdd);
@@ -1640,7 +1709,7 @@ export const createBot = ({
       authorName: displayName(ctx.message.sender),
     });
     onHomeworkSaved?.(item);
-    return show(ctx, `${t.homeworkSaved(lesson.subject)}\n${attachmentSummary(item.attachments)}`, [[button(t.homework, 'hw:list'), ...(appButton(t, undefined, t.openInApp) ? [appButton(t, undefined, t.openInApp)] : [])]], await bot.homeworkMedia(item));
+    return show(ctx, `${t.homeworkSaved(lesson.subject)}\n${attachmentSummary(item.attachments)}`, [[button(ctx.lang === 'en' ? 'Due and submission' : 'Срок и способ сдачи', `hd:${item.id}`), button(ctx.lang === 'en' ? 'History' : 'История', `hh:${item.id}`)], [button(t.homework, 'hw:list'), ...(appButton(t, undefined, t.openInApp) ? [appButton(t, undefined, t.openInApp)] : [])]], await bot.homeworkMedia(item));
   };
 
   const savePersonalHomework = async (ctx, state, text, attachments, mids) => {
@@ -1660,8 +1729,9 @@ export const createBot = ({
       text,
       ...(attachments ? { attachments, intakeMids: mids } : {}),
       authorId: userId(ctx),
+      authorName: displayName(ctx.message.sender),
     });
-    return show(ctx, `${t.personalSaved(lesson.subject)}\n${attachmentSummary(item.attachments)}`, [[button(t.homework, 'hw:list'), button(t.menu, 'menu')]], await bot.homeworkMedia(item));
+    return show(ctx, `${t.personalSaved(lesson.subject)}\n${attachmentSummary(item.attachments)}`, [[button(ctx.lang === 'en' ? 'Due and submission' : 'Срок и способ сдачи', `hd:${item.id}`), button(ctx.lang === 'en' ? 'History' : 'История', `hh:${item.id}`)], [button(t.homework, 'hw:list'), button(t.menu, 'menu')]], await bot.homeworkMedia(item));
   };
 
   bot.homeworkMedia = async (item) => {
@@ -1732,6 +1802,12 @@ export const createBot = ({
     if (text.startsWith('/')) return undefined;
 
     const state = session(ctx);
+    if (state.step === 'homework-date' || state.step === 'homework-link' || state.step === 'homework-label') {
+      const item = await detailItem(ctx, state.id, true);
+      const patch = state.step === 'homework-date' ? { deadline: { kind: 'date', local: text.replace(' ', 'T') } } : { submission: { ...(item.submission ?? { kind: 'other' }), ...(state.step === 'homework-link' ? { url: text } : { label: text }) } };
+      try { await updateDetails(ctx, item, patch); } catch (error) { return ctx.reply(error.message); }
+      setSession(ctx, null); return showDetails(ctx, item.id);
+    }
     if (state.step === 'move-date') {
       const config = await moveConfig(ctx);
     if (!config) return toast(ctx, ctx.t.homeworkForbidden);

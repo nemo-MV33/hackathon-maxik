@@ -1,3 +1,4 @@
+import { installDemo, demoContext } from './services/demo-service.js';
 import { AttachmentStore } from './storage/attachments.js';
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +20,7 @@ if (!config.botToken) {
 }
 
 const client = new IrnituClient(config.irnitu);
-const service = new UniversityService({ irnitu: new ScheduleService(client), bgu: new BguProvider(config.bgu) });
+const service = installDemo(new UniversityService({ irnitu: new ScheduleService(client), bgu: new BguProvider(config.bgu) }));
 Promise.allSettled([service.groups(), service.teachers(), service.auditories()]);
 const preferences = new PreferencesStore(
   fileURLToPath(new URL('../data/preferences.json', import.meta.url)),
@@ -81,8 +82,7 @@ let stopping = false;
 server.listen(config.port, () => {
   console.log(`HTTP API is listening on port ${config.port}`);
 });
-reminders.start();
-notifications.start();
+demoContext.run({ userId: 'internal' }, () => { reminders.start(); notifications.start(); });
 
 const syncCommands = () => bot.syncCommands().catch((error) => {
   console.error('Failed to update bot commands, retrying:', error.message);

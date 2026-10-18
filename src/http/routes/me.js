@@ -1,3 +1,4 @@
+import { assertDemoAccess } from '../../services/demo-service.js';
 import { sameGroup, splitGroupKey } from '../../universities/identity.js';
 import { university } from '../../universities/config.js';
 import { validTimeZone } from '../../lib/timezone.js';
@@ -80,11 +81,13 @@ export const updateMe = async ({ user, preferences, service, body }) => {
   }
 
   const saved = await preferences.get(user.id);
+  if (!('groupId' in body)) assertDemoAccess(saved.selection?.id, user.id);
   // Имя нужно старосте: в списке одногруппников для выбора доверенного лица.
   const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || (user.username ? `@${user.username}` : null);
   const patch = name && name !== saved.name ? { name } : {};
 
   if ('groupId' in body) {
+    assertDemoAccess(body.groupId, user.id);
     let universityId;
     try { universityId = splitGroupKey(body.groupId).universityId; } catch { throw new HttpError(400, 'unknown_group'); }
     const groups = await service.groups(universityId);

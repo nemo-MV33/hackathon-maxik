@@ -1,3 +1,4 @@
+import { isDemo, demoAllowed } from './demo-service.js';
 import { groupKey } from '../universities/identity.js';
 import { universityTimeZone, zonedDateKey, zonedMoment, lessonInTimeZone, profileTimeZone } from '../lib/timezone.js';
 import { Keyboard } from '@maxhub/max-bot-api';
@@ -39,7 +40,7 @@ export class ReminderService {
       const now = this.now();
       const schedules = new Map();
       for (const [id, profile] of await this.preferences.entries()) {
-        if (profile.selection?.kind !== 'group' || isQuiet(profile, now)) continue;
+        if (profile.selection?.kind !== 'group' || isQuiet(profile, now) || (isDemo(profile.selection.id) && !demoAllowed(id))) continue;
         const sourceZone = universityTimeZone(profile.selection.id);
         const today = zonedDateKey(now, sourceZone);
         const wantStart = remindersEnabled(profile);

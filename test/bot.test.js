@@ -739,3 +739,31 @@ test('бот: текст и фото одним сообщением, серия
   assert.equal(personal.attachments.length, 1);
   assert.equal(personal.sharedAttachments.length, 1);
 });
+
+test('необязательные срок, способ сдачи, напоминание и история после сохранения ДЗ в боте', async (t) => {
+  const { say, press, community, preferences } = await setup(t);
+  const day = toDateKey(addDays(startOfWeek(new Date()), 7));
+  await preferences.set(HEADMAN.user_id, { selection: { kind: 'group', id: 11, title: GROUPS[0].title }, lang: 'ru' });
+  await preferences.set(STUDENT.user_id, { selection: { kind: 'group', id: 11, title: GROUPS[0].title }, lang: 'ru' });
+  await community.setChat(GROUP_CHAT.chat_id, { group: { id: 11, title: GROUPS[0].title }, headman: { userId: HEADMAN.user_id } });
+  await press(HEADMAN, `gh:${day}:1:0`, { chat: GROUP_CHAT });
+  const [saved] = await say(HEADMAN, 'Задачи 1–3', { chat: GROUP_CHAT });
+  assert.match(JSON.stringify(saved.extra), /Срок и способ сдачи/);
+  const item = (await community.homeworkForGroup(11, { from: day }))[0];
+  await press(HEADMAN, `hdc:${item.id}:next`, { chat: GROUP_CHAT });
+  await press(HEADMAN, `hds:${item.id}:moodle`, { chat: GROUP_CHAT });
+  await press(HEADMAN, `hdc:${item.id}:date`, { chat: GROUP_CHAT });
+  await say(HEADMAN, '2099-10-22 18:00', { chat: GROUP_CHAT });
+  await press(HEADMAN, `hdi:${item.id}:link`, { chat: GROUP_CHAT });
+  const [invalid] = await say(HEADMAN, 'http://example.org', { chat: GROUP_CHAT });
+  assert.match(invalid.text, /https/);
+  await say(HEADMAN, 'https://example.org/course', { chat: GROUP_CHAT });
+  const [history] = await press(STUDENT, `hh:${item.id}`);
+  assert.match(history.text, /История изменений/); assert.match(history.text, /Moodle/); assert.match(history.text, /Срок/);
+  await press(STUDENT, `hdr:${item.id}:due-day`);
+  assert.equal((await preferences.get(STUDENT.user_id)).homeworkReminders[`${day}:1:0`].mode, 'due-day');
+  await press(HEADMAN, `hhr:${item.id}:1`, { chat: GROUP_CHAT });
+  const latest = (await community.homeworkForGroup(11, { from: day }))[0];
+  assert.equal(latest.deadline.kind, 'lesson'); assert.equal(latest.history.at(-1).restoredFrom, 1);
+  const [list] = await say(STUDENT, '/homework'); assert.match(list.text, /Срок/); assert.match(JSON.stringify(list.extra), /История/);
+});

@@ -99,6 +99,7 @@ test('ошибка фонового обновления сохраняет кэ
 test('общая очередь ограничивает одновременные запросы к разным группам', async (t) => {
   const f = await setup(t, { concurrency: 2 });
   const jobs = [1, 2, 3, 4, 5].map((id) => f.request(id));
+  await f.until(() => f.pending.length === 2);
   for (let done = 0; done < 5;) {
     await f.until(() => f.pending.length > 0);
     for (const finish of f.pending.splice(0)) { finish(); done += 1; }

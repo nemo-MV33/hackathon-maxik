@@ -102,7 +102,7 @@ test('personal files private, cannot steal pending upload or cross group/scope, 
   await assert.rejects(readFile(store.path(personal.id)), { code: 'ENOENT' });
 });
 
-test('move and cancellation preserve both scopes; removal records history and deletes bytes; abandoned uploads cleaned', async (t) => {
+test('move and cancellation preserve both scopes; removal records history and retains version bytes; abandoned uploads cleaned', async (t) => {
   const { upload, store, community, advance, directory } = await setup(t);
   const shared = await upload(PNG);
   const own = await upload(PDF, { scope: 'personal' });
@@ -116,7 +116,10 @@ test('move and cancellation preserve both scopes; removal records history and de
   for (const row of rows) { assert.equal(row.status, 'orphaned'); assert.equal(row.attachments.length, 1); await readFile(store.path(row.attachments[0].id)); }
   const moved = { ...target, lessonDate: to.date, lessonNumber: 2 };
   const changed = await community.upsertHomework({ ...moved, text: 'Без фото', attachments: [], authorId: 1 });
-  assert.equal(changed.history.at(-1).removed[0].id, shared.id);
+  assert.equal(changed.history.findLast((event) => event.type === 'attachments').removed[0].id, shared.id);
+  assert.deepEqual(await readFile(store.path(shared.id)), PNG);
+  await assert.rejects(store.authorize(shared.id, 2), { status: 403 });
+  await community.removeHomework(moved);
   await assert.rejects(readFile(store.path(shared.id)), { code: 'ENOENT' });
   await community.removePersonalHomework(1, moved);
   await assert.rejects(readFile(store.path(own.id)), { code: 'ENOENT' });

@@ -1,0 +1,11 @@
+import 'dotenv/config';
+import { CommunityStore } from '../src/storage/community.js';
+import { PreferencesStore } from '../src/storage/preferences.js';
+import { AttachmentStore } from '../src/storage/attachments.js';
+import { resetDemo } from '../src/services/demo-reset.js';
+if (process.env.DEMO_RESET_OFFLINE !== '1') throw new Error('Use npm run demo:reset on the host; all writers must be stopped');
+const community = new CommunityStore('./data/community.json');
+const preferences = new PreferencesStore('./data/preferences.json');
+community.attachmentStore = new AttachmentStore(process.env.ATTACHMENT_DIR || './attachments', { community, preferences, secret: process.env.BOT_TOKEN });
+await resetDemo({ community, preferences });
+console.log('Демо восстановлено в исходное состояние');

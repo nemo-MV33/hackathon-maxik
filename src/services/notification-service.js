@@ -1,3 +1,5 @@
+import { withDeadline, detailsText, dueReminderAt } from '../lib/homework-details.js';
+import { isDemo, demoAllowed } from './demo-service.js';
 import { attachmentSummary } from '../bot/homework-attachments.js';
 import { userDayLessons } from './user-schedule.js';
 import { sameGroup, groupKey } from '../universities/identity.js';
@@ -166,7 +168,7 @@ export class NotificationService {
 
   async #recipients(groupId, kind) {
     return (await this.preferences.entries())
-      .filter(([, prefs]) => prefs.selection?.kind === 'group' && sameGroup(prefs.selection.id, groupId))
+      .filter(([id, prefs]) => prefs.selection?.kind === 'group' && sameGroup(prefs.selection.id, groupId) && (!isDemo(groupId) || demoAllowed(id)))
       .filter(([, prefs]) => notificationEnabled(prefs, kind) && !isQuiet(prefs, this.now()))
       .map(([id, prefs]) => ({ id: Number(id), prefs }));
   }
@@ -188,15 +190,16 @@ export class NotificationService {
     const timer = setTimeout(() => {
       this.#pendingHomework.delete(key);
       this.notifyHomework(item, { isUpdate }).catch(console.error);
-    }, this.homeworkDelayMs);
+    }, isDemo(item.groupId) ? Math.min(2000, this.homeworkDelayMs) : this.homeworkDelayMs);
     timer.unref?.();
     this.#pendingHomework.set(key, { timer, isUpdate });
   }
 
   async notifyHomework(item, { isUpdate = false } = {}) {
+    item = await withDeadline(item, this.service);
     const lesson = { date: item.lessonDate, lessonNumber: item.lessonNumber, subgroup: item.subgroup ?? null };
     const recipients = (await this.#recipients(item.groupId, 'homework'))
-      .filter(({ id }) => String(id) !== String(item.authorId))
+      .filter(({ id }) => String(id) !== String(item.authorId) && (!isDemo(item.groupId) || demoAllowed(id)))
       .filter(({ prefs }) => forSubgroup(prefs.subgroup, item.subgroup));
     const media = await this.bot.homeworkMedia?.(item) ?? [];
     for (const { id, prefs } of recipients) {
@@ -205,7 +208,7 @@ export class NotificationService {
       const when = `${shortDate(prefs.lang, local?.date ?? item.lessonDate)}, ${local?.time.slice(0, 5) ?? ''}`.replace(/, $/, '');
       const title = isUpdate ? t.updatedHomework(item.subject, when) : t.newHomework(item.subject, when);
       try {
-        await this.#send(id, prefs.lang, `${title}\n\n${item.text}\n${attachmentSummary(item.attachments)}`, appPayload(lesson, prefs.selection.id), t.openLesson, media);
+        await this.#send(id, prefs.lang, `${title}\n\n${item.text}\n${detailsText(item, prefs.lang, profileTimeZone(prefs))}\n${attachmentSummary(item.attachments)}`, appPayload(lesson, prefs.selection.id), t.openLesson, media);
       } catch (error) {
         console.error(`Homework notification failed for user ${id}:`, error.message);
       }
@@ -215,7 +218,7 @@ export class NotificationService {
         const t = texts(chat.lang);
         const app = this.bot.appButton?.(t, appPayload(lesson, item.groupId), t.openLesson);
         try {
-          await this.bot.api.sendMessageToChat(chat.chatId, `${isUpdate ? t.updatedHomework(item.subject, item.lessonDate) : t.newHomework(item.subject, item.lessonDate)}\n${item.text}\n${attachmentSummary(item.attachments)}`, {
+          await this.bot.api.sendMessageToChat(chat.chatId, `${isUpdate ? t.updatedHomework(item.subject, item.lessonDate) : t.newHomework(item.subject, item.lessonDate)}\n${item.text}\n${detailsText(item, chat.lang)}\n${attachmentSummary(item.attachments)}`, {
             attachments: [...media, ...(app ? [Keyboard.inlineKeyboard([[app]])] : [])],
           });
         } catch (error) { console.error('Group homework notification failed:', error.message); }
@@ -232,7 +235,7 @@ export class NotificationService {
       const now = this.now();
       const schedules = new Map();
       const users = (await this.preferences.entries())
-        .filter(([, prefs]) => prefs.selection?.kind === 'group' && notificationEnabled(prefs, 'summary'))
+        .filter(([id, prefs]) => prefs.selection?.kind === 'group' && notificationEnabled(prefs, 'summary') && (!isDemo(prefs.selection.id) || demoAllowed(id)))
         .filter(([, prefs]) => summaryDue(prefs, now) && prefs.summarySentFor !== zonedDateKey(now, profileTimeZone(prefs), 1));
 
       for (const [id, prefs] of users) {
@@ -271,7 +274,7 @@ export class NotificationService {
     };
     let sent = 0;
     const users = (await this.preferences.entries())
-      .filter(([, prefs]) => prefs.selection?.kind === 'group' && notificationEnabled(prefs, 'exams'))
+      .filter(([id, prefs]) => prefs.selection?.kind === 'group' && notificationEnabled(prefs, 'exams') && (!isDemo(prefs.selection.id) || demoAllowed(id)))
       .filter(([, prefs]) => summaryDue(prefs, now));
     for (const [id, prefs] of users) {
       const reminded = new Set(prefs.examReminders ?? []);
@@ -307,7 +310,7 @@ export class NotificationService {
   // Новое объявление старосты — каждому в личку, кроме автора.
   async notifyAnnouncement(item) {
     const recipients = (await this.#recipients(item.groupId, 'announcements'))
-      .filter(({ id }) => String(id) !== String(item.authorId));
+      .filter(({ id }) => String(id) !== String(item.authorId) && (!isDemo(item.groupId) || demoAllowed(id)));
     for (const { id, prefs } of recipients) {
       const t = texts(prefs.lang);
       try {
@@ -332,7 +335,7 @@ export class NotificationService {
     let sent = 0;
     const announcements = await this.community.allAnnouncements();
     for (const [id, prefs] of await this.preferences.entries()) {
-      if (prefs.selection?.kind !== 'group' || isQuiet(prefs, now)) continue;
+      if (prefs.selection?.kind !== 'group' || isQuiet(prefs, now) || (isDemo(prefs.selection.id) && !demoAllowed(id))) continue;
       const done = new Set(prefs.sentScheduled ?? []);
       const fresh = [];
       const t = texts(prefs.lang);
@@ -349,16 +352,18 @@ export class NotificationService {
       }
       if (notificationEnabled(prefs, 'homework')) {
         for (const [lessonKey, reminder] of Object.entries(prefs.homeworkReminders ?? {})) {
-          if (reminder?.suspended || !reminder?.at || new Date(reminder.at) > now || now - new Date(reminder.at) > 6 * 60 * MINUTE) continue;
-          const key = `${groupKey(prefs.selection.id)}|h:${lessonKey}:${reminder.at}`;
-          if (done.has(key)) continue;
+          if (reminder?.suspended) continue;
           const [date, lessonNumber, subgroup] = lessonKey.split(':');
           const lesson = { date, lessonNumber: Number(lessonNumber), subgroup: Number(subgroup) || null };
           const homework = (await this.community.homeworkForUser(prefs.selection.id, id, { from: date, to: date, subgroup: prefs.subgroup }))
-            .find((item) => item.lessonNumber === lesson.lessonNumber);
+            .find((item) => item.lessonNumber === lesson.lessonNumber && (item.subgroup ?? null) === lesson.subgroup);
+          const at = reminder.mode?.startsWith('due-') ? dueReminderAt(homework ? (await withDeadline(homework, this.service)).dueAt : null, reminder.mode, prefs) : reminder.at;
+          if (!at || new Date(at) > now || now - new Date(at) > 6 * 60 * MINUTE) continue;
+          const key = `${groupKey(prefs.selection.id)}|h:${lessonKey}:${at}`;
+          if (done.has(key)) continue;
           due.push({
             key,
-            text: t.homeworkReminder(reminder.subject ?? homework?.subject ?? '', `${shortDate(prefs.lang, date)}, ${reminder.time ?? ''}`.replace(/, $/, ''), homework?.text),
+            text: t.homeworkReminder(reminder.subject ?? homework?.subject ?? '', `${shortDate(prefs.lang, date)}, ${reminder.time ?? ''}`.replace(/, $/, ''), `${homework?.text ?? ''}\n${homework ? detailsText(await withDeadline(homework, this.service), prefs.lang, profileTimeZone(prefs)) : ''}`),
             payload: appPayload(lesson, prefs.selection.id),
             label: t.openLesson,
           });

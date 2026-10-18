@@ -1,8 +1,13 @@
+import { demoContext, demoAllowed, isDemo } from '../services/demo-service.js';
+import { revisionEvent, versionSnapshot } from '../lib/homework-details.js';
+import { HttpError } from '../http/routes/me.js';
 import { groupKey, sameGroup, migrateGroupReferences } from '../universities/identity.js';
 import { toDateKey } from '../lib/date.js';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
+
+const visibleGroup = (id) => !demoContext.getStore() || !isDemo(id) || demoAllowed();
 
 export class CommunityStore {
   #data = { chats: {}, homework: [], personalHomework: [], notices: [], announcements: [], lessonChanges: [], scheduleOperations: [] };
@@ -18,9 +23,21 @@ export class CommunityStore {
     return [...this.#data.homework, ...this.#data.personalHomework];
   }
 
+  async resetGroup(groupId) {
+    await this.#load();
+    for (const name of ['homework', 'personalHomework', 'notices', 'announcements', 'lessonChanges']) {
+      this.#data[name] = this.#data[name].filter((item) => !sameGroup(item.groupId, groupId));
+    }
+    this.#data.scheduleOperations = this.#data.scheduleOperations.filter((id) => !id.startsWith(`${groupKey(groupId)}:`));
+    for (const [id, chat] of Object.entries(this.#data.chats)) if (sameGroup(chat.group?.id, groupId)) delete this.#data.chats[id];
+    await this.#queueSave();
+    await this.attachmentStore?.reconcile({ removeGroup: groupId });
+  }
+
   async getChat(chatId) {
     await this.#load();
-    return this.#data.chats[String(chatId)] ?? null;
+    const chat = this.#data.chats[String(chatId)];
+    return chat && visibleGroup(chat.group?.id) ? chat : null;
   }
 
   async setChat(chatId, value) {
@@ -39,12 +56,12 @@ export class CommunityStore {
 
   async chatsForGroup(groupId) {
     await this.#load();
-    return Object.values(this.#data.chats).filter((chat) => sameGroup(chat.group?.id, groupId));
+    return Object.values(this.#data.chats).filter((chat) => visibleGroup(chat.group?.id)).filter((chat) => sameGroup(chat.group?.id, groupId));
   }
 
   async allChats() {
     await this.#load();
-    return Object.values(this.#data.chats);
+    return Object.values(this.#data.chats).filter((chat) => visibleGroup(chat.group?.id));
   }
 
   async scheduleOperationApplied(id) {
@@ -79,7 +96,7 @@ export class CommunityStore {
     const lessons = new Map();
     for (const item of [...this.#data.homework, ...this.#data.personalHomework]) {
       if (!sameGroup(item.groupId, groupId) || item.status !== 'orphaned') continue;
-      const from = item.history?.at(-1)?.from;
+      const from = item.history?.findLast((event) => event.type === 'orphaned')?.from;
       if (from) lessons.set(this.#lessonKey(item), from);
     }
     return [...lessons.values()];
@@ -91,17 +108,19 @@ export class CommunityStore {
   }
 
   // Изменение слота и история сохраняются одним атомарным обновлением JSON.
-  async relocateHomework(groupId, from, to, { id, at = new Date().toISOString(), by = 'schedule' } = {}) {
+  async relocateHomework(groupId, from, to, { id, at = new Date().toISOString(), by = 'schedule', authorId, authorName } = {}) {
     await this.#load();
     let changed = false;
     for (const collection of ['homework', 'personalHomework']) {
       for (const item of this.#data[collection]) {
         if (!this.#sameLesson(item, { groupId, lessonDate: from.date, lessonTime: from.time, ...from })) continue;
         if ((item.history ?? []).some((event) => event.id === id)) continue;
-        item.history = [...(item.history ?? []), { id, type: to ? 'moved' : 'orphaned', from, to, at, by }];
+        item.history = [...(item.history ?? []), { id, type: to ? 'moved' : 'orphaned', from, to, at, by, authorId, authorName, version: (item.version ?? 1) + 1, before: versionSnapshot(item) }];
         item.status = to ? 'active' : 'orphaned';
         if (to) Object.assign(item, { lessonDate: to.date, lessonNumber: to.lessonNumber, lessonTime: to.time, subgroup: to.subgroup ?? null });
         item.updatedAt = at;
+        item.version = (item.version ?? 1) + 1;
+        item.history.at(-1).after = versionSnapshot(item);
         changed = true;
       }
       // В целевом слоте может уже быть ДЗ. Сохраняем оба текста и историю.
@@ -114,6 +133,12 @@ export class CommunityStore {
           item.text = [...new Set([previous.text, item.text].filter(Boolean))].join('\n\n');
           item.history = [...(previous.history ?? []), ...(item.history ?? [])];
           item.attachments = [...new Map([...(previous.attachments ?? []), ...(item.attachments ?? [])].map((file) => [file.id, file])).values()];
+          let revision = 0;
+          item.history = item.history.sort((a, b) => String(a.at ?? '').localeCompare(String(b.at ?? ''))).map((event) => ({ ...event,
+            ...(event.version ? { originalVersion: event.originalVersion ?? event.version } : {}), version: event.after ? ++revision : undefined,
+          }));
+          item.version = Math.max(previous.version ?? 1, item.version ?? 1, revision) + 1;
+          item.history.push(revisionEvent(null, item, { type: 'merged' }));
           unique.set(key, item);
         }
       }
@@ -136,10 +161,13 @@ export class CommunityStore {
       ...value,
       attachments: value.attachments ?? current?.attachments ?? [],
       history: this.#attachmentHistory(current, value, now),
-      status: 'active',
+      status: value.status ?? current?.status ?? 'active',
       version: (current?.version ?? 0) + 1,
       updatedAt: now,
     };
+    if (current && !(current.history ?? []).some((event) => event.after)) item.history = [...(item.history ?? []), revisionEvent(null, current, { type: 'baseline' })];
+    item.history = [...(item.history ?? []), revisionEvent(current, item, value.restoredFrom ? { restoredFrom: value.restoredFrom } : {})];
+    delete item.restoredFrom;
     if (index >= 0) {
       this.#data.homework[index] = item;
       this.#data.homework = this.#data.homework.filter((candidate, candidateIndex) =>
@@ -147,6 +175,22 @@ export class CommunityStore {
     } else this.#data.homework.push(item);
     await this.#queueSave();
     return item;
+  }
+
+  async restoreHomework(groupId, userId, target, version, authorName) {
+    const role = await this.homeworkRoleForGroup(groupId, userId);
+    if (!['headman', 'editor'].includes(role)) throw new HttpError(403, 'homework_forbidden');
+    const current = (await this.attachmentRecords()).find((item) => item.userId == null && this.#sameLesson(item, { ...target, groupId }));
+    if (!current) throw new HttpError(404, 'homework_not_found');
+    const event = (current.history ?? []).find((item) => item.version === version && item.after);
+    // Older records have no snapshots. Never invent old text or silently discard files.
+    const snapshot = event?.after;
+    if (!snapshot || version >= current.version) throw new HttpError(409, 'version_unavailable');
+    for (const file of snapshot.attachments ?? []) {
+      try { await this.attachmentStore.metadata(file.id); }
+      catch { throw new HttpError(409, 'version_attachments_removed', 'Файлы этой версии удалены; полный возврат невозможен'); }
+    }
+    return this.upsertHomework({ ...current, ...snapshot, authorId: userId, authorName, restoredFrom: version });
   }
 
   async addHomework(value) {
@@ -193,6 +237,8 @@ export class CommunityStore {
       version: (current?.version ?? 0) + 1,
       updatedAt: now,
     };
+    if (current && !(current.history ?? []).some((event) => event.after)) item.history = [...(item.history ?? []), revisionEvent(null, current, { type: 'baseline' })];
+    item.history = [...(item.history ?? []), revisionEvent(current, item)];
     if (index >= 0) this.#data.personalHomework[index] = item;
     else this.#data.personalHomework.push(item);
     await this.#queueSave();
@@ -224,6 +270,12 @@ export class CommunityStore {
       const source = own ? 'personal' : 'shared';
       return {
         ...(own ?? common),
+        sharedDeadline: common?.deadline ?? { kind: 'lesson' },
+        personalDeadline: own?.deadline ?? { kind: 'lesson' },
+        sharedSubmission: common?.submission ?? null,
+        personalSubmission: own?.submission ?? null,
+        sharedHistory: common?.history ?? [],
+        personalHistory: own?.history ?? [],
         sharedAttachments: common?.attachments ?? [],
         personalAttachments: own?.attachments ?? [],
         attachments: own?.attachments ?? common?.attachments ?? [],
@@ -295,7 +347,7 @@ export class CommunityStore {
   async chatsWithRole(userId) {
     await this.#load();
     const id = String(userId);
-    return Object.values(this.#data.chats).filter((chat) => chat.group && (
+    return Object.values(this.#data.chats).filter((chat) => visibleGroup(chat.group?.id)).filter((chat) => chat.group && (
       String(chat.headman?.userId) === id || (chat.editors ?? []).some((editor) => String(editor.userId) === id)
     ));
   }
@@ -351,7 +403,7 @@ export class CommunityStore {
 
   async allAnnouncements() {
     await this.#load();
-    return [...this.#data.announcements];
+    return this.#data.announcements.filter((item) => visibleGroup(item.groupId));
   }
 
   // Удаление аккаунта студента. Сообщения об опозданиях остаются у старосты (это журнал группы),

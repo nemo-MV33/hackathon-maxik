@@ -74,15 +74,15 @@ test('общее ДЗ, личные версии, относительное и 
   assert.equal(shared.lessonDate, TO.date);
   assert.equal(shared.lessonNumber, TO.lessonNumber);
   assert.equal(shared.text, oldHomework.text);
-  assert.equal(shared.history.length, 1);
-  assert.deepEqual({ type: shared.history[0].type, from: shared.history[0].from, to: shared.history[0].to, at: shared.history[0].at, by: shared.history[0].by },
+  assert.equal(shared.history.filter((event) => event.type === 'moved').length, 1);
+  assert.deepEqual({ type: shared.history.find((event) => event.type === 'moved').type, from: shared.history.find((event) => event.type === 'moved').from, to: shared.history.find((event) => event.type === 'moved').to, at: shared.history.find((event) => event.type === 'moved').at, by: shared.history.find((event) => event.type === 'moved').by },
     { type: 'moved', from: FROM, to: TO, at: NOW.toISOString(), by: 'schedule' });
   assert.equal((await community.homeworkForUser(1, 2, range))[0].personalText, 'Мои задачи');
   assert.equal((await preferences.get(1)).homeworkReminders[lessonSlot(TO)].at, '2026-10-20T01:50:00.000Z');
   assert.equal((await preferences.get(2)).homeworkReminders[lessonSlot(TO)].at, '2026-10-19T12:00:00Z');
   assert.deepEqual((await preferences.get(3)).homeworkReminders, {});
   const reloaded = new CommunityStore(join(directory, 'community.json'));
-  assert.equal((await homework(reloaded))[0].history.length, 1);
+  assert.equal((await homework(reloaded))[0].history.filter((event) => event.type === 'moved').length, 1);
   assert.ok(JSON.parse(await readFile(join(directory, 'community.json'), 'utf8')).personalHomework[0].history);
 });
 
@@ -118,7 +118,7 @@ test('ручная отметка видна группе с автором; п�
   assert.equal((await changes.official(1, { type: 'moved', previous: FROM, lesson: TO }, 'confirmed')).silent, true);
   assert.equal((await community.lessonChanges(1))[0].status, 'confirmed');
   assert.equal(sent.length, 1);
-  assert.equal((await homework(community))[0].history.length, 1);
+  assert.equal((await homework(community))[0].history.filter((event) => event.type === 'moved').length, 1);
 });
 
 test('расхождение: приоритет вуза, ДЗ переходит ещё раз, автор получает сообщение', async (t) => {
@@ -129,7 +129,7 @@ test('расхождение: приоритет вуза, ДЗ переходи
   await changes.official(1, { type: 'moved', previous: FROM, lesson: official }, 'conflict');
   assert.equal((await community.lessonChanges(1))[0].status, 'conflict');
   assert.equal((await homework(community))[0].lessonDate, official.date);
-  assert.equal((await homework(community))[0].history.length, 2);
+  assert.equal((await homework(community))[0].history.filter((event) => event.type === 'moved').length, 2);
   assert.match(sent.find((item) => item.userId === 1).text, /Расписание вуза отличается/);
   assert.deepEqual(await changes.overlay(1, [official], range.from, range.to), [official]);
 });
@@ -289,7 +289,7 @@ test('старый снимок без типа занятия обновляе�
   assert.equal(sent.length, 0);
   assert.equal((await homework(community))[0].lessonDate, FROM.date);
   assert.equal((await homework(community))[0].status, 'active');
-  assert.equal((await homework(community))[0].history, undefined);
+  assert.equal((await homework(community))[0].history.some((event) => ['moved', 'orphaned'].includes(event.type)), false);
   assert.equal(JSON.parse(await readFile(snapshotsPath, 'utf8'))['irnitu~1'].schemaVersion, 2);
   state.lessons = [TO];
   await notifications.checkChanges();

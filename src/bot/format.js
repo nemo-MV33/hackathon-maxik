@@ -1,3 +1,4 @@
+import { detailsText } from '../lib/homework-details.js';
 import { attachmentSummary } from './homework-attachments.js';
 import { lessonInTimeZone } from '../lib/timezone.js';
 import { toDateKey } from '../lib/date.js';
@@ -108,12 +109,15 @@ export const formatScheduleWeek = (language, schedule, { title, today = new Date
 };
 
 export const formatHomework = (language, items, timeZone = 'Asia/Irkutsk') => {
+  items = items.map((item) => ({ ...item, details: detailsText(item, language, timeZone) }));
   items = items.map((item) => { const local = lessonInTimeZone({ date: item.lessonDate, time: item.lessonTime }, timeZone); return { ...item, lessonDate: local.date, lessonTime: local.time }; });
   const t = texts(language);
   if (!items.length) return `${t.homeworkTitle}\n\n${t.homeworkEmpty}`;
   return [t.homeworkTitle, ...items.map((item) => [
     `**${item.subject}**, ${formatDate(language, item.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' })}, ${item.lessonTime.slice(0, 5)}`,
     item.text,
+    item.details,
+    item.dueAt && Date.parse(item.dueAt) < Date.now() ? (language === 'en' ? 'Overdue' : 'Просрочено') : '',
     attachmentSummary(item.attachments),
     item.source === 'personal' ? t.homeworkPersonalMark : '',
   ].filter(Boolean).join('\n'))].join('\n\n');
