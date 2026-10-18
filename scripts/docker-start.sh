@@ -3,7 +3,14 @@ set -e
 
 if [ -n "$IRNITU_API_TOKEN" ]; then
   (
-    last_full=0
+    # Перезапуск приложения не должен заново выгружать весь семестр.
+    last_full=$(node --input-type=module -e '
+      import { readFile } from "node:fs/promises";
+      try {
+        const meta = JSON.parse(await readFile("webapp/dist/data/meta.json", "utf8"));
+        console.log(Math.floor(Date.parse(meta.fullUpdatedAt) / 1000) || 0);
+      } catch { console.log(0); }
+    ')
     while true; do
       now=$(date +%s)
       if [ $((now - last_full)) -ge "${EXPORT_FULL_INTERVAL_SEC:-604800}" ]; then
