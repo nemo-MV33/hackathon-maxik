@@ -20,12 +20,12 @@ export const UniversityScreen = ({ profile, onBack, onChangeGroup }: { profile: 
     <div className="screen screen--section">
       <BackHeader label={t.profile} onBack={onBack} title={t.university} />
       <div className="settings-list">
-        <div className="settings-row settings-row--static">
+        <button type="button" onClick={onChangeGroup} className="settings-row">
           <span className="settings-row__text">
             <span className="settings-row__hint">{t.fieldUniversity}</span>
-            <span className="settings-row__title">{t.universityName}</span>
-          </span>
-        </div>
+            <span className="settings-row__title">{String(profile.group.id).startsWith('bgu~') ? 'БГУ / Baikal State University' : t.universityName}</span>
+          </span><ChevronRight size={18} />
+        </button>
         <div className="settings-row settings-row--static">
           <span className="settings-row__text">
             <span className="settings-row__hint">{t.fieldInstitute}</span>

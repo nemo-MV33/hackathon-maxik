@@ -14,7 +14,7 @@ import { useI18n } from '../lib/i18n';
 
 const findContext = async (shared: SharedHomework) => {
   const [groups, week] = await Promise.all([
-    loadGroups(),
+    loadGroups(String(shared?.groupId).startsWith('bgu~') ? 'bgu' : 'irnitu'),
     loadWeek(shared.groupId, toDateKey(startOfWeek(fromDateKey(shared.date)))).catch(() => null),
   ]);
   const group = groups.find((item) => item.id === shared.groupId);

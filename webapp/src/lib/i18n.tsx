@@ -13,6 +13,13 @@ const plural = (count: number, one: string, few: string, many: string) => {
 };
 
 const ru = {
+  sourceUnavailable: 'Источник временно недоступен. Показано сохранённое расписание.',
+  quietHours: 'Тихие часы',
+  quietFrom: 'Не отправлять с',
+  quietTo: 'До',
+  timeZone: 'Часовой пояс',
+  universityBgu: 'Байкальский государственный университет',
+  universityIrnitu: 'Иркутский национальный исследовательский технический университет',
   moveAction: 'Пара перенесена',
   moveDate: 'Новая дата',
   moveChoose: 'Выбери пару',
@@ -52,7 +59,7 @@ const ru = {
   noLessonsFree: 'Свободный день',
   emptyWeekTitle: 'Неделя без пар',
   emptyWeekText: 'Каникулы или сессия ещё не в расписании',
-  footnote: (updated: string) => `Данные ИРНИТУ, обновлено ${updated}`,
+  footnote: (updated: string) => `Данные вуза, обновлено ${updated}`,
   irkutsk: 'Иркутск',
   loadingSchedule: 'Загружаем расписание',
 
@@ -70,7 +77,7 @@ const ru = {
   failedTitle: 'Не получилось',
   retry: 'Повторить',
 
-  introTitle: 'Расписание ИРНИТУ и ДЗ группы',
+  introTitle: 'Расписание и ДЗ группы',
   introLead: 'Пары на день и неделю, а у каждой пары — ДЗ, которое записал староста',
   otherGroup: 'Другая группа',
   currentGroup: (title: string) => `Сейчас выбрана ${title}`,
@@ -139,7 +146,7 @@ const ru = {
   task: 'Задание',
   otherGroupWarning: (their: string, mine: string) =>
     `Это ДЗ группы ${their}, а у тебя выбрана ${mine}. После сохранения расписание переключится на ${their}`,
-  lessonMissing: 'Этой пары нет в расписании ИРНИТУ — сохранить ДЗ не получится',
+  lessonMissing: 'Этой пары нет в расписании вуза — сохранить ДЗ не получится',
   saveForMe: 'Сохранить себе',
   dontSave: 'Не сохранять',
   brokenLinkTitle: 'Ссылка не открылась',
@@ -374,14 +381,14 @@ const ru = {
   groupChangeWarning: 'При смене группы список дисциплин и формы контроля заменятся на предметы новой группы.',
 
   // Дисциплины
-  disciplinesLead: (group: string) => `Все предметы ${group} за семестр — прямо из расписания ИРНИТУ.`,
+  disciplinesLead: (group: string) => `Все предметы ${group} за семестр — прямо из расписания вуза.`,
   disciplinesEmpty: 'В расписании пока нет предметов',
   discipline: 'Дисциплина',
   noTeacher: 'Преподаватель не указан',
   controlForm: 'Форма контроля',
   controlNotSet: 'Не указана',
   controlForms: { exam: 'Экзамен', credit: 'Зачёт', graded_credit: 'Дифзачёт', coursework: 'Курсовая', none: 'Без контроля' } as Record<string, string>,
-  controlHint: 'ИРНИТУ не присылает формы контроля заранее — отметь сам, чтобы понимать, к чему готовиться.',
+  controlHint: 'Источник расписания не присылает формы контроля заранее — отметь сам, чтобы понимать, к чему готовиться.',
   teachers: 'Преподаватели',
   semesterLoad: 'Занятия в семестре',
   nextLesson: 'Следующая',
@@ -408,14 +415,14 @@ const ru = {
     changes: 'Отмены, новые пары, смена аудитории',
     exams: 'Экзамены и зачёты — за 3 дня и накануне',
   } as Record<string, string>,
-  notificationsFootnote: 'Время везде иркутское — как в расписании ИРНИТУ.',
+  notificationsFootnote: 'Время указано в часовом поясе профиля. Тихие часы отключают личные уведомления на выбранный период.',
 
   // FAQ
   faqItems: [
     {
       title: 'Расписание',
       items: [
-        ['Откуда берётся расписание?', 'Из официального API ИРНИТУ. Ближайшие две недели обновляем каждые три часа, весь семестр — раз в неделю. Время обновления написано внизу расписания.'],
+        ['Откуда берётся расписание?', 'ИРНИТУ — официальный API, БГУ — публичный сайт. Сегодня и завтра проверяем каждые 15 минут у активных групп, ближайшие две недели — каждые три часа, семестр — раз в неделю. Время обновления написано внизу расписания.'],
         ['Почему пара называется «1 пара», хотя начинается в 13:45?', 'Мы нумеруем пары по порядку в твоём дне, чтобы не путаться. Официальное время всегда написано рядом.'],
         ['Как посмотреть расписание преподавателя или аудитории?', 'Вкладка «Расписание» → лупа. Можно искать по фамилии, номеру аудитории или другой группе и отфильтровать результаты.'],
         ['Что значат цвета карточек?', 'Цвет — тип занятия: розовый — лекция, зелёный — практика, оранжевый — лабораторная, красная рамка — экзамен или зачёт. Идущая сейчас пара — тёмно-зелёная.'],
@@ -444,7 +451,7 @@ const ru = {
         ['Какие данные хранит бот?', 'Имя из MAX, группу и подгруппу, настройки, личное ДЗ и напоминания. Телефон и переписку бот не видит.'],
         ['Как удалить все данные?', 'Профиль → «Удалить аккаунт» или в боте: «Ещё» → «Настройки» → «Мои данные». Сообщения об опозданиях останутся у старосты как журнал группы.'],
         ['Как сменить группу?', 'Профиль → «Университет». Дисциплины и формы контроля обновятся под новую группу.'],
-        ['Приложение не открывается или пишет «нет связи»?', 'Проверь интернет и открой приложение из чата с ботом кнопкой «Открыть приложение». Если сайт ИРНИТУ недоступен, покажем последнее сохранённое расписание.'],
+        ['Приложение не открывается или пишет «нет связи»?', 'Проверь интернет и открой приложение из чата с ботом кнопкой «Открыть приложение». Если источник расписания недоступен, покажем последнее сохранённое расписание.'],
       ],
     },
   ] as { title: string; items: [string, string][] }[],
@@ -459,6 +466,13 @@ const ru = {
 type Dictionary = typeof ru;
 
 const en: Dictionary = {
+  sourceUnavailable: 'The source is temporarily unavailable. Showing the saved timetable.',
+  quietHours: 'Quiet hours',
+  quietFrom: 'Do not send from',
+  quietTo: 'Until',
+  timeZone: 'Time zone',
+  universityBgu: 'Baikal State University',
+  universityIrnitu: 'Irkutsk National Research Technical University',
   moveAction: 'Lesson moved',
   moveDate: 'New date',
   moveChoose: 'Choose a lesson',
@@ -497,7 +511,7 @@ const en: Dictionary = {
   noLessonsFree: 'A free day',
   emptyWeekTitle: 'No classes this week',
   emptyWeekText: 'Holidays, or the exam timetable is not published yet',
-  footnote: (updated) => `INRTU data, updated ${updated}`,
+  footnote: (updated) => `University data, updated ${updated}`,
   irkutsk: 'Irkutsk',
   loadingSchedule: 'Loading the timetable',
 
@@ -515,7 +529,7 @@ const en: Dictionary = {
   failedTitle: 'Something went wrong',
   retry: 'Try again',
 
-  introTitle: 'INRTU timetable and group homework',
+  introTitle: 'Timetable and group homework',
   introLead: 'Classes for the day and week, with homework recorded by your class representative',
   otherGroup: 'Another group',
   currentGroup: (title) => `Currently ${title}`,
@@ -584,7 +598,7 @@ const en: Dictionary = {
   task: 'Task',
   otherGroupWarning: (their, mine) =>
     `This homework is for ${their}, but you have ${mine} selected. After saving, the timetable switches to ${their}`,
-  lessonMissing: 'This class is not in the INRTU timetable, so it cannot be saved',
+  lessonMissing: 'This class is not in the university timetable, so it cannot be saved',
   saveForMe: 'Save for me',
   dontSave: 'Don’t save',
   brokenLinkTitle: 'The link did not open',
@@ -810,14 +824,14 @@ const en: Dictionary = {
   universityName: 'INRTU',
   groupChangeWarning: 'If you change the group, subjects and assessment forms will be replaced with the new group’s.',
 
-  disciplinesLead: (group) => `All ${group} subjects this term, straight from the INRTU timetable.`,
+  disciplinesLead: (group) => `All ${group} subjects this term, straight from the university timetable.`,
   disciplinesEmpty: 'No subjects in the timetable yet',
   discipline: 'Subject',
   noTeacher: 'Teacher not listed',
   controlForm: 'Assessment',
   controlNotSet: 'Not set',
   controlForms: { exam: 'Exam', credit: 'Pass/fail', graded_credit: 'Graded test', coursework: 'Coursework', none: 'No assessment' },
-  controlHint: 'INRTU doesn’t publish assessment forms in advance, so mark it yourself to know what to prepare for.',
+  controlHint: 'The timetable source does not publish assessment forms in advance, so mark it yourself to know what to prepare for.',
   teachers: 'Teachers',
   semesterLoad: 'Classes this term',
   nextLesson: 'Next',
@@ -843,13 +857,13 @@ const en: Dictionary = {
     changes: 'Cancellations, new classes, room changes',
     exams: 'Exams and tests — 3 days and 1 day ahead',
   },
-  notificationsFootnote: 'All times are Irkutsk time, as in the INRTU timetable.',
+  notificationsFootnote: 'Times use your profile time zone. Quiet hours suppress personal notifications during the selected period.',
 
   faqItems: [
     {
       title: 'Timetable',
       items: [
-        ['Where does the timetable come from?', 'From the official INRTU API. The next two weeks refresh every three hours, the whole term once a week. The update time is shown at the bottom of the timetable.'],
+        ['Where does the timetable come from?', 'IRNITU uses its official API; BSU uses its public website. Active groups refresh today and tomorrow every 15 minutes, the next two weeks every three hours, and the whole term weekly. The update time is shown at the bottom of the timetable.'],
         ['Why is a class called “Class 1” if it starts at 13:45?', 'We number classes in the order of your day so it’s easy to follow. The official time is always shown next to it.'],
         ['How do I see a teacher’s or a room’s timetable?', 'Timetable tab → magnifier. Search by surname, room or another group and filter the results.'],
         ['What do the card colours mean?', 'The colour is the type of class: pink is a lecture, green is practice, orange is a lab, a red border is an exam or test. The class happening now is dark green.'],
@@ -878,7 +892,7 @@ const en: Dictionary = {
         ['What data does the bot keep?', 'Your MAX name, group and subgroup, settings, personal homework and reminders. The bot can’t see your phone or messages.'],
         ['How do I delete all my data?', 'Profile → “Delete account”, or in the bot: “More” → “Settings” → “My data”. Late notes stay with the representative as the group’s record.'],
         ['How do I change my group?', 'Profile → “University”. Subjects and assessment forms update for the new group.'],
-        ['The app won’t open or says “no connection”?', 'Check your internet and open the app from the bot chat with “Open app”. If the INRTU site is down, we show the last saved timetable.'],
+        ['The app won’t open or says “no connection”?', 'Check your internet and open the app from the bot chat with “Open app”. If the timetable source is down, we show the last saved timetable.'],
       ],
     },
   ],

@@ -1,3 +1,4 @@
+import { lessonDate } from '../lib/timezone';
 import { useEffect, useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
@@ -149,8 +150,8 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
   const horizon = toDateKey(addDays(now, 28));
   const [lessons] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, horizon), [profile.group.id, profile.subgroup, todayKey]);
   const all = lessons.status === 'ready' ? lessons.data : [];
-  const lessonDays = [...new Set(all.map((lesson) => lesson.date))];
-  const dayLessons = all.filter((lesson) => lesson.date === date);
+  const lessonDays = [...new Set(all.map((lesson) => lessonDate(lesson)))];
+  const dayLessons = all.filter((lesson) => lessonDate(lesson) === date);
   const lesson = dayLessons.find((item) => homeworkKey(item) === lessonKey) ?? null;
 
   useEffect(() => {

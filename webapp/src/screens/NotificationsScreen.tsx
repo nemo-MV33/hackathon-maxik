@@ -119,6 +119,17 @@ export const NotificationsScreen = ({ onBack }: { onBack: () => void }) => {
           )}
         </div>
 
+        <p className="settings__label">{t.quietHours}</p>
+        <div className="settings-list">
+          <label className="settings-row settings-row--static">
+            <span className="settings-row__title">{t.quietHours}</span>
+            <Switch checked={Boolean(settings.quietHours)} disabled={saving === 'quiet'} onChange={() => save('quiet', { quietHours: settings.quietHours ? null : { from: '23:00', to: '07:00' } })} />
+          </label>
+          {settings.quietHours && <>
+            <label className="settings-row settings-row--static"><span>{t.quietFrom}</span><input type="time" value={settings.quietHours.from} disabled={saving === 'quiet'} onChange={(event) => void save('quiet', { quietHours: { ...settings.quietHours!, from: event.target.value } })} /></label>
+            <label className="settings-row settings-row--static"><span>{t.quietTo}</span><input type="time" value={settings.quietHours.to} disabled={saving === 'quiet'} onChange={(event) => void save('quiet', { quietHours: { ...settings.quietHours!, to: event.target.value } })} /></label>
+          </>}
+        </div>
         <p className="settings__label">{t.aboutGroup}</p>
         <div className="settings-list">
           {SIMPLE.map((kind) => (

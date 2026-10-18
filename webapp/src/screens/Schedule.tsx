@@ -1,3 +1,4 @@
+import { lessonDate } from '../lib/timezone';
 import { ScheduleFreshness } from '../components/ScheduleFreshness';
 import { useEffect, useRef, useState } from 'react';
 import { loadMeta, loadWeek, type Lesson } from '../data/schedule';
@@ -113,7 +114,7 @@ export const Schedule = ({
 
   const availableWeeks = meta.status === 'ready' ? meta.data.weeks : [];
   const lessons = week.status === 'ready' ? forSubgroup(week.data.lessons, profile.subgroup) : [];
-  const lessonsOn = (key: string) => lessons.filter((lesson) => lesson.date === key);
+  const lessonsOn = (key: string) => lessons.filter((lesson) => lessonDate(lesson) === key);
 
   const weekKeyOf = (offset: number) => toDateKey(addDays(fromDateKey(weekStart), offset * 7));
   const canShift = (weeks: number) => availableWeeks.includes(weekKeyOf(weeks));
@@ -136,6 +137,7 @@ export const Schedule = ({
 
   useEffect(() => {
     if (!launch || week.status !== 'ready') return;
+    if (launch.groupId && launch.groupId !== profile.group.id) { onLaunchHandled?.(); return; }
     if (mode !== 'day') setMode('day');
     const target = launch.lessonNumber
       ? week.data.lessons.find((lesson) => lesson.date === launch.date
@@ -187,7 +189,7 @@ export const Schedule = ({
 
       {mode === 'day' && <DayHeading dateKey={selected} todayKey={todayKey} lessons={selectedLessons} loading={week.status !== 'ready'} />}
 
-      {week.status === 'ready' && <ScheduleFreshness at={week.data.updatedAt} />}
+      {week.status === 'ready' && <ScheduleFreshness at={week.data.updatedAt} stale={week.data.stale} />}
 
       <div className="week-nav">
         <button type="button" className="icon-button" aria-label={t.previousWeek} disabled={!canShift(-1)} onClick={() => shiftWeek(-1)}>
@@ -254,7 +256,7 @@ export const Schedule = ({
       {absence && <AbsenceSheet kind={absence.kind} lesson={absence.lesson} onClose={() => setAbsence(null)} />}
 
       {meta.status === 'ready' && (
-        <p className="footnote">{t.footnote(formatUpdatedAt(meta.data.updatedAt))}</p>
+        <p className="footnote">{t.footnote(formatUpdatedAt(week.status === 'ready' && week.data.updatedAt ? week.data.updatedAt : meta.data.updatedAt))}</p>
       )}
       </>)}
     </div>

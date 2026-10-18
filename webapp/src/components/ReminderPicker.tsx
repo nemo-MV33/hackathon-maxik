@@ -1,4 +1,5 @@
-import { addDays, formatMoment, fromDateKey, fromIrkutskInput, irkutskMoment, toDateKey, toIrkutskInput } from '../lib/date';
+import { userTimeZone } from '../lib/timezone';
+import { addDays, formatMoment, fromDateKey, fromLocalInput, userMoment, toDateKey, toLocalInput } from '../lib/date';
 import { useI18n } from '../lib/i18n';
 
 type Props = {
@@ -24,18 +25,18 @@ export const ReminderPicker = ({ value, onChange, dateKey, now }: Props) => {
   const future = (iso: string) => new Date(iso) > new Date();
   const presets: Preset[] = [{ id: 'none', label: t.remindNone, at: null }];
   if (dateKey) {
-    const eve = irkutskMoment(toDateKey(addDays(fromDateKey(dateKey), -1)), '19:00');
-    const morning = irkutskMoment(dateKey, '08:00');
+    const eve = userMoment(toDateKey(addDays(fromDateKey(dateKey), -1)), '19:00');
+    const morning = userMoment(dateKey, '08:00');
     if (future(eve)) presets.push({ id: 'eve', label: t.remindEve, at: eve });
     if (future(morning)) presets.push({ id: 'morning', label: t.remindMorningOf, at: morning });
   } else {
     const hour = new Date(Date.now() + 3_600_000).toISOString();
-    const tomorrow = irkutskMoment(toDateKey(addDays(now, 1)), '08:00');
+    const tomorrow = userMoment(toDateKey(addDays(now, 1)), '08:00');
     presets.push({ id: 'hour', label: t.remindHour, at: hour }, { id: 'tomorrow', label: t.remindTomorrow, at: tomorrow });
   }
   const matched = presets.find((preset) => preset.at === value);
   const custom = value !== null && !matched;
-  const min = toIrkutskInput(new Date().toISOString());
+  const min = toLocalInput(new Date().toISOString());
 
   return (
     <div className="reminder">
@@ -67,12 +68,12 @@ export const ReminderPicker = ({ value, onChange, dateKey, now }: Props) => {
           className="field"
           type="datetime-local"
           min={min}
-          value={toIrkutskInput(value!)}
-          onChange={(event) => onChange(fromIrkutskInput(event.target.value))}
+          value={toLocalInput(value!)}
+          onChange={(event) => onChange(fromLocalInput(event.target.value))}
           aria-label={t.remindCustom}
         />
       )}
-      {value && <p className="reminder__note">🔔 {formatMoment(value)}, {t.irkutskTime}</p>}
+      {value && <p className="reminder__note">🔔 {formatMoment(value)}, {userTimeZone()}</p>}
     </div>
   );
 };

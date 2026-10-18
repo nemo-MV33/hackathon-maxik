@@ -43,17 +43,17 @@ type Route =
   | { name: 'import'; shared: SharedHomework | null }
   | { name: 'decoding' }
   | { name: 'welcome' }
-  | { name: 'invite'; groupId: number; subgroup: 1 | 2 | null };
+  | { name: 'invite'; groupId: string | number; subgroup: 1 | 2 | null };
 
 // Кнопки в уведомлениях бота открывают приложение с start_param: day_2026-10-02, lesson_2026-10-02_2_0 или plan.
-export type LaunchTarget = { date: string; lessonNumber?: number; subgroup?: number | null };
+export type LaunchTarget = { date: string; groupId?: string; lessonNumber?: number; subgroup?: number | null };
 
 const launchTarget = (): LaunchTarget | undefined => {
   const value = startParam() ?? '';
-  const day = value.match(/^day_(\d{4}-\d{2}-\d{2})$/);
-  if (day) return { date: day[1] };
-  const lesson = value.match(/^lesson_(\d{4}-\d{2}-\d{2})_(\d{1,2})_([012])$/);
-  if (lesson) return { date: lesson[1], lessonNumber: Number(lesson[2]), subgroup: Number(lesson[3]) || null };
+  const day = value.match(/^day_(\d{4}-\d{2}-\d{2})(?:_((?:irnitu|bgu)~\d+))?$/);
+  if (day) return { date: day[1], groupId: day[2] };
+  const lesson = value.match(/^lesson_(\d{4}-\d{2}-\d{2})_(\d+)_([012])(?:_((?:irnitu|bgu)~\d+))?$/);
+  if (lesson) return { date: lesson[1], groupId: lesson[4], lessonNumber: Number(lesson[2]), subgroup: Number(lesson[3]) || null };
   return undefined;
 };
 
@@ -68,8 +68,8 @@ const initialTab = (): Tab => {
 const initialRoute = (): Route => {
   const value = startParam() ?? '';
   if (value.startsWith('hw')) return { name: 'decoding' };
-  const invite = value.match(/^group_(\d+)_([012])$/);
-  if (invite) return { name: 'invite', groupId: Number(invite[1]), subgroup: invite[2] === '0' ? null : (Number(invite[2]) as 1 | 2) };
+  const invite = value.match(/^group_((?:(?:irnitu|bgu)~)?\d+)_([012])$/);
+  if (invite) return { name: 'invite', groupId: invite[1].includes('~') ? invite[1] : `irnitu~${invite[1]}`, subgroup: invite[2] === '0' ? null : (Number(invite[2]) as 1 | 2) };
   return { name: 'main' };
 };
 
@@ -119,7 +119,7 @@ export const App = () => {
   }, [route.name]);
 
   const toMain = () => {
-    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
+    if (window.location.search) window.history.replaceState(null, '', `${window.location.pathname}${import.meta.env.DEV && new URLSearchParams(window.location.search).has('demoUser') ? `?demoUser=${new URLSearchParams(window.location.search).get('demoUser')}` : ''}`);
     setRoute({ name: 'main' });
   };
 
@@ -150,7 +150,7 @@ export const App = () => {
         subgroup={route.subgroup}
         onAccept={(group, subgroup) => {
           saveProfile({ group, subgroup });
-          if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
+          if (window.location.search) window.history.replaceState(null, '', `${window.location.pathname}${import.meta.env.DEV && new URLSearchParams(window.location.search).has('demoUser') ? `?demoUser=${new URLSearchParams(window.location.search).get('demoUser')}` : ''}`);
           afterGroupChosen();
         }}
         onOther={() => setRoute({ name: 'onboarding' })}

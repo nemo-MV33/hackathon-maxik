@@ -1,10 +1,11 @@
+import { addDays, fromDateKey, toDateKey } from '../lib/date';
 import { useCallback, useEffect, useState } from 'react';
 import type { Lesson } from './schedule';
 import { apiRequest } from '../lib/api';
 
 export type HomeworkItem = {
   status?: 'active' | 'orphaned';
-  groupId: number;
+  groupId: string | number;
   date: string;
   lessonNumber: number;
   subgroup: number | null;
@@ -36,16 +37,17 @@ export type HomeworkState =
 export const homeworkKey = (lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>) =>
   `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 
-export const loadHomework = (groupId: number, from: string, to: string) =>
-  apiRequest<HomeworkData>(`/api/homework?groupId=${groupId}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+export const loadHomework = (groupId: string | number, from: string, to: string) =>
+  apiRequest<HomeworkData>(`/api/homework?groupId=${groupId}&from=${toDateKey(addDays(fromDateKey(from), -1))}&to=${toDateKey(addDays(fromDateKey(to), 1))}`);
 
 // remindAt: undefined — напоминание не трогаем, null — снять, ISO — поставить (напоминание личное).
 export const saveHomework = (
-  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null, reminderMode?: 'fixed' | 'lesson', minutesBefore?: number,
+  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup' | 'groupId'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null, reminderMode?: 'fixed' | 'lesson', minutesBefore?: number,
 ) =>
   apiRequest('/api/homework', {
     method: 'PUT',
     body: JSON.stringify({
+      groupId: lesson.groupId,
       date: lesson.date,
       lessonNumber: lesson.lessonNumber,
       subgroup: lesson.subgroup,
@@ -57,7 +59,7 @@ export const saveHomework = (
     }),
   });
 
-export const useRemoteHomework = (groupId: number, from: string, to: string, dependency?: unknown) => {
+export const useRemoteHomework = (groupId: string | number, from: string, to: string, dependency?: unknown) => {
   const [state, setState] = useState<HomeworkState>({ status: 'loading' });
   const refresh = useCallback((silent = false) => {
     // Тихое обновление после сохранения не прячет уже показанное ДЗ за спиннером.

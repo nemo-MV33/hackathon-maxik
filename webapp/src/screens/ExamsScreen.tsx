@@ -1,3 +1,4 @@
+import { lessonDate, lessonTime } from '../lib/timezone';
 import type { Lesson } from '../data/schedule';
 import { hasNativeBackButton } from '../bridge/max';
 import { formatDay, fromDateKey, toDateKey } from '../lib/date';
@@ -38,12 +39,12 @@ export const ExamsScreen = ({ profile, onBack, onOpenLesson }: Props) => {
               onClick={() => onOpenLesson(lesson)}
             >
               <span className="card__row">
-                <span className="card__time first-letter">{formatDay(fromDateKey(lesson.date))}</span>
-                <span className="card__kind">{t.daysLeft(daysBetween(todayKey, lesson.date))}</span>
+                <span className="card__time first-letter">{formatDay(fromDateKey(lessonDate(lesson)))}</span>
+                <span className="card__kind">{t.daysLeft(daysBetween(todayKey, lessonDate(lesson)))}</span>
               </span>
               <span className="card__subject">{lesson.subject}</span>
               <span className="card__meta">
-                {[lessonKindName(lesson.lessonType), lesson.time.slice(0, 5), lesson.auditories.join(', ')].filter(Boolean).join(', ')}
+                {[lessonKindName(lesson.lessonType), lessonTime(lesson).slice(0, 5), lesson.auditories.join(', ')].filter(Boolean).join(', ')}
               </span>
             </button>
           ))}

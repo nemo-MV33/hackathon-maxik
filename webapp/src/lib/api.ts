@@ -1,3 +1,4 @@
+import { saveTimeZone, deviceTimeZone } from './timezone';
 import { webApp } from '../bridge/max';
 import { t } from './i18n';
 
@@ -33,7 +34,10 @@ export const apiRequest = async <T>(path: string, init: RequestInit = {}): Promi
 export type ControlForm = 'exam' | 'credit' | 'graded_credit' | 'coursework' | 'none';
 
 export type RemoteProfile = {
-  group: { id: number; title: string } | null;
+  group: { id: string | number; title: string } | null;
+  universityId: string | null;
+  timeZone: string | null;
+  quietHours: { from: string; to: string } | null;
   institute: string | null;
   course: number | null;
   subgroup: 1 | 2 | null;
@@ -52,6 +56,7 @@ export type Notifications = {
   summary: boolean; homework: boolean; changes: boolean; exams: boolean; announcements: boolean; lessonEnd: boolean;
 };
 export type SettingsPatch = {
+  timeZone?: string; universityId?: string; quietHours?: { from: string; to: string } | null;
   remindersEnabled?: boolean; muted?: boolean; onboarded?: boolean; reminderMinutes?: number; endMinutes?: number;
   summaryTime?: string; notifications?: Partial<Notifications>; controls?: Record<string, ControlForm | null>;
 };
@@ -67,7 +72,17 @@ export type MeResponse = {
   chatLinked: boolean;
 };
 
-export const loadMe = () => apiRequest<MeResponse>('/api/me');
+export const loadMe = async () => {
+  const me = await apiRequest<MeResponse>('/api/me');
+  if (me.profile.timeZone) saveTimeZone(me.profile.timeZone);
+  else {
+    const timeZone = deviceTimeZone();
+    const result = await apiRequest<{ profile: RemoteProfile }>('/api/me', { method: 'PUT', body: JSON.stringify({ timeZone }) });
+    me.profile = result.profile;
+    saveTimeZone(timeZone);
+  }
+  return me;
+};
 export const deleteAccount = () => apiRequest<{ deleted: true }>('/api/me', { method: 'DELETE' });
 
 export const updateSettings = (patch: SettingsPatch) =>
@@ -86,7 +101,7 @@ export type AbsenceInput = {
 export const sendAbsence = (input: AbsenceInput) =>
   apiRequest<{ status: 'sent' | 'pending' }>('/api/absence', { method: 'POST', body: JSON.stringify(input) });
 
-export const syncProfile = (groupId: number, subgroup: 1 | 2 | null) => apiRequest('/api/me', {
+export const syncProfile = (groupId: string | number, subgroup: 1 | 2 | null) => apiRequest('/api/me', {
   method: 'PUT', body: JSON.stringify({ groupId, subgroup }),
 });
 

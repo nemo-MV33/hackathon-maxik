@@ -1,3 +1,4 @@
+import { lessonDate } from '../lib/timezone';
 import { useState } from 'react';
 import type { Lesson } from '../data/schedule';
 import type { ControlForm } from '../lib/api';
@@ -39,7 +40,7 @@ const collect = (lessons: Lesson[], todayKey: string) => {
       kinds.add(lesson.lessonType);
       item.teachers.set(teacher, kinds);
     }
-    if (!item.next && lesson.date >= todayKey) item.next = lesson;
+    if (!item.next && lessonDate(lesson) >= todayKey) item.next = lesson;
     map.set(lesson.subject, item);
   }
   return [...map.values()].sort((left, right) => left.subject.localeCompare(right.subject, 'ru'));

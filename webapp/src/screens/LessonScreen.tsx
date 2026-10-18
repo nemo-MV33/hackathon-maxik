@@ -1,3 +1,4 @@
+import { userTimeZone, lessonDate, lessonTime, lessonMoment } from '../lib/timezone';
 import { LessonMove } from '../components/LessonMove';
 import { ScheduleFreshness } from '../components/ScheduleFreshness';
 import { useEffect, useState } from 'react';
@@ -5,7 +6,7 @@ import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
 import { homeworkKey, saveHomework, useRemoteHomework, type HomeworkData } from '../data/homework';
 import { hasNativeBackButton, haptic, openExternal } from '../bridge/max';
-import { formatDay, formatMoment, formatStamp, fromDateKey, timeToMinutes, toDateKey } from '../lib/date';
+import { formatDay, formatMoment, formatStamp, fromDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
 import { ErrorState, Loading } from '../components/Status';
@@ -34,7 +35,7 @@ const LessonFacts = ({ lesson }: { lesson: Lesson }) => {
   const { t } = useI18n();
   return (
   <dl className="facts">
-    <div><dt>{t.when}</dt><dd className="first-letter">{formatDay(fromDateKey(lesson.date))}<br /><span className="mono">{lesson.time}</span></dd></div>
+    <div><dt>{t.when}</dt><dd className="first-letter">{formatDay(fromDateKey(lessonDate(lesson)))}<br /><span className="mono">{lessonTime(lesson)}</span>{userTimeZone() !== (lesson.timeZone || 'Asia/Irkutsk') && <small><br />{lesson.time.slice(0, 5)} {t.irkutskTime}</small>}</dd></div>
     {lesson.auditories.length > 0 && <div><dt>{t.where}</dt><dd>{lesson.auditories.join(', ')}</dd></div>}
     {lesson.teachers.length > 0 && <div><dt>{t.who}</dt><dd>{lesson.teachers.join(', ')}</dd></div>}
     {lesson.subgroup && <div><dt>{t.forWhom}</dt><dd>{t.forSubgroup(lesson.subgroup)}</dd></div>}
@@ -92,9 +93,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
     return () => { active = false; };
   }, [absence, lesson.date, lesson.lessonNumber]);
   const now = useNow();
-  const todayKey = toDateKey(now);
-  const lessonOver = lesson.date < todayKey || (lesson.date === todayKey
-    && timeToMinutes(lesson.time.slice(6, 11)) <= now.getUTCHours() * 60 + now.getUTCMinutes());
+  const lessonOver = Date.parse(lessonMoment(lesson, true)) <= Date.now();
 
   // Во время редактирования системная «Назад» закрывает редактор, а не экран пары.
   useBackButton(editing && !saving ? () => setEditing(false) : onBack);
@@ -156,7 +155,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
       )}
       <LessonHeading lesson={lesson} />
       <LessonFacts lesson={lesson} />
-      <ScheduleFreshness at={lesson.updatedAt} />
+      <ScheduleFreshness at={lesson.updatedAt} stale={lesson.stale} />
       {lesson.markedBy && lesson.markedAt && <p className="footnote">{t.moveMarked(lesson.markedBy, formatStamp(lesson.markedAt))}</p>}
       {item?.status === 'orphaned' && <p role="status">{t.orphaned}</p>}
       {canEditShared && <LessonMove lesson={lesson} groupId={profile.group.id} onSaved={onBack} />}
@@ -260,10 +259,10 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
         {homework.status === 'ready' && !editing && item?.text && !lessonOver && (
           <div className="hw-block">
             <p className="hw-block__label">{t.reminder}</p>
-            <Button stretched variant="secondary" disabled={saving} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', new Date(new Date(`${lesson.date}T${lesson.time.slice(0, 5)}:00+08:00`).getTime() - 600_000).toISOString(), 'lesson', 10), t.beforeLesson)}>{t.beforeLesson}</Button>
+            <Button stretched variant="secondary" disabled={saving} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', new Date(new Date(lessonMoment(lesson)).getTime() - 600_000).toISOString(), 'lesson', 10), t.beforeLesson)}>{t.beforeLesson}</Button>
             <ReminderPicker
               value={item.remindAt}
-              dateKey={lesson.date}
+              dateKey={lessonDate(lesson)}
               now={now}
               onChange={(value) => void run(() => saveHomework(lesson, null, 'reminder', value), value ? t.reminderSet(formatMoment(value)) : t.reminderOff)}
             />

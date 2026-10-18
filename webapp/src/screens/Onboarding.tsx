@@ -104,11 +104,12 @@ const SubgroupStep = ({ group, current, onPick, onBack }: {
 };
 
 export const Onboarding = ({ current, onDone, onCancel }: Props) => {
-  const [groups, retry] = useAsync(loadGroups, []);
+  const [universityId, setUniversityId] = useState<string | null>(null);
+  const [groups, retry] = useAsync(() => universityId ? loadGroups(universityId) : Promise.resolve([]), [universityId]);
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<Group | null>(null);
-  useBackButton(picked ? undefined : onCancel);
-  const { t } = useI18n();
+  useBackButton(picked ? undefined : universityId ? () => setUniversityId(null) : onCancel);
+  const { t, lang } = useI18n();
 
   const results = useMemo(() => {
     if (groups.status !== 'ready') return [];
@@ -131,6 +132,20 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
     );
   }
 
+  if (!universityId) return (
+    <div className="screen screen--onboarding">
+      {onCancel && <BackLink label={t.back} onClick={onCancel} />}
+      <LanguageSwitch />
+      <div className="intro"><p className="eyebrow">1 / 3</p><h1 className="display">{t.fieldUniversity}</h1></div>
+      <div className="choice-list">
+        {(['irnitu', 'bgu'] as const).map((id) => <button type="button" className="choice" key={id} onClick={() => setUniversityId(id)}>
+          <span className="choice__text"><span className="choice__title">{id === 'bgu' ? (lang === 'en' ? 'BSU' : 'БГУ') : t.universityName}</span>
+            <span className="choice__hint">{id === 'bgu' ? t.universityBgu : t.universityIrnitu}</span></span><ChevronRight size={18} />
+        </button>)}
+      </div>
+    </div>
+  );
+
   const searching = normalize(query).length >= 2;
 
   return (
@@ -151,6 +166,8 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
           {current && <p className="lead">{t.currentGroup(current.group.title)}</p>}
         </div>
       )}
+      <BackLink label={t.fieldUniversity} onClick={() => { setUniversityId(null); setQuery(''); }} />
+      <p className="eyebrow">2 / 3 · {universityId === 'bgu' ? 'БГУ' : 'ИРНИТУ'}</p>
       <div className="search">
         <label className="field-label" htmlFor="group-search">{t.groupField}</label>
         <Input
@@ -159,7 +176,7 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
           size="large"
           mode="contrast"
           iconBefore={<SearchIcon size={20} />}
-          placeholder="ИСТб-25-1"
+          placeholder={universityId === 'bgu' ? 'ГМУ-25-1' : 'ИСТб-25-1'}
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}

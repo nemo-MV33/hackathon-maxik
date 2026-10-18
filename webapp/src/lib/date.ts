@@ -1,8 +1,9 @@
+import { dateInZone, clockInZone, localMoment, userTimeZone } from './timezone';
 import { t } from './i18n';
 
-const IRKUTSK_OFFSET_MS = 8 * 60 * 60 * 1000;
 
-export const irkutskNow = () => new Date(Date.now() + IRKUTSK_OFFSET_MS);
+
+export const userNow = () => { const now = new Date(); return new Date(`${dateInZone(now)}T${clockInZone(now)}:00Z`); };
 
 export const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -26,7 +27,7 @@ export const formatDay = (date: Date) =>
   format({ weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }, date);
 
 export const formatUpdatedAt = (iso: string) =>
-  `${format({ day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Irkutsk' }, new Date(iso))} (${t().irkutsk})`;
+  `${format({ day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: userTimeZone() }, new Date(iso))} (${userTimeZone()})`;
 
 export const timeToMinutes = (time: string) => {
   const [hours, minutes] = time.slice(0, 5).split(':').map(Number);
@@ -52,18 +53,15 @@ export const formatRange = (from: Date, to: Date) => {
 };
 
 export const formatStamp = (iso: string) =>
-  format({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Irkutsk' }, new Date(iso)).replace('.', '');
+  format({ day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: userTimeZone() }, new Date(iso)).replace('.', '');
 
-// Время в интерфейсе — иркутское (UTC+8), а на сервер уходит момент в ISO.
-export const irkutskMoment = (dateKey: string, time: string) =>
-  new Date(`${dateKey}T${time}:00+08:00`).toISOString();
-
-// Для <input type="datetime-local">: «2026-09-28T19:00» по Иркутску и обратно.
-export const toIrkutskInput = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3_600_000).toISOString().slice(0, 16);
-export const fromIrkutskInput = (value: string) => (value ? new Date(`${value}:00+08:00`).toISOString() : null);
+// Дата и время ввода относятся к часовому поясу пользователя.
+export const userMoment = (dateKey: string, time: string) => localMoment(dateKey, time);
+export const toLocalInput = (iso: string) => `${dateInZone(new Date(iso))}T${clockInZone(new Date(iso))}`;
+export const fromLocalInput = (value: string) => value ? localMoment(value.slice(0, 10), value.slice(11, 16)) : null;
 
 export const formatMoment = (iso: string) =>
-  new Intl.DateTimeFormat(t().locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Irkutsk' })
+  new Intl.DateTimeFormat(t().locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: userTimeZone() })
     .format(new Date(iso)).replace('.', '');
 
 export const formatShortDay = (key: string) =>

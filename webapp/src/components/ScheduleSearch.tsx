@@ -1,3 +1,4 @@
+import { useProfile } from '../lib/profile';
 import { useEffect, useRef, useState } from 'react';
 import { loadGroups } from '../data/schedule';
 import { apiRequest } from '../lib/api';
@@ -17,6 +18,9 @@ const normalize = (value: string) => value.toLowerCase().replace(/ё/g, 'е').re
 // Поиск по расписанию ИРНИТУ: преподаватели и аудитории — через API, группы — из выгруженного списка.
 export const ScheduleSearch = ({ onOpen, onClose }: { onOpen: (target: EntityTarget) => void; onClose: () => void }) => {
   const { t } = useI18n();
+  const [profile] = useProfile();
+  const universityId = String(profile?.group.id).startsWith('bgu~') ? 'bgu' : 'irnitu';
+  const supported = (kind: Filter) => !(universityId === 'bgu' && kind === 'auditory');
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [results, setResults] = useState<Result[] | null>(null);
@@ -36,13 +40,13 @@ export const ScheduleSearch = ({ onOpen, onClose }: { onOpen: (target: EntityTar
     let active = true;
     setLoading(true);
     const timer = window.setTimeout(async () => {
-      const wants = (kind: Filter) => filter === 'all' || filter === kind;
+      const wants = (kind: Filter) => supported(kind) && (filter === 'all' || filter === kind);
       const q = encodeURIComponent(text);
       try {
         const [teachers, auditories, groups] = await Promise.all([
-          wants('teacher') ? apiRequest<{ items: { id: number; name: string; fullName?: string }[] }>(`/api/teachers?q=${q}&limit=${LIMIT}`) : { items: [] },
-          wants('auditory') ? apiRequest<{ items: { id: number; title: string }[] }>(`/api/auditories?q=${q}&limit=${LIMIT}`) : { items: [] },
-          wants('group') ? loadGroups() : [],
+          wants('teacher') ? apiRequest<{ items: { id: number; name: string; fullName?: string }[] }>(`/api/teachers?q=${q}&universityId=${universityId}&limit=${LIMIT}`) : { items: [] },
+          wants('auditory') ? apiRequest<{ items: { id: number; title: string }[] }>(`/api/auditories?q=${q}&universityId=${universityId}&limit=${LIMIT}`) : { items: [] },
+          wants('group') ? loadGroups(universityId) : [],
         ]);
         if (!active) return;
         const needle = normalize(text);
@@ -60,7 +64,7 @@ export const ScheduleSearch = ({ onOpen, onClose }: { onOpen: (target: EntityTar
       }
     }, 250);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [query, filter]);
+  }, [query, filter, universityId]);
 
   return (
     <div className="schedule-search">
@@ -79,7 +83,7 @@ export const ScheduleSearch = ({ onOpen, onClose }: { onOpen: (target: EntityTar
         <button type="button" className="search-field__close" aria-label={t.closeSearch} onClick={onClose}><CloseIcon size={18} /></button>
       </div>
       <div className="chips chips--scroll" role="radiogroup" aria-label={t.searchWhat}>
-        {FILTERS.map((value) => (
+        {FILTERS.filter(supported).map((value) => (
           <button key={value} type="button" role="radio" className="chip-option" aria-checked={filter === value} onClick={() => setFilter(value)}>
             {t.searchFilters[value]}
           </button>

@@ -5,7 +5,7 @@ import { useI18n } from '../lib/i18n';
 import { ErrorState, Loading } from '../components/Status';
 
 type Props = {
-  groupId: number;
+  groupId: string | number;
   subgroup: 1 | 2 | null;
   onAccept: (group: Group, subgroup: 1 | 2 | null) => void;
   onOther: () => void;
@@ -13,7 +13,7 @@ type Props = {
 
 export const InviteScreen = ({ groupId, subgroup, onAccept, onOther }: Props) => {
   const { t } = useI18n();
-  const [groups, retry] = useAsync(loadGroups, []);
+  const [groups, retry] = useAsync(() => loadGroups(String(groupId).split('~')[0] === 'bgu' ? 'bgu' : 'irnitu'), [groupId]);
   if (groups.status === 'loading') return <Loading />;
   if (groups.status === 'error') return <div className="screen"><ErrorState message={groups.message} onRetry={retry} /></div>;
   const group = groups.data.find((item) => item.id === groupId);

@@ -1,3 +1,4 @@
+import { lessonMoment, userTimeZone, lessonTime } from '../lib/timezone';
 import { Fragment } from 'react';
 import type { Lesson } from '../data/schedule';
 import { homeworkKey, type HomeworkItem } from '../data/homework';
@@ -6,8 +7,8 @@ import { isControlLesson, lessonKindClass, lessonKindName } from '../lib/lessonK
 import { useI18n } from '../lib/i18n';
 import type { AbsenceKind } from '../lib/api';
 
-export const lessonStart = (lesson: Lesson) => lesson.time.slice(0, 5);
-export const lessonEnd = (lesson: Lesson) => lesson.time.slice(6, 11);
+export const lessonStart = (lesson: Lesson) => lessonTime(lesson).slice(0, 5);
+export const lessonEnd = (lesson: Lesson) => lessonTime(lesson).slice(6, 11);
 
 type CardProps = {
   lesson: Lesson;
@@ -21,11 +22,11 @@ type CardProps = {
 // В расписании преподавателя важнее группы, в расписании группы — преподаватели.
 export type MetaKind = 'group' | 'teacher' | 'auditory';
 
-const LessonCard = ({ lesson, state, nowMinutes, homework, onOpen, metaKind }: CardProps) => {
+const LessonCard = ({ lesson, state, homework, onOpen, metaKind }: CardProps) => {
   const { t } = useI18n();
-  const start = timeToMinutes(lessonStart(lesson));
-  const end = timeToMinutes(lessonEnd(lesson));
-  const progress = state === 'live' ? Math.min(100, Math.max(0, ((nowMinutes - start) / (end - start)) * 100)) : 0;
+  const startsAt = Date.parse(lessonMoment(lesson));
+  const endsAt = Date.parse(lessonMoment(lesson, true));
+  const progress = state === 'live' ? Math.min(100, Math.max(0, (Date.now() - startsAt) / (endsAt - startsAt) * 100)) : 0;
   const kind = [lessonKindName(lesson.lessonType), lesson.auditories[0]].filter(Boolean).join(', ');
   const meta = [
     metaKind !== 'teacher' ? lesson.teachers.join(', ') : '',
@@ -48,6 +49,7 @@ const LessonCard = ({ lesson, state, nowMinutes, homework, onOpen, metaKind }: C
         </span>
         <span className="card__kind">{kind}</span>
       </span>
+      {userTimeZone() !== (lesson.timeZone || 'Asia/Irkutsk') && <span className="card__meta">{lesson.time.slice(0, 5)} {t.irkutskTime}</span>}
       <span className="card__subject">
         {lesson.transferred && <span className="flag">{t.transferred}</span>}
         {lesson.subject}
@@ -56,7 +58,7 @@ const LessonCard = ({ lesson, state, nowMinutes, homework, onOpen, metaKind }: C
       {meta && <span className="card__meta">{meta}</span>}
       {state === 'live' && (
         <span className="card__live">
-          {t.live(formatDuration(end - nowMinutes))}
+          {t.live(formatDuration(Math.max(0, Math.ceil((endsAt - Date.now()) / 60_000))))}
           <span className="meter" aria-hidden="true"><i style={{ width: `${progress}%` }} /></span>
         </span>
       )}
@@ -91,24 +93,21 @@ type DayTimelineProps = {
 export const DayTimeline = ({ lessons, dateKey, todayKey, now, homework, onOpen, onAbsence, metaKind = 'group' }: DayTimelineProps) => {
   const { t } = useI18n();
   const isToday = dateKey === todayKey;
-  const isPastDay = dateKey < todayKey;
   const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const upcomingIndex = isToday ? lessons.findIndex((lesson) => timeToMinutes(lessonStart(lesson)) > nowMinutes) : -1;
   const hasLive = isToday && lessons.some((lesson) =>
-    timeToMinutes(lessonStart(lesson)) <= nowMinutes && timeToMinutes(lessonEnd(lesson)) > nowMinutes);
+    Date.parse(lessonMoment(lesson)) <= Date.now() && Date.parse(lessonMoment(lesson, true)) > Date.now());
   const showMarker = isToday && !hasLive;
 
   const stateOf = (lesson: Lesson): CardProps['state'] => {
-    if (isPastDay) return 'past';
-    if (!isToday) return 'idle';
-    if (timeToMinutes(lessonEnd(lesson)) <= nowMinutes) return 'past';
-    if (timeToMinutes(lessonStart(lesson)) <= nowMinutes) return 'live';
+    if (Date.parse(lessonMoment(lesson, true)) <= Date.now()) return 'past';
+    if (Date.parse(lessonMoment(lesson)) <= Date.now()) return 'live';
     return 'idle';
   };
 
   // «Опоздаю» имеет смысл только для пары, которая идёт или начнётся следующей.
   const absenceTarget = isToday && onAbsence
-    ? lessons.find((lesson) => timeToMinutes(lessonEnd(lesson)) > nowMinutes)
+    ? lessons.find((lesson) => Date.parse(lessonMoment(lesson, true)) > Date.now())
     : undefined;
 
   const markerNote = (index: number) => {

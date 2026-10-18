@@ -3,12 +3,13 @@ import type { Group } from '../data/schedule';
 
 export type LocalProfile = { group: Group; subgroup: 1 | 2 | null };
 
-const KEY = 'norfly.profile';
+const KEY = `norfly.profile${import.meta.env.DEV ? `.${new URLSearchParams(window.location.search).get('demoUser') ?? '1'}` : ''}`;
 const EVENT = 'norfly:profile';
 
 const read = (): LocalProfile | null => {
   try {
     const value = JSON.parse(localStorage.getItem(KEY) ?? 'null');
+    if (value?.group?.id && /^\d+$/.test(String(value.group.id))) value.group.id = `irnitu~${value.group.id}`;
     return value?.group?.id ? value : null;
   } catch {
     return null;

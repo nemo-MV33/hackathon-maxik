@@ -1,3 +1,4 @@
+import { lessonDate } from '../lib/timezone';
 import { useState } from 'react';
 import type { Lesson } from '../data/schedule';
 import { apiRequest } from '../lib/api';
@@ -11,7 +12,7 @@ import { Empty, ErrorState, ScheduleSkeleton } from '../components/Status';
 import { ChevronLeft, ChevronRight } from '../components/Icon';
 import { DayHeading } from './Schedule';
 
-export type EntityTarget = { kind: 'group' | 'teacher' | 'auditory'; id: number; title: string };
+export type EntityTarget = { kind: 'group' | 'teacher' | 'auditory'; id: string | number; title: string };
 
 type Response = { weekEven: boolean; lessons: Lesson[] };
 
@@ -27,7 +28,7 @@ export const EntityScheduleScreen = ({ target, onBack }: { target: EntityTarget;
   );
   const days = Array.from({ length: 7 }, (_, index) => toDateKey(addDays(fromDateKey(weekStart), index)));
   const lessons = week.status === 'ready' ? week.data.lessons : [];
-  const busyDays = days.filter((key) => lessons.some((lesson) => lesson.date === key));
+  const busyDays = days.filter((key) => lessons.some((lesson) => lessonDate(lesson) === key));
   const shift = (weeks: number) => setWeekStart(toDateKey(addDays(fromDateKey(weekStart), weeks * 7)));
 
   return (
@@ -45,7 +46,7 @@ export const EntityScheduleScreen = ({ target, onBack }: { target: EntityTarget;
       {week.status === 'error' && <ErrorState message={week.message} onRetry={retry} />}
       {week.status === 'ready' && busyDays.length === 0 && <Empty title={t.emptyWeekTitle}>{t.emptyWeekText}</Empty>}
       {week.status === 'ready' && busyDays.map((key) => {
-        const dayLessons = lessons.filter((lesson) => lesson.date === key);
+        const dayLessons = lessons.filter((lesson) => lessonDate(lesson) === key);
         return (
           <section key={key} className="week-day">
             <DayHeading dateKey={key} todayKey={todayKey} lessons={dayLessons} level="h2" />

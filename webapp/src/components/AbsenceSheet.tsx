@@ -1,3 +1,4 @@
+import { lessonTime } from '../lib/timezone';
 import { useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
@@ -65,7 +66,7 @@ export const AbsenceSheet = ({ kind, lesson, onClose, onSent }: Props) => {
       labelId="absence-title"
       onClose={onClose}
       busy={Boolean(sending)}
-      hint={<>{lesson ? `${lesson.subject}, ${lesson.time.slice(0, 5)}. ` : ''}{toDeputy ? t.absenceHintDeputy(me?.deputy?.name ?? null) : t.absenceHint}</>}
+      hint={<>{lesson ? `${lesson.subject}, ${lessonTime(lesson).slice(0, 5)}. ` : ''}{toDeputy ? t.absenceHintDeputy(me?.deputy?.name ?? null) : t.absenceHint}</>}
     >
       {!done && kind === 'late' && (
         <>

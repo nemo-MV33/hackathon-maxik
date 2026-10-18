@@ -1,3 +1,4 @@
+import { lessonDate, lessonTime } from '../lib/timezone';
 import { useEffect, useState } from 'react';
 import { Button } from '@maxhub/max-ui';
 import { loadWeek, invalidateSchedule, type Lesson } from '../data/schedule';
@@ -12,11 +13,11 @@ export const scheduleChanged = () => {
 };
 
 export const LessonMove = ({ lesson, groupId, orphanId, onSaved }: {
-  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>; groupId: number; orphanId?: string; onSaved?: () => void;
+  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'> & Partial<Lesson>; groupId: string | number; orphanId?: string; onSaved?: () => void;
 }) => {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const [date, setDate] = useState(lesson.date);
+  const [date, setDate] = useState(lesson.time ? lessonDate(lesson as Lesson) : lesson.date);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [target, setTarget] = useState('');
   const [moves, setMoves] = useState<Move[]>([]);
@@ -33,7 +34,7 @@ export const LessonMove = ({ lesson, groupId, orphanId, onSaved }: {
     setLessons([]);
     setTarget('');
     loadWeek(groupId, toDateKey(startOfWeek(fromDateKey(date)))).then((week) => {
-      if (active) setLessons(week.lessons.filter((item) => item.date === date && item.subgroup === lesson.subgroup && key(item) !== key(lesson)));
+      if (active) setLessons(week.lessons.filter((item) => lessonDate(item) === date && item.subgroup === lesson.subgroup && key(item) !== key(lesson)));
     }).catch((failure: Error) => active && setError(failure.message));
     return () => { active = false; };
   }, [date, open, groupId]);
@@ -43,7 +44,7 @@ export const LessonMove = ({ lesson, groupId, orphanId, onSaved }: {
     try {
       const path = revoke ? `/api/lesson-changes/${existing!.id}` : orphanId ? '/api/homework/orphaned' : '/api/lesson-changes';
       await apiRequest(path, { method: revoke ? 'DELETE' : orphanId ? 'PUT' : 'POST',
-        ...(!revoke ? { body: JSON.stringify(orphanId ? { id: orphanId, to } : { from: lesson, to }) } : {}) });
+        ...(!revoke ? { body: JSON.stringify(orphanId ? { groupId, id: orphanId, to } : { groupId, from: lesson, to }) } : {}) });
       scheduleChanged();
       setOpen(false);
       setMoves([]);
@@ -58,7 +59,7 @@ export const LessonMove = ({ lesson, groupId, orphanId, onSaved }: {
         <label className="field-label">{t.moveDate}<input type="date" value={date} onInput={(event) => setDate(event.currentTarget.value)} /></label>
         <label className="field-label">{t.moveChoose}<select value={target} onChange={(event) => setTarget(event.target.value)}>
           <option value="">{t.moveChoose}</option>
-          {lessons.map((item) => <option key={key(item)} value={key(item)}>{item.time} · {item.subject}</option>)}
+          {lessons.map((item) => <option key={key(item)} value={key(item)}>{lessonTime(item)} · {item.subject}</option>)}
         </select></label>
         <Button stretched loading={busy} disabled={!target || busy} onClick={() => void submit(lessons.find((item) => key(item) === target)!)}>{t.save}</Button>
         {!orphanId && <Button stretched disabled={busy} variant="secondary" onClick={() => void submit(null)}>{t.moveCancelled}</Button>}

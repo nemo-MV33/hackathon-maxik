@@ -1,0 +1,3 @@
+# Подлинные ответы БГУ сохраняют CRLF и пробелы источника.
+test/fixtures/bgu/*.html -whitespace
+test/fixtures/bgu/robots.txt -whitespace

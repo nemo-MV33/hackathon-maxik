@@ -1,3 +1,4 @@
+import { lessonDate, lessonTime } from '../lib/timezone';
 import { useEffect, useState } from 'react';
 import { Button } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
@@ -46,9 +47,9 @@ export const AbsencesScreen = ({ profile, onBack, onOpenStudent }: Props) => {
 
   // Предупредить можно о парах, которые ещё не закончились: сегодня и в ближайшие дни.
   const upcoming = (lessons.status === 'ready' ? lessons.data : [])
-    .filter((lesson) => lesson.date > todayKey || timeToMinutes(lesson.time.slice(6, 11)) > nowMinutes);
-  const firstDay = upcoming[0]?.date;
-  const choices = upcoming.filter((lesson) => lesson.date === firstDay);
+    .filter((lesson) => lessonDate(lesson) > todayKey || timeToMinutes(lessonTime(lesson).slice(6, 11)) > nowMinutes);
+  const firstDay = (upcoming[0] ? lessonDate(upcoming[0]) : undefined);
+  const choices = upcoming.filter((lesson) => lessonDate(lesson) === firstDay);
   const key = (lesson: Lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
   const selected = choices.find((lesson) => key(lesson) === lessonKey) ?? choices[0];
   const totalMine = history?.mine.reduce((sum, note) => sum + (note.minutes ?? 0), 0) ?? 0;
@@ -78,7 +79,7 @@ export const AbsencesScreen = ({ profile, onBack, onOpenStudent }: Props) => {
                 <button key={key(lesson)} type="button" role="radio" className="choice choice--compact" aria-checked={selected && key(selected) === key(lesson)} onClick={() => setLessonKey(key(lesson))}>
                   <span className="choice__text">
                     <span className="choice__title">{lesson.subject}</span>
-                    <span className="choice__hint">{lesson.time}, {lesson.auditories.join(', ') || lesson.lessonType}</span>
+                    <span className="choice__hint">{lessonTime(lesson)}, {lesson.auditories.join(', ') || lesson.lessonType}</span>
                   </span>
                 </button>
               ))}

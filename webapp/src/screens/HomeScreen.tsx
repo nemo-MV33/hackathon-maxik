@@ -1,8 +1,9 @@
+import { lessonDate, lessonMoment } from '../lib/timezone';
 import { ScheduleFreshness } from '../components/ScheduleFreshness';
 import { useEffect, useState } from 'react';
 import type { Lesson } from '../data/schedule';
 import { useRemoteHomework } from '../data/homework';
-import { addDays, formatDay, fromDateKey, timeToMinutes, toDateKey } from '../lib/date';
+import { addDays, formatDay, fromDateKey, toDateKey } from '../lib/date';
 import { useI18n } from '../lib/i18n';
 import type { LocalProfile } from '../lib/profile';
 import { useAsync } from '../lib/useAsync';
@@ -47,7 +48,6 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfi
   const now = useNow();
   const todayKey = toDateKey(now);
   const lastKey = toDateKey(addDays(now, LOOKAHEAD_DAYS));
-  const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const [lessons, retry] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, lastKey), [profile.group.id, profile.subgroup, todayKey, scheduleRevision]);
   const [homework] = useRemoteHomework(profile.group.id, todayKey, toDateKey(addDays(now, TASK_DAYS)), `${profileRevision}:${scheduleRevision}`);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -62,13 +62,13 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfi
   }, [profileRevision]);
 
   const all = lessons.status === 'ready' ? lessons.data : [];
-  const today = all.filter((lesson) => lesson.date === todayKey);
-  const todayActive = today.some((lesson) => timeToMinutes(lessonEnd(lesson)) > nowMinutes);
-  const upcoming = all.find((lesson) => lesson.date > todayKey);
-  const focusDay = todayActive ? todayKey : upcoming?.date;
+  const today = all.filter((lesson) => lessonDate(lesson) === todayKey);
+  const todayActive = today.some((lesson) => Date.parse(lessonMoment(lesson, true)) > Date.now());
+  const upcoming = all.find((lesson) => lessonDate(lesson) > todayKey);
+  const focusDay = todayActive ? todayKey : (upcoming ? lessonDate(upcoming) : undefined);
   const focusLessons = todayActive
     ? today
-    : all.filter((lesson) => lesson.date === upcoming?.date && lesson.lessonNumber === upcoming?.lessonNumber);
+    : all.filter((lesson) => lessonDate(lesson) === (upcoming ? lessonDate(upcoming) : undefined) && lesson.lessonNumber === upcoming?.lessonNumber);
   const diff = focusDay ? daysBetween(todayKey, focusDay) : 0;
   const label = diff === 0 ? t.today : diff === 1 ? t.tomorrow : diff === 2 ? t.dayAfterTomorrow : null;
   const homeworkMap = homework.status === 'ready'
@@ -87,7 +87,7 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfi
         <button type="button" className="exam-banner" onClick={onOpenExams}>
           <span className="exam-banner__title">{t.examsSoon(exams.length)}</span>
           <span className="exam-banner__next">
-            {t.examsNext(lessonKindName(exams[0].lessonType), exams[0].subject, t.daysLeft(daysBetween(todayKey, exams[0].date)))}
+            {t.examsNext(lessonKindName(exams[0].lessonType), exams[0].subject, t.daysLeft(daysBetween(todayKey, lessonDate(exams[0]))))}
           </span>
           <ChevronRight size={18} />
         </button>
@@ -103,7 +103,7 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfi
             </span>
           )}
         </div>
-        <ScheduleFreshness at={focusLessons[0]?.updatedAt} />
+        <ScheduleFreshness at={focusLessons[0]?.updatedAt} stale={focusLessons[0]?.stale} />
         {lessons.status === 'loading' && <ScheduleSkeleton rows={2} />}
         {lessons.status === 'error' && <ErrorState message={lessons.message} onRetry={retry} />}
         {lessons.status === 'ready' && !focusDay && <Empty title={t.noUpcomingTitle}>{t.noUpcomingText}</Empty>}
