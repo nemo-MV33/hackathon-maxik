@@ -1,3 +1,4 @@
+import { attachmentSummary } from './homework-attachments.js';
 import { lessonInTimeZone } from '../lib/timezone.js';
 import { toDateKey } from '../lib/date.js';
 import { lessonTypeLabel, texts } from './i18n.js';
@@ -113,6 +114,7 @@ export const formatHomework = (language, items, timeZone = 'Asia/Irkutsk') => {
   return [t.homeworkTitle, ...items.map((item) => [
     `**${item.subject}**, ${formatDate(language, item.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' })}, ${item.lessonTime.slice(0, 5)}`,
     item.text,
+    attachmentSummary(item.attachments),
     item.source === 'personal' ? t.homeworkPersonalMark : '',
   ].filter(Boolean).join('\n'))].join('\n\n');
 };

@@ -1,3 +1,4 @@
+import { AttachmentStore } from './storage/attachments.js';
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { config } from './config.js';
@@ -26,6 +27,13 @@ const preferences = new PreferencesStore(
 const community = new CommunityStore(
   fileURLToPath(new URL('../data/community.json', import.meta.url)),
 );
+community.attachmentStore = new AttachmentStore(process.env.ATTACHMENT_DIR || fileURLToPath(new URL('../attachments', import.meta.url)), {
+  community, preferences, secret: config.botToken,
+});
+const cleanAttachments = () => community.attachmentStore.reconcile().catch((error) => console.error('Attachment cleanup failed:', error.message));
+await cleanAttachments();
+const attachmentCleanup = setInterval(cleanAttachments, 15 * 60_000);
+attachmentCleanup.unref();
 let notifications;
 let lessonChanges;
 const onHomeworkSaved = (item) => notifications?.homeworkSaved(item);

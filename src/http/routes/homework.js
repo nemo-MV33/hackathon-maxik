@@ -50,7 +50,7 @@ const lessonInput = (body) => {
   // scope: 'reminder' — только личное напоминание к паре, текст ДЗ не трогаем.
   if (body.scope === 'reminder') {
     if (!('remindAt' in body)) throw new HttpError(400, 'invalid_remind_at', 'Нужно время напоминания или null');
-  } else if (body.text !== null && (typeof body.text !== 'string' || !body.text.trim())) {
+  } else if (body.text !== null && (typeof body.text !== 'string' || (!body.text.trim() && !body.attachmentIds?.length))) {
     throw new HttpError(400, 'invalid_text', 'ДЗ не может быть пустым');
   }
   if (body.text?.trim().length > MAX_TEXT_LENGTH) {
@@ -80,12 +80,18 @@ const findLesson = async (service, groupId, input) => {
 };
 
 const serialize = (item, reminders = {}) => ({
+  attachments: item.attachments ?? [],
+  sharedAttachments: item.sharedAttachments ?? (item.source === 'personal' ? [] : item.attachments ?? []),
+  personalAttachments: item.personalAttachments ?? (item.source === 'personal' ? item.attachments ?? [] : []),
   groupId: groupKey(item.groupId),
   date: item.lessonDate,
   lessonNumber: item.lessonNumber,
   subgroup: item.subgroup ?? null,
   subject: item.subject,
   lessonTime: item.lessonTime,
+  sharedAuthorName: item.sharedAuthorName ?? item.authorName ?? null,
+  sharedUpdatedAt: item.sharedUpdatedAt ?? item.updatedAt,
+  sharedVersion: item.sharedVersion ?? item.version ?? 1,
   sharedText: item.sharedText,
   personalText: item.personalText,
   text: item.text,
@@ -156,6 +162,14 @@ export const putHomework = async ({ user, preferences, community, service, body,
     subject: lesson.subject,
   };
 
+  const records = await community.attachmentRecords();
+  const current = records.find((item) => sameGroup(item.groupId, group.id) && item.lessonDate === lesson.date
+    && item.lessonNumber === lesson.lessonNumber && (item.subgroup ?? null) === (lesson.subgroup ?? null)
+    && (input.scope === 'shared' ? item.userId == null : String(item.userId) === String(user.id)));
+  const attachments = body.attachmentIds === undefined ? current?.attachments ?? []
+    : await community.attachmentStore?.resolveInput(body.attachmentIds, { userId: user.id, groupId: group.id, scope: input.scope, current: current?.attachments ?? [] });
+  if (body.attachmentIds?.length && !attachments) throw new HttpError(503, 'attachments_unavailable');
+
   if (input.scope === 'shared') {
     const role = await community.homeworkRoleForGroup(group.id, user.id);
     if (role === 'student') throw new HttpError(403, 'homework_forbidden', 'Нет прав на изменение общего ДЗ');
@@ -166,6 +180,7 @@ export const putHomework = async ({ user, preferences, community, service, body,
     const item = await community.upsertHomework({
       ...target,
       text: input.text,
+      attachments,
       authorId: user.id,
       authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || `MAX ID ${user.id}`,
     });
@@ -177,6 +192,6 @@ export const putHomework = async ({ user, preferences, community, service, body,
     await community.removePersonalHomework(user.id, target);
     return { deleted: true, scope: input.scope };
   }
-  const item = await community.setPersonalHomework(user.id, { ...target, text: input.text });
+  const item = await community.setPersonalHomework(user.id, { ...target, text: input.text, attachments, authorId: user.id });
   return { item: serialize({ ...item, sharedText: null, personalText: item.text, source: 'personal' }, reminders) };
 };

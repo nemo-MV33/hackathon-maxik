@@ -1,3 +1,4 @@
+import { attachmentSummary } from '../bot/homework-attachments.js';
 import { userDayLessons } from './user-schedule.js';
 import { sameGroup, groupKey } from '../universities/identity.js';
 import { universityTimeZone, zonedClock, zonedDateKey, zonedMinutes, profileTimeZone, lessonInTimeZone, zonedMoment } from '../lib/timezone.js';
@@ -170,10 +171,10 @@ export class NotificationService {
       .map(([id, prefs]) => ({ id: Number(id), prefs }));
   }
 
-  async #send(userId, lang, text, payload, buttonText) {
+  async #send(userId, lang, text, payload, buttonText, media = []) {
     const t = texts(lang);
     const button = this.bot.appButton?.(t, payload, buttonText);
-    const attachments = button ? [Keyboard.inlineKeyboard([[button]])] : [];
+    const attachments = [...media, ...(button ? [Keyboard.inlineKeyboard([[button]])] : [])];
     await this.bot.api.sendMessageToUser(userId, `${text}\n\n_${t.notifyFooter}_`, { format: 'markdown', attachments });
   }
 
@@ -197,15 +198,27 @@ export class NotificationService {
     const recipients = (await this.#recipients(item.groupId, 'homework'))
       .filter(({ id }) => String(id) !== String(item.authorId))
       .filter(({ prefs }) => forSubgroup(prefs.subgroup, item.subgroup));
+    const media = await this.bot.homeworkMedia?.(item) ?? [];
     for (const { id, prefs } of recipients) {
       const t = texts(prefs.lang);
       const local = item.lessonTime ? lessonInTimeZone({ date: item.lessonDate, time: item.lessonTime }, profileTimeZone(prefs)) : null;
       const when = `${shortDate(prefs.lang, local?.date ?? item.lessonDate)}, ${local?.time.slice(0, 5) ?? ''}`.replace(/, $/, '');
       const title = isUpdate ? t.updatedHomework(item.subject, when) : t.newHomework(item.subject, when);
       try {
-        await this.#send(id, prefs.lang, `${title}\n\n${item.text}`, appPayload(lesson, prefs.selection.id), t.openLesson);
+        await this.#send(id, prefs.lang, `${title}\n\n${item.text}\n${attachmentSummary(item.attachments)}`, appPayload(lesson, prefs.selection.id), t.openLesson, media);
       } catch (error) {
         console.error(`Homework notification failed for user ${id}:`, error.message);
+      }
+    }
+    if (item.attachments?.length) {
+      for (const chat of await this.community.chatsForGroup(item.groupId)) {
+        const t = texts(chat.lang);
+        const app = this.bot.appButton?.(t, appPayload(lesson, item.groupId), t.openLesson);
+        try {
+          await this.bot.api.sendMessageToChat(chat.chatId, `${isUpdate ? t.updatedHomework(item.subject, item.lessonDate) : t.newHomework(item.subject, item.lessonDate)}\n${item.text}\n${attachmentSummary(item.attachments)}`, {
+            attachments: [...media, ...(app ? [Keyboard.inlineKeyboard([[app]])] : [])],
+          });
+        } catch (error) { console.error('Group homework notification failed:', error.message); }
       }
     }
     return recipients.length;

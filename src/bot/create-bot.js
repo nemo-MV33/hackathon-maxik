@@ -1,3 +1,4 @@
+import { HomeworkAttachmentBatch, incomingHomeworkAttachments, downloadMaxAttachment, attachmentSummary } from './homework-attachments.js';
 import { userDayLessons } from '../services/user-schedule.js';
 import { groupKey, sameGroup, splitGroupKey } from '../universities/identity.js';
 import { universities } from '../universities/config.js';
@@ -80,14 +81,26 @@ export const ABSENCE_REASONS = {
 const lessonKey = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 
 export const createBot = ({
-  token, service, miniAppUrl, miniAppButton = 'app', preferences, community, onHomeworkSaved, getLessonChanges, onAnnouncement,
+  token, service, miniAppUrl, miniAppButton = 'app', preferences, community, onHomeworkSaved, getLessonChanges, onAnnouncement, homeworkAttachmentWindowMs = 10_000, downloadAttachment = downloadMaxAttachment,
 }) => {
   const bot = new Bot(token);
+  let nextApiAt = 0;
+  const pace = async () => {
+    const delay = Math.max(0, nextApiAt - Date.now());
+    nextApiAt = Math.max(Date.now(), nextApiAt) + 100;
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
+  };
+  for (const name of ['sendMessageToUser', 'sendMessageToChat', 'uploadImage']) {
+    const original = bot.api[name].bind(bot.api);
+    bot.api[name] = async (...args) => { await pace(); return original(...args); };
+  }
   const sessions = new Map();
+  let attachmentBatch;
 
   const sessionKey = (ctx) => `${ctx.chatId}:${userId(ctx)}`;
   const session = (ctx) => sessions.get(sessionKey(ctx)) ?? {};
   const setSession = (ctx, value) => {
+    attachmentBatch?.cancel(sessionKey(ctx));
     if (value) sessions.set(sessionKey(ctx), { universityId: session(ctx).universityId, ...value });
     else sessions.delete(sessionKey(ctx));
   };
@@ -101,7 +114,7 @@ export const createBot = ({
   };
 
   // Ответ на нажатие кнопки меняет то же сообщение, чтобы чат не превращался в ленту меню.
-  const show = async (ctx, text, rows = []) => {
+  const show = async (ctx, text, rows = [], media = []) => {
     const scoped = await Promise.all(rows.map(async (row) => Promise.all(row.map(async (item) => {
       if (!item.payload || item.payload.includes('|')) return item;
       const shared = /^(gh|gp|mv|mt|mo|md|mu):/.test(item.payload);
@@ -110,7 +123,7 @@ export const createBot = ({
       const group = shared ? (await groupConfigFor(ctx))?.group : chatSchedule ? (await community.getChat(ctx.chatId))?.group : personal ? ownGroup(ctx.prefs) : null;
       return group ? { ...item, payload: `${item.payload}|${groupKey(group.id)}` } : item;
     }))));
-    const attachments = scoped.length ? [Keyboard.inlineKeyboard(scoped)] : [];
+    const attachments = [...media, ...(scoped.length ? [Keyboard.inlineKeyboard(scoped)] : [])];
     if (ctx.update.update_type === 'message_callback') {
       return ctx.answerOnCallback({ message: { text: clip(text), format: 'markdown', attachments } });
     }
@@ -446,13 +459,13 @@ export const createBot = ({
       const config = await community.getChat(ctx.chatId);
       if (!config?.group) return show(ctx, t.groupNotConfigured, [[button(t.setup, 'setup', 'positive')]]);
       const items = await community.homeworkForGroup(config.group.id, { subgroup: config.subgroup ?? null });
-      return show(ctx, formatHomework(lang, items, profileTimeZone(prefs)), [[button(t.addHomework, 'gh:pick'), button(t.team, 'team')]]);
+      return show(ctx, formatHomework(lang, items, profileTimeZone(prefs)), [[...(appButton(t, undefined, t.openInApp) ? [appButton(t, undefined, t.openInApp)] : [])], [button(t.addHomework, 'gh:pick'), button(t.team, 'team')]], await bot.homeworkMedia({ attachments: items.flatMap((item) => item.attachments ?? []) }));
     }
     const group = ownGroup(prefs);
     if (!group) return show(ctx, t.noGroupYet);
     const items = await community.homeworkForUser(group.id, userId(ctx), { subgroup: prefs.subgroup });
     const app = appButton(t, items[0] ? `day_${items[0].lessonDate}_${groupKey(group.id)}` : undefined, t.openInApp);
-    return show(ctx, formatHomework(lang, items, profileTimeZone(prefs)), [[button(t.addPersonal, 'ph:pick')], [...(app ? [app] : []), button(t.menu, 'menu')]]);
+    return show(ctx, formatHomework(lang, items, profileTimeZone(prefs)), [[button(t.addPersonal, 'ph:pick')], [...(app ? [app] : []), button(t.menu, 'menu')]], await bot.homeworkMedia({ attachments: items.flatMap((item) => item.attachments ?? []) }));
   };
 
   const beginAdd = async (ctx) => {
@@ -1606,7 +1619,7 @@ export const createBot = ({
 
   // Сообщения: команды, ввод по шагам, поиск
 
-  const saveGroupHomework = async (ctx, state, text) => {
+  const saveGroupHomework = async (ctx, state, text, attachments, mids) => {
     const { t } = ctx;
     const config = await groupConfigFor(ctx);
     setSession(ctx, null);
@@ -1622,20 +1635,21 @@ export const createBot = ({
       subgroup: lesson.subgroup ?? null,
       subject: lesson.subject,
       text,
+      ...(attachments ? { attachments, intakeMids: mids } : {}),
       authorId: userId(ctx),
       authorName: displayName(ctx.message.sender),
     });
     onHomeworkSaved?.(item);
-    return show(ctx, t.homeworkSaved(lesson.subject), [[button(t.homework, 'hw:list'), button(t.menu, isGroupChat(ctx) ? 'help' : 'menu')]]);
+    return show(ctx, `${t.homeworkSaved(lesson.subject)}\n${attachmentSummary(item.attachments)}`, [[button(t.homework, 'hw:list'), ...(appButton(t, undefined, t.openInApp) ? [appButton(t, undefined, t.openInApp)] : [])]], await bot.homeworkMedia(item));
   };
 
-  const savePersonalHomework = async (ctx, state, text) => {
+  const savePersonalHomework = async (ctx, state, text, attachments, mids) => {
     const { t, prefs } = ctx;
     const group = ownGroup(prefs);
     setSession(ctx, null);
     if (!group || (state.groupId && !sameGroup(state.groupId, group.id))) return ctx.reply(t.noGroupYet);
     const { lesson } = state;
-    await community.setPersonalHomework(userId(ctx), {
+    const item = await community.setPersonalHomework(userId(ctx), {
       groupId: group.id,
       groupTitle: group.title,
       lessonDate: lesson.date,
@@ -1644,9 +1658,65 @@ export const createBot = ({
       subgroup: lesson.subgroup ?? null,
       subject: lesson.subject,
       text,
+      ...(attachments ? { attachments, intakeMids: mids } : {}),
+      authorId: userId(ctx),
     });
-    return show(ctx, t.personalSaved(lesson.subject), [[button(t.homework, 'hw:list'), button(t.menu, 'menu')]]);
+    return show(ctx, `${t.personalSaved(lesson.subject)}\n${attachmentSummary(item.attachments)}`, [[button(t.homework, 'hw:list'), button(t.menu, 'menu')]], await bot.homeworkMedia(item));
   };
+
+  bot.homeworkMedia = async (item) => {
+    const store = community.attachmentStore;
+    if (!store) return [];
+    const media = [];
+    for (const file of (item.attachments ?? []).filter((file) => file.mime.startsWith('image/')).slice(0, 8)) {
+      try {
+        const metadata = await store.metadata(file.id);
+        let token = metadata.maxToken;
+        if (!token) {
+          const uploaded = await bot.api.uploadImage({ source: store.path(file.id) });
+          token = uploaded.toJson().payload.token;
+          await store.exclusive(async () => store.writeMetadata({ ...await store.metadata(file.id), maxToken: token }));
+        }
+        media.push({ type: 'image', payload: { token } });
+      } catch (error) { console.error('Homework image delivery failed:', error.message); }
+    }
+    return media;
+  };
+  attachmentBatch = new HomeworkAttachmentBatch({
+    windowMs: homeworkAttachmentWindowMs,
+    failed: ({ ctx }, error) => ctx.reply(error.message || 'Не удалось сохранить вложения / Attachment save failed'),
+    save: async ({ ctx, state }, text, incoming, mids) => {
+      if (session(ctx) !== state) return;
+      ctx.prefs = await preferences.get(userId(ctx));
+      if (text.length > HOMEWORK_LIMIT) throw new Error(ctx.t.homeworkTooLong);
+      if (!incoming.length) return state.step === 'group-text' ? saveGroupHomework(ctx, state, text) : savePersonalHomework(ctx, state, text);
+      const store = community.attachmentStore;
+      if (!store) throw new Error('Вложения недоступны / Attachments unavailable');
+      const unique = [...new Map(incoming.map((item) => [item.payload?.token || item.payload?.url, item])).values()];
+      if (unique.length > store.limits.count) throw new Error(`Не более ${store.limits.count} вложений / Attachment count limit`);
+      const config = state.step === 'group-text' ? await groupConfigFor(ctx) : null;
+      const group = config?.group ?? ownGroup(ctx.prefs);
+      if (!group || (state.groupId && !sameGroup(state.groupId, group.id)) || (state.step === 'group-text' && !canEditHomework(ctx, config))) throw new Error(ctx.t.homeworkRightsChanged);
+      const attachments = [];
+      try {
+        for (const item of unique) {
+          const bytes = await downloadAttachment(item, store.limits.fileBytes);
+          attachments.push(await store.upload(bytes, { userId: userId(ctx), groupId: group.id,
+            scope: state.step === 'group-text' ? 'shared' : 'personal', name: item.filename || `${item.type}-${attachments.length + 1}`,
+            maxToken: item.type === 'image' ? item.payload?.token : undefined }));
+        }
+        if (session(ctx) !== state) {
+          for (const file of attachments) await store.discard(file.id, userId(ctx));
+          return;
+        }
+        return await (state.step === 'group-text' ? saveGroupHomework(ctx, state, text, attachments, mids) : savePersonalHomework(ctx, state, text, attachments, mids));
+      } catch (error) {
+        for (const file of attachments) await store.discard(file.id, userId(ctx)).catch(() => {});
+        throw error;
+      }
+    },
+  });
+  bot.flushHomeworkAttachments = async () => { for (const key of attachmentBatch.batches.keys()) await attachmentBatch.flush(key); };
 
   bot.on('message_created', async (ctx) => {
     const text = ctx.message?.body?.text?.trim() ?? '';
@@ -1671,6 +1741,11 @@ export const createBot = ({
       return show(ctx, ctx.t.moveChoose, [...lessons.map((lesson) => [button(`${lesson.time} ${lesson.subject}`, `mt:${lessonKey(lesson)}`)]), [button(ctx.t.cancel, 'cancel')]]);
     }
     if (['group-text', 'personal-text'].includes(state.step)) {
+      const incoming = incomingHomeworkAttachments(ctx.message);
+      if (ctx.message.body.mid && (await community.attachmentRecords()).some((item) => String(item.authorId) === String(userId(ctx)) && item.intakeMids?.includes(ctx.message.body.mid))) return;
+      if (incoming.length || attachmentBatch.batches.has(sessionKey(ctx)) || homeworkAttachmentWindowMs > 0) {
+        return attachmentBatch.add(sessionKey(ctx), { mid: ctx.message.body.mid, text, attachments: incoming, context: { ctx, state } });
+      }
       if (!text) return ctx.reply(ctx.t.homeworkNeedsText);
       if (text.length > HOMEWORK_LIMIT) return ctx.reply(ctx.t.homeworkTooLong);
       return state.step === 'group-text' ? saveGroupHomework(ctx, state, text) : savePersonalHomework(ctx, state, text);

@@ -1,3 +1,4 @@
+import { uploadAttachment, sendAttachment } from './routes/attachments.js';
 import { groupKey } from '../universities/identity.js';
 import { createServer } from 'node:http';
 import { parseDateKey, toDateKey } from '../lib/date.js';
@@ -40,7 +41,7 @@ const readJson = async (request) => {
   }
 };
 
-const authenticate = (request, { botToken, initDataMaxAgeSec, devUserId }) => {
+const authenticate = (request, { botToken, initDataMaxAgeSec, devUserId, devUserName }) => {
   const header = request.headers.authorization ?? '';
   if (header.startsWith('tma ')) {
     try {
@@ -50,7 +51,7 @@ const authenticate = (request, { botToken, initDataMaxAgeSec, devUserId }) => {
       throw error;
     }
   }
-  if (devUserId) return { id: devUserId, first_name: 'Dev' };
+  if (devUserId) return { id: devUserId, first_name: devUserName || 'Dev' };
   return null;
 };
 
@@ -87,6 +88,34 @@ const route = async (request, response, options) => {
 
   if (url.pathname === '/health') {
     return sendJson(response, 200, { status: 'ok' });
+  }
+
+  if (parts[0] === 'api' && parts[1] === 'attachments') {
+    const store = community.attachmentStore;
+    if (!store) throw new HttpError(503, 'attachments_unavailable');
+    const id = parts[2];
+    const user = authenticate(request, options);
+    if (!id && request.method === 'POST') {
+      if (!user) throw new HttpError(401, 'unauthorized');
+      return sendJson(response, 201, await uploadAttachment({ request, user, preferences, community, url }));
+    }
+    if (id && request.method === 'DELETE' && parts.length === 3) {
+      if (!user) throw new HttpError(401, 'unauthorized');
+      await store.discard(id, user.id);
+      return sendJson(response, 200, { deleted: true });
+    }
+    if (id && request.method === 'GET' && parts[3] === 'link') {
+      if (!user) throw new HttpError(401, 'unauthorized');
+      response.setHeader('Cache-Control', 'private, no-store');
+      return sendJson(response, 200, await store.link(id, user.id));
+    }
+    if (id && request.method === 'GET' && parts.length === 3) {
+      // A supplied signature is always checked, even in development mode.
+      const userId = url.searchParams.has('signature') ? await store.signedUser(id, url) : user?.id;
+      if (!userId) throw new HttpError(401, 'unauthorized');
+      return sendAttachment({ response, store, id, userId });
+    }
+    throw new HttpError(405, 'method_not_allowed');
   }
 
   if (url.pathname === '/api/me') {

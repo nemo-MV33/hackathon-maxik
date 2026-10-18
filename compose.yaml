@@ -8,10 +8,12 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
+      ATTACHMENT_DIR: /app/attachments
     ports:
       - "${HOST_PORT:-3000}:3000"
     volumes:
       - norfly-data:/app/data
+      - norfly-attachments:/app/attachments
       - norfly-schedule:/app/webapp/dist/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
@@ -23,3 +25,4 @@ services:
 volumes:
   norfly-data:
   norfly-schedule:
+  norfly-attachments:

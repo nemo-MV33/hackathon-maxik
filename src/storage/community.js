@@ -13,6 +13,11 @@ export class CommunityStore {
     this.filePath = filePath;
   }
 
+  async attachmentRecords() {
+    await this.#load();
+    return [...this.#data.homework, ...this.#data.personalHomework];
+  }
+
   async getChat(chatId) {
     await this.#load();
     return this.#data.chats[String(chatId)] ?? null;
@@ -108,6 +113,7 @@ export class CommunityStore {
         else {
           item.text = [...new Set([previous.text, item.text].filter(Boolean))].join('\n\n');
           item.history = [...(previous.history ?? []), ...(item.history ?? [])];
+          item.attachments = [...new Map([...(previous.attachments ?? []), ...(item.attachments ?? [])].map((file) => [file.id, file])).values()];
           unique.set(key, item);
         }
       }
@@ -128,6 +134,8 @@ export class CommunityStore {
       createdAt: current?.createdAt ?? now,
       ...current,
       ...value,
+      attachments: value.attachments ?? current?.attachments ?? [],
+      history: this.#attachmentHistory(current, value, now),
       status: 'active',
       version: (current?.version ?? 0) + 1,
       updatedAt: now,
@@ -180,6 +188,9 @@ export class CommunityStore {
       createdAt: current?.createdAt ?? now,
       ...current,
       ...target,
+      attachments: value.attachments ?? current?.attachments ?? [],
+      history: this.#attachmentHistory(current, value, now),
+      version: (current?.version ?? 0) + 1,
       updatedAt: now,
     };
     if (index >= 0) this.#data.personalHomework[index] = item;
@@ -212,7 +223,13 @@ export class CommunityStore {
       const own = personal.find((item) => this.#lessonKey(item) === key) ?? null;
       const source = own ? 'personal' : 'shared';
       return {
-        ...(common ?? own),
+        ...(own ?? common),
+        sharedAttachments: common?.attachments ?? [],
+        personalAttachments: own?.attachments ?? [],
+        attachments: own?.attachments ?? common?.attachments ?? [],
+        sharedAuthorName: common?.authorName ?? null,
+        sharedUpdatedAt: common?.updatedAt ?? null,
+        sharedVersion: common?.version ?? 1,
         sharedText: common?.text ?? null,
         personalText: own?.text ?? null,
         text: own?.text ?? common?.text ?? '',
@@ -351,6 +368,7 @@ export class CommunityStore {
       }
     }
     await this.#queueSave();
+    await this.attachmentStore?.reconcile({ removeUser: userId });
   }
 
   async markNoticeSent(id) {
@@ -372,33 +390,45 @@ export class CommunityStore {
     try {
       const contents = await readFile(this.filePath, 'utf8');
       const parsed = migrateGroupReferences(JSON.parse(contents));
+      if ((parsed.schemaVersion ?? 1) > 4) throw new Error('Unsupported community schemaVersion');
       this.#data = {
         ...parsed,
-        schemaVersion: 3,
+        schemaVersion: 4,
         chats: parsed.chats ?? {},
-        homework: parsed.homework ?? [],
-        personalHomework: parsed.personalHomework ?? [],
+        homework: (parsed.homework ?? []).map((item) => ({ ...item, attachments: item.attachments ?? [] })),
+        personalHomework: (parsed.personalHomework ?? []).map((item) => ({ ...item, attachments: item.attachments ?? [] })),
         notices: parsed.notices ?? [],
         announcements: parsed.announcements ?? [],
         lessonChanges: parsed.lessonChanges ?? [],
         scheduleOperations: parsed.scheduleOperations ?? [],
       };
-      if (JSON.parse(contents).schemaVersion !== 3) await this.#save();
+      if (JSON.parse(contents).schemaVersion !== 4) await this.#save();
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
   }
 
   async #queueSave() {
-    this.#writeQueue = this.#writeQueue.then(() => this.#save());
-    await this.#writeQueue;
+    const saving = this.#writeQueue.then(() => this.#save());
+    this.#writeQueue = saving.catch(() => {});
+    await saving;
+    await this.attachmentStore?.reconcile();
   }
 
   async #save() {
     await mkdir(dirname(this.filePath), { recursive: true });
     const temporaryPath = `${this.filePath}.tmp`;
-    await writeFile(temporaryPath, `${JSON.stringify({ ...migrateGroupReferences(this.#data), schemaVersion: 3 }, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(temporaryPath, `${JSON.stringify({ ...migrateGroupReferences(this.#data), schemaVersion: 4 }, null, 2)}\n`, { mode: 0o600 });
     await rename(temporaryPath, this.filePath);
+  }
+
+  #attachmentHistory(current, value, at) {
+    const before = current?.attachments ?? [];
+    const after = value.attachments ?? before;
+    const added = after.filter((file) => !before.some((old) => old.id === file.id));
+    const removed = before.filter((file) => !after.some((next) => next.id === file.id));
+    if (!added.length && !removed.length) return current?.history;
+    return [...(current?.history ?? []), ...(added.length || removed.length ? [{ type: 'attachments', at, by: value.authorId ?? value.userId, authorName: value.authorName ?? null, added, removed }] : [])];
   }
 
   #dateKey(value) {

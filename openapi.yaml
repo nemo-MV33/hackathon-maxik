@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: norfly API
-  version: 0.4.0
+  version: 0.5.0
   description: Профиль, расписание и домашние задания студента ИРНИТУ или БГУ. Даты пар относятся к вузу; startsAt и endsAt — моменты времени.
 servers:
   - url: https://158-160-253-148.sslip.io
@@ -12,6 +12,87 @@ security:
   - maxInitData: []
   - serviceKey: []
 paths:
+  /api/attachments:
+    post:
+      operationId: uploadHomeworkAttachment
+      summary: Подготовить файл к одному сохранению текста и вложений ДЗ
+      security: [{ maxInitData: [] }]
+      parameters:
+        - { name: scope, in: query, required: true, schema: { type: string, enum: [shared, personal] } }
+        - { name: name, in: query, required: true, schema: { type: string } }
+      description: Байты проверяются по содержимому. Группа берётся из профиля; для shared нужны права редактора. По умолчанию 10 МиБ на файл, 8 несохранённых файлов автора и 100 МиБ на группу. Несохранённые файлы удаляются через час.
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: { type: string, format: binary }
+      responses:
+        '201':
+          description: Файл подготовлен; передайте item.id в attachmentIds при PUT /api/homework
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  item: { $ref: '#/components/schemas/HomeworkAttachment' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Нет прав на общее ДЗ }
+        '413': { description: attachment_size, attachment_count, attachment_quota или attachment_total_quota }
+        '415': { description: attachment_type — неподдерживаемое содержимое }
+        '507': { description: attachment_disk_full — свободное место ниже резерва }
+  /api/attachments/{id}/link:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: signHomeworkAttachment
+      summary: Ссылка на файл на 5 минут для просмотра или MAX Bridge downloadFile
+      security: [{ maxInitData: [] }]
+      responses:
+        '200':
+          description: Ссылка после проверки выбранной группы или владельца личной версии; private, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: { type: string, description: Относительный URL с user, expires и HMAC signature }
+                  expiresAt: { type: string, format: date-time }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Чужая группа или чужая личная версия }
+        '404': { description: Файл удалён или не существует }
+  /api/attachments/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: downloadHomeworkAttachment
+      summary: Байты файла с проверкой доступа; временная ссылка работает вне MAX без initData
+      security: [{ maxInitData: [] }, { attachmentSignature: [] }]
+      parameters:
+        - { name: user, in: query, schema: { type: integer } }
+        - { name: expires, in: query, schema: { type: integer, description: Unix milliseconds } }
+        - { name: signature, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: MIME по содержимому; attachment для всего кроме изображений; nosniff; private, no-store. Даже подписанная ссылка повторно проверяет текущие права и наличие записи.
+          headers:
+            Content-Disposition: { schema: { type: string } }
+            X-Content-Type-Options: { schema: { type: string, const: nosniff } }
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Нет доступа, неверная подпись или attachment_link_expired }
+        '404': { description: Файл удалён или не существует }
+    delete:
+      operationId: discardHomeworkAttachment
+      summary: Удалить свою несохранённую загрузку
+      security: [{ maxInitData: [] }]
+      description: Привязанное вложение удаляется только сохранением ДЗ с новым attachmentIds или удалением самого ДЗ.
+      responses:
+        '200': { description: Удалено }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Чужой или уже привязанный файл }
+        '404': { description: Файл не найден }
   /api/universities:
     get:
       operationId: getUniversities
@@ -461,7 +542,12 @@ paths:
                 date: { type: string, format: date }
                 lessonNumber: { type: integer, minimum: 1 }
                 subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
-                text: { type: [string, 'null'], maxLength: 2000, description: null удаляет версию }
+                text: { type: [string, 'null'], maxLength: 2000, description: 'null удаляет версию; пустая строка допустима с attachmentIds' }
+                attachmentIds:
+                  type: array
+                  uniqueItems: true
+                  description: 'Полный выбранный список; отсутствие поля сохраняет прежние вложения. [] удаляет вложения. Лимит ATTACHMENT_MAX_COUNT, по умолчанию 8.'
+                  items: { type: string, format: uuid }
                 scope: { type: string, enum: [shared, personal, reminder], description: 'reminder — только личное напоминание, text не нужен' }
                 remindAt: { type: [string, 'null'], format: date-time, description: Личное напоминание о ДЗ; null снимает }
                 reminderMode: { type: string, enum: [fixed, lesson], default: fixed }
@@ -614,6 +700,11 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
 components:
   securitySchemes:
+    attachmentSignature:
+      type: apiKey
+      in: query
+      name: signature
+      description: HMAC от UUID файла, user и expires; срок 5 минут, проверяются все три query-поля
     serviceKey:
       type: http
       scheme: bearer
@@ -778,6 +869,14 @@ components:
             lastName: { type: [string, 'null'] }
             username: { type: [string, 'null'] }
         profile: { $ref: '#/components/schemas/Profile' }
+    HomeworkAttachment:
+      type: object
+      required: [id, name, size, mime]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        size: { type: integer, minimum: 1, description: Размер в байтах }
+        mime: { type: string, description: Определён по содержимому }
     Homework:
       type: object
       required: [groupId, date, lessonNumber, subgroup, subject, lessonTime, sharedText, personalText, text, source, updatedAt, version]
@@ -788,6 +887,12 @@ components:
         subgroup: { type: [integer, 'null'] }
         subject: { type: string }
         lessonTime: { type: string }
+        attachments: { type: array, items: { $ref: '#/components/schemas/HomeworkAttachment' } }
+        sharedAttachments: { type: array, items: { $ref: '#/components/schemas/HomeworkAttachment' } }
+        personalAttachments: { type: array, items: { $ref: '#/components/schemas/HomeworkAttachment' } }
+        sharedAuthorName: { type: [string, 'null'] }
+        sharedUpdatedAt: { type: [string, 'null'], format: date-time }
+        sharedVersion: { type: integer }
         sharedText: { type: [string, 'null'] }
         personalText: { type: [string, 'null'] }
         text: { type: string }

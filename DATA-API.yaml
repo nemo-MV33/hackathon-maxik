@@ -237,3 +237,46 @@ checks:
 # запросов совместимы с ИРНИТУ. week, lesson.date и ключи ДЗ — даты вуза.
 # startsAt/endsAt — ISO-моменты. Отображение, сводка и тихие часы используют IANA
 # из профиля; PUT /api/me принимает timeZone, quietHours и groupId.
+
+  - name: upload-homework-attachment-requires-max
+    role: anonymous
+    request:
+      method: POST
+      path: /api/attachments
+      query: { scope: shared, name: test.pdf }
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+  - name: attachment-link-requires-max
+    role: anonymous
+    request:
+      method: GET
+      path: /api/attachments/00000000-0000-4000-8000-000000000000/link
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+  - name: attachment-download-requires-max-or-signature
+    role: anonymous
+    request:
+      method: GET
+      path: /api/attachments/00000000-0000-4000-8000-000000000000
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+  - name: expired-attachment-signature
+    role: anonymous
+    request:
+      method: GET
+      path: /api/attachments/00000000-0000-4000-8000-000000000000
+      query: { user: 1, expires: 1, signature: expired }
+    expected:
+      statusCodes: [403]
+      contentType: application/json
+  - name: discard-attachment-requires-max
+    role: anonymous
+    request:
+      method: DELETE
+      path: /api/attachments/00000000-0000-4000-8000-000000000000
+    expected:
+      statusCodes: [401]
+      contentType: application/json

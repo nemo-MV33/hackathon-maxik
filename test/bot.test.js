@@ -1,3 +1,4 @@
+import { AttachmentStore } from '../src/storage/attachments.js';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -59,7 +60,7 @@ const service = {
   auditorySchedule: schedule('auditory'),
 };
 
-const setup = async (t, scheduleService = service) => {
+const setup = async (t, scheduleService = service, options = {}) => {
   const directory = await mkdtemp(join(tmpdir(), 'norfly-bot-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const preferences = new PreferencesStore(join(directory, 'preferences.json'));
@@ -68,7 +69,7 @@ const setup = async (t, scheduleService = service) => {
   const unreachable = new Set();
   const make = () => {
     let changes;
-    const bot = createBot({ token: 'test', service: scheduleService, preferences, community, getLessonChanges: () => changes });
+    const bot = createBot({ token: 'test', homeworkAttachmentWindowMs: 0, service: scheduleService, preferences, community, getLessonChanges: () => changes, ...options });
     changes = new LessonChangeService({ community, preferences, service: scheduleService, bot });
     bot.botInfo = BOT;
     bot.catch((error) => { throw error; });
@@ -104,11 +105,11 @@ const setup = async (t, scheduleService = service) => {
     }
     return replies;
   };
-  const say = (user, text, { chat = PRIVATE_CHAT(user), reply, markup } = {}) => run({
+  const say = (user, text, { chat = PRIVATE_CHAT(user), reply, markup, attachments, mid } = {}) => run({
     update_type: 'message_created',
     message: {
       sender: user, recipient: chat,
-      body: { mid: `m${clock}`, text, ...(markup ? { markup } : {}) },
+      body: { mid: mid ?? `m${clock}`, text, ...(attachments ? { attachments } : {}), ...(markup ? { markup } : {}) },
       ...(reply ? { link: { type: 'reply', sender: reply } } : {}),
     },
   });
@@ -121,7 +122,7 @@ const setup = async (t, scheduleService = service) => {
   const payloads = (reply) => buttons(reply).map((item) => item.payload).filter(Boolean);
   const restart = () => { bot = make(); };
 
-  return { run, say, press, payloads, buttons, restart, preferences, community, sent, unreachable };
+  return { run, say, press, payloads, buttons, restart, preferences, community, sent, unreachable, directory, getBot: () => bot };
 };
 
 test('parseCommand понимает упоминание бота, регистр и аргументы', () => {
@@ -696,4 +697,45 @@ test('кнопка пары с вузом отвергается после см
   const [expired] = await press(STUDENT, payload);
   assert.ok(expired.notification);
   await say(STUDENT, 'Не должно попасть в другую группу');
+});
+
+
+test('бот: текст и фото одним сообщением, серия, повторы, только файлы, личная версия', async (t) => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aS1sAAAAASUVORK5CYII=', 'base64');
+  const { say, press, preferences, community, directory, getBot, sent } = await setup(t, service, {
+    homeworkAttachmentWindowMs: 10_000, downloadAttachment: async () => png,
+  });
+  community.attachmentStore = new AttachmentStore(join(directory, 'files'), { community, preferences, secret: 'test' });
+  await community.setChat(GROUP_CHAT.chat_id, { group: { id: 11, title: 'ИСТб-25-1' }, headman: { userId: HEADMAN.user_id } });
+  await preferences.set(HEADMAN.user_id, { selection: { kind: 'group', id: 11, title: 'ИСТб-25-1' }, lang: 'ru' });
+  const date = toDateKey(new Date());
+  const photo = { type: 'image', payload: { token: 'photo-token', url: 'https://photo.okcdn.ru/test' } };
+  await press(HEADMAN, `gh:${date}:1:0`, { chat: GROUP_CHAT });
+  await say(HEADMAN, 'x'.repeat(2001), { chat: GROUP_CHAT, mid: 'too-long' });
+  await assert.rejects(getBot().flushHomeworkAttachments(), /2000/);
+  await say(HEADMAN, 'Задачи с доски', { chat: GROUP_CHAT, mid: 'single', attachments: [photo] });
+  assert.equal((await community.homeworkForGroup(11)).length, 0);
+  await getBot().flushHomeworkAttachments();
+  let item = (await community.homeworkForGroup(11))[0];
+  assert.equal(item.text, 'Задачи с доски');
+  assert.equal(item.attachments.length, 1);
+  assert.equal(item.version, 1);
+  assert.ok(sent.some((reply) => reply.extra.attachments?.some((attachment) => attachment.type === 'image' && attachment.payload.token === 'photo-token')));
+  await press(HEADMAN, `gh:${date}:1:0`);
+  await say(HEADMAN, 'Новая версия', { mid: 'caption' });
+  await say(HEADMAN, '', { mid: 'part', attachments: [photo] });
+  await say(HEADMAN, '', { mid: 'part', attachments: [photo] });
+  await getBot().flushHomeworkAttachments();
+  item = (await community.homeworkForGroup(11))[0];
+  assert.equal(item.text, 'Новая версия');
+  assert.equal(item.version, 2);
+  assert.equal(item.attachments.length, 1);
+  await press(HEADMAN, `ph:${date}:1:0`);
+  await say(HEADMAN, '', { attachments: [photo] });
+  await getBot().flushHomeworkAttachments();
+  const personal = (await community.homeworkForUser(11, HEADMAN.user_id))[0];
+  assert.equal(personal.source, 'personal');
+  assert.equal(personal.text, '');
+  assert.equal(personal.attachments.length, 1);
+  assert.equal(personal.sharedAttachments.length, 1);
 });
