@@ -1,21 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { webApp } from '../bridge/max';
+import { BackButtonStack } from './back-button-stack.mjs';
 
-// Колбэк держим в ref, чтобы кнопка не мигала на каждом рендере из-за новой функции.
+let stack: BackButtonStack | undefined;
+
 export const useBackButton = (onBack: (() => void) | undefined) => {
   const callback = useRef(onBack);
   callback.current = onBack;
   const enabled = Boolean(onBack);
-
   useEffect(() => {
-    const button = webApp()?.BackButton;
-    if (!button || !enabled) return undefined;
-    const handler = () => callback.current?.();
-    button.show();
-    button.onClick(handler);
-    return () => {
-      button.offClick(handler);
-      button.hide();
-    };
+    const app = webApp();
+    if (!app?.initData || !app.BackButton || !enabled) return undefined;
+    stack ??= new BackButtonStack(app.BackButton);
+    return stack.add(() => callback.current?.());
   }, [enabled]);
 };

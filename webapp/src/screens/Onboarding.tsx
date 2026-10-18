@@ -80,21 +80,19 @@ const SubgroupStep = ({ group, current, onPick, onBack }: {
         <p className="eyebrow">{[group.institute, group.course && t.course(group.course)].filter(Boolean).join(', ')}</p>
         <h1 className="display">{group.title}</h1>
       </div>
-      <div className="choice-list" role="radiogroup" aria-label={t.subgroupField}>
+      <div className="subgroup-options" role="radiogroup" aria-label={t.subgroupField}>
         {subgroups.map((option) => (
           <button
             key={option.title}
             type="button"
             role="radio"
             aria-checked={currentSubgroup === option.value}
-            className="choice"
+            className="subgroup-option"
             onClick={() => onPick(option.value)}
           >
             <span className="choice__text">
               <span className="choice__title" data-current={t.current}>{option.title}</span>
-              <span className="choice__hint">{option.hint}</span>
             </span>
-            <ChevronRight size={18} className="choice__chevron" />
           </button>
         ))}
       </div>
@@ -105,7 +103,7 @@ const SubgroupStep = ({ group, current, onPick, onBack }: {
 
 export const Onboarding = ({ current, onDone, onCancel }: Props) => {
   const [universityId, setUniversityId] = useState<string | null>(null);
-  const [groups, retry] = useAsync(() => universityId ? loadGroups(universityId) : Promise.resolve([]), [universityId]);
+  const [groups, retry] = useAsync(() => universityId ? loadGroups(universityId) : Promise.resolve([]), [universityId], 'Onboarding-lessons');
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<Group | null>(null);
   useBackButton(picked ? undefined : universityId ? () => setUniversityId(null) : onCancel);

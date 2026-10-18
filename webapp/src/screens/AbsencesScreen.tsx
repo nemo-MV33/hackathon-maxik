@@ -30,7 +30,7 @@ export const AbsencesScreen = ({ profile, onBack, onOpenStudent }: Props) => {
   const now = useNow();
   const todayKey = toDateKey(now);
   const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const [lessons] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, toDateKey(addDays(now, 7))), [profile.group.id, profile.subgroup, todayKey]);
+  const [lessons] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, toDateKey(addDays(now, 7))), [profile.group.id, profile.subgroup, todayKey], 'AbsencesScreen-lessons');
   const [history, setHistory] = useState<AbsenceHistory | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);

@@ -1,3 +1,4 @@
+import { ResourceCache } from '../lib/resource-cache.mjs';
 import { addDays, fromDateKey, toDateKey } from '../lib/date';
 import { lessonDate, userTimeZone } from '../lib/timezone';
 import { apiRequest } from '../lib/api';
@@ -60,11 +61,13 @@ export const loadGroups = async (universityId = 'irnitu'): Promise<Group[]> => {
   try { return (await apiRequest<{ items: Group[] }>(`/api/groups?universityId=${universityId}&limit=5000`)).items; }
   catch { return (await load<Group[]>('groups.json')).map((group) => ({ ...group, id: /^\d+$/.test(String(group.id)) ? `irnitu~${group.id}` : group.id })).filter((group) => (group.universityId ?? 'irnitu') === universityId); }
 };
-export const invalidateSchedule = () => cache.clear();
+const sourceCache = new ResourceCache();
+window.addEventListener('focus', () => sourceCache.clear());
+export const invalidateSchedule = () => { cache.clear(); sourceCache.clear(); };
 
 // Динамический API применяет отметки старосты и запускает обновление устаревшей недели.
 // Статическая выгрузка остаётся доступной при недоступности сервера.
-const loadSourceWeek = async (groupId: string | number, weekStart: string, kind: 'group' | 'teacher' | 'auditory' = 'group'): Promise<WeekSchedule> => {
+const fetchSourceWeek = async (groupId: string | number, weekStart: string, kind: 'group' | 'teacher' | 'auditory' = 'group'): Promise<WeekSchedule> => {
   try {
     const result = await apiRequest<WeekSchedule>(`/api/schedule/${kind}/${groupId}?week=${weekStart}`);
     return { ...result, weekStart, lessons: result.lessons.map((lesson) => ({ ...lesson, stale: result.stale, updatedAt: lesson.updatedAt ?? result.updatedAt })) };
@@ -76,6 +79,10 @@ const loadSourceWeek = async (groupId: string | number, weekStart: string, kind:
       throw error;
     }
   }
+};
+
+const loadSourceWeek = (groupId: string | number, weekStart: string, kind: 'group' | 'teacher' | 'auditory' = 'group') => {
+  return sourceCache.get(`${kind}:${groupId}:${weekStart}`, () => fetchSourceWeek(groupId, weekStart, kind));
 };
 
 // Границы пользовательской недели могут пересекать соседнюю неделю вуза.

@@ -1,3 +1,4 @@
+import { TimeZonePicker } from '../components/TimeZonePicker';
 import { saveTimeZone, userTimeZone } from '../lib/timezone';
 import { useState } from 'react';
 import { Button } from '@maxhub/max-ui';
@@ -102,17 +103,11 @@ export const ProfileScreen = ({ profile, onBack, onOpen, onAccountDeleted }: Pro
         <p className="settings__label">{t.settingsSection}</p>
         <div className="settings-list">
           <Row icon={<BellIcon size={20} />} title={t.notificationsTitle} hint={notifyHint} onClick={() => onOpen('notifications')} />
-          <label className="settings-row settings-row--static settings-row--wrap">
-            <span className="settings-row__text"><span className="settings-row__title">{t.timeZone}</span></span>
-            <select aria-label={t.timeZone} value={userTimeZone()} disabled={savingZone} onChange={async (event) => {
-              const zone = event.target.value;
-              setSavingZone(true); setTimeZoneError(null);
-              try { await update({ timeZone: zone }); saveTimeZone(zone); window.location.reload(); }
-              catch (error) { setTimeZoneError((error as Error).message); setSavingZone(false); }
-            }}>
-              {[...new Set([userTimeZone(), ...Intl.supportedValuesOf('timeZone')])].map((zone) => <option value={zone} key={zone}>{zone}</option>)}
-            </select>
-          </label>
+          <TimeZonePicker value={userTimeZone()} disabled={savingZone} onChange={async (zone) => {
+            setSavingZone(true); setTimeZoneError(null);
+            try { await update({ timeZone: zone }); saveTimeZone(zone); window.location.reload(); }
+            catch (error) { setTimeZoneError((error as Error).message); setSavingZone(false); }
+          }} />
           {timeZoneError && <p role="alert" className="toast toast--error">{timeZoneError}</p>}
           <div className="settings-row settings-row--static">
             <span className="settings-row__icon"><GlobeIcon /></span>

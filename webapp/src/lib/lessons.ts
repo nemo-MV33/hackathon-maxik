@@ -28,6 +28,6 @@ export const loadSemesterLessons = async (groupId: string | number, subgroup: 1 
 
 // Номер пары для студента — порядковый в его дне: если день начинается в 13:45, это «1 пара».
 export const ordinalIn = (dayLessons: Lesson[], lesson: Lesson) => {
-  const slots = [...new Set(dayLessons.map((item) => item.lessonNumber))].sort((a, b) => a - b);
+  const slots = [...new Set([...dayLessons].sort((a, b) => a.time.localeCompare(b.time)).map((item) => item.lessonNumber))];
   return slots.indexOf(lesson.lessonNumber) + 1;
 };

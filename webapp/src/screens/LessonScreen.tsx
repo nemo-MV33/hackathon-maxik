@@ -1,3 +1,4 @@
+import { HomeworkCompletion } from '../components/HomeworkCompletion';
 import { HomeworkDetails, HomeworkDetailsEditor } from '../components/HomeworkDetails';
 import { HomeworkHistory } from '../components/HomeworkHistory';
 import type { Deadline, Submission } from '../data/homework';
@@ -15,7 +16,7 @@ import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
 import { ErrorState, Loading } from '../components/Status';
 import { ChevronLeft } from '../components/Icon';
-import { isControlLesson, lessonKindClass, lessonKindCode, lessonKindName } from '../lib/lessonKind';
+import { isControlLesson, lessonKindClass, lessonKindName } from '../lib/lessonKind';
 import { useI18n } from '../lib/i18n';
 import { AbsenceSheet } from '../components/AbsenceSheet';
 import { loadAbsences, type AbsenceKind, type AbsenceNote } from '../lib/api';
@@ -61,8 +62,7 @@ const LessonHeading = ({ lesson }: { lesson: Lesson }) => {
   return (
   <header className={`lesson-head ${lessonKindClass(lesson.lessonType)}${isControlLesson(lesson.lessonType) ? ' is-control' : ''}`}>
     <p className="eyebrow">
-      <span className="kind-code">{lessonKindCode(lesson.lessonType)}</span>
-      {lessonKindName(lesson.lessonType)}
+      <span className="kind-code">{lessonKindName(lesson.lessonType)}</span>
       {lesson.transferred && <span className="flag">{t.transferred}</span>}
     </p>
     <h1 className="display">{lesson.subject}</h1>
@@ -165,7 +165,117 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
         <button type="button" className="back-link" onClick={onBack}><ChevronLeft size={18} />{t.scheduleBack}</button>
       )}
       <LessonHeading lesson={lesson} />
-      <LessonFacts lesson={lesson} />
+
+      <section className="homework" aria-labelledby="homework-title">
+        <div className="section-head">
+          <h2 id="homework-title" className="section-title">{t.homeworkTitle}</h2>
+          {homework.status === 'ready' && <p className="section-note">{t.roles[homework.data.role]}</p>}
+        </div>
+
+        {homework.status === 'loading' && <Loading />}
+        {homework.status === 'error' && <ErrorState message={homework.message} onRetry={() => refresh()} />}
+
+        {homework.status === 'ready' && !editing && (
+          <>
+            <div className="hw-block hw-block--shared">
+              <p className="hw-block__label">{t.forGroup}</p>
+              {item?.sharedText
+                ? <p className="hw-block__text">{item.sharedText}</p>
+                : !item?.sharedAttachments?.length && <p className="hw-block__empty">{t.nobodyWrote}</p>}
+              {item?.source === 'shared' && <HomeworkCompletion item={item} onSaved={() => refresh(true)} />}
+              <AttachmentList files={item?.sharedAttachments} />
+              {(item?.sharedText || !!item?.sharedAttachments?.length) && <HomeworkDetails deadline={item.sharedDeadline} submission={item.sharedSubmission} completed={item.completed} dueAt={item.sharedDueAt ?? (item.source === 'shared' ? item.dueAt : null)} />}
+              <HomeworkHistory history={item?.sharedHistory ?? []} lesson={lesson} canRestore={homework.data.role === 'headman' || homework.data.role === 'editor'} currentVersion={item?.sharedVersion} onSaved={() => refresh(true)} />
+              {(item?.sharedText || item?.sharedAttachments?.length) && (
+                <p className="hw-block__meta">
+                  {[item.sharedAuthorName ?? item.authorName, formatStamp(item.sharedUpdatedAt ?? item.updatedAt), (item.sharedVersion ?? item.version) > 1 && t.edit(item.sharedVersion ?? item.version)].filter(Boolean).join(', ')}
+                </p>
+              )}
+            </div>
+            {(item?.personalText || !!item?.personalAttachments?.length) && <div className={`hw-block${(item?.personalText || item?.personalAttachments?.length) ? ' hw-block--personal' : ''}`}>
+              <p className="hw-block__label">{t.forMe}</p>
+              {item?.personalText
+                ? <p className="hw-block__text">{item.personalText}</p>
+                : !item?.personalAttachments?.length && <p className="hw-block__empty">{item?.sharedText ? t.noOwnVersion : t.noOwnYet}</p>}
+              {item?.source === 'personal' && <HomeworkCompletion item={item} onSaved={() => refresh(true)} />}
+              <AttachmentList files={item?.personalAttachments} />
+              {(item?.personalText || !!item?.personalAttachments?.length) && <>
+                <HomeworkDetails deadline={item.personalDeadline} submission={item.personalSubmission} completed={item.completed} dueAt={item.personalDueAt ?? (item.source === 'personal' ? item.dueAt : null)} />
+                <HomeworkHistory history={item.personalHistory ?? []} lesson={lesson} onSaved={() => refresh(true)} />
+              </>}
+            </div>}
+
+            <div className="actions">
+              {canEditShared && (
+                <Button stretched size="large" onClick={() => startEditing('shared')}>
+                  {item?.sharedText || item?.sharedAttachments?.length ? t.editShared : t.writeShared}
+                </Button>
+              )}
+              <Button stretched size="large" variant={canEditShared ? 'secondary' : 'primary'} onClick={() => startEditing('personal')}>
+                {item?.personalText || item?.personalAttachments?.length ? t.editOwn : t.writeOwn}
+              </Button>
+            </div>
+            {(item?.personalText || item?.personalAttachments?.length || (canEditShared && (item?.sharedText || item?.sharedAttachments?.length))) && <details className="homework-management"><summary>{t.homeworkManage}</summary><div className="actions">
+              {(item?.personalText || !!item?.personalAttachments?.length) && (
+                <Button stretched variant="ghost" disabled={saving} onClick={() => remove('personal')}>
+                  {t.deleteOwn}
+                </Button>
+              )}
+              {canEditShared && (item?.sharedText || !!item?.sharedAttachments?.length) && (
+                <Button
+                  stretched
+                  variant={confirmDelete ? 'destructive' : 'ghost'}
+                  loading={saving && confirmDelete}
+                  onClick={() => remove('shared')}
+                >
+                  {confirmDelete ? t.confirmDelete : t.deleteShared}
+                </Button>
+              )}
+            </div></details>}
+          </>
+        )}
+
+        {homework.status === 'ready' && editing && (
+          <div className="editor">
+            <p className="editor__scope">
+              {scope === 'shared' ? t.sharedScope : t.ownScope}
+            </p>
+            <Textarea
+              autoFocus
+              maxLength={MAX_LENGTH}
+              rows={6}
+              placeholder={t.placeholder}
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+            />
+            <p className={`editor__counter${text.length > MAX_LENGTH * 0.9 ? ' is-near' : ''}`}>{text.length} / {MAX_LENGTH}</p>
+            <AttachmentEditor files={files} scope={scope} onChange={setFiles} onBusy={setUploading} />
+            <HomeworkDetailsEditor deadline={deadline} submission={submission} onDeadline={setDeadline} onSubmission={setSubmission} />
+            <div className="actions">
+              <Button stretched size="large" disabled={uploading || (!text.trim() && !files.length)} loading={saving} onClick={save}>{t.save}</Button>
+              <Button stretched variant="ghost" disabled={saving} onClick={() => setEditing(false)}>{t.cancel}</Button>
+            </div>
+          </div>
+        )}
+
+        {homework.status === 'ready' && !editing && (item?.text || !!item?.attachments?.length) && (
+          <details className="hw-block reminder-options"><summary>{t.reminder}</summary>
+            <Button stretched variant="secondary" disabled={saving} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', new Date(new Date(lessonMoment(lesson)).getTime() - 600_000).toISOString(), 'lesson', 10), t.beforeLesson)}>{t.beforeLesson}</Button>
+            {(['due-day', 'due-morning'] as const).map((mode) => <Button key={mode} stretched aria-pressed={item.reminderMode === mode} variant="secondary" disabled={saving || !item.dueAt} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', item.dueAt, mode), t.reminder)}>{mode === 'due-day' ? t.dueDay : t.dueMorning}</Button>)}
+            <ReminderPicker
+              value={item.remindAt}
+              dateKey={lessonDate(lesson)}
+              now={now}
+              onChange={(value) => void run(() => saveHomework(lesson, null, 'reminder', value), value ? t.reminderSet(formatMoment(value)) : t.reminderOff)}
+            />
+          </details>
+        )}
+
+        {notice && (
+          <p className={`toast toast--${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.text}</p>
+        )}
+      </section>
+      <details className="lesson-info"><summary>{t.lessonInformation}</summary><LessonFacts lesson={lesson} />
       <ScheduleFreshness at={lesson.updatedAt} stale={lesson.stale} />
       {lesson.markedBy && lesson.markedAt && <p className="footnote">{t.moveMarked(lesson.markedBy, formatStamp(lesson.markedAt))}</p>}
       {item?.status === 'orphaned' && <p role="status">{t.orphaned}</p>}
@@ -189,112 +299,7 @@ export const LessonScreen = ({ lesson, profile, profileRevision, onBack }: Props
       )}
       {absence && <AbsenceSheet kind={absence} lesson={lesson} onClose={() => setAbsence(null)} />}
 
-      <section className="homework" aria-labelledby="homework-title">
-        <div className="section-head">
-          <h2 id="homework-title" className="section-title">{t.homeworkTitle}</h2>
-          {homework.status === 'ready' && <p className="section-note">{t.roles[homework.data.role]}</p>}
-        </div>
-
-        {homework.status === 'loading' && <Loading />}
-        {homework.status === 'error' && <ErrorState message={homework.message} onRetry={() => refresh()} />}
-
-        {homework.status === 'ready' && !editing && (
-          <>
-            <div className="hw-block">
-              <p className="hw-block__label">{t.forGroup}</p>
-              {item?.sharedText
-                ? <p className="hw-block__text">{item.sharedText}</p>
-                : !item?.sharedAttachments?.length && <p className="hw-block__empty">{t.nobodyWrote}</p>}
-              <AttachmentList files={item?.sharedAttachments} />
-              {(item?.sharedText || !!item?.sharedAttachments?.length) && <HomeworkDetails deadline={item.sharedDeadline} submission={item.sharedSubmission} dueAt={item.sharedDueAt ?? (item.source === 'shared' ? item.dueAt : null)} />}
-              <HomeworkHistory history={item?.sharedHistory ?? []} lesson={lesson} canRestore={homework.data.role === 'headman' || homework.data.role === 'editor'} currentVersion={item?.sharedVersion} onSaved={() => refresh(true)} />
-              {(item?.sharedText || item?.sharedAttachments?.length) && (
-                <p className="hw-block__meta">
-                  {[item.sharedAuthorName ?? item.authorName, formatStamp(item.sharedUpdatedAt ?? item.updatedAt), (item.sharedVersion ?? item.version) > 1 && t.edit(item.sharedVersion ?? item.version)].filter(Boolean).join(', ')}
-                </p>
-              )}
-            </div>
-            <div className={`hw-block${(item?.personalText || item?.personalAttachments?.length) ? ' hw-block--personal' : ''}`}>
-              <p className="hw-block__label">{t.forMe}</p>
-              {item?.personalText
-                ? <p className="hw-block__text">{item.personalText}</p>
-                : !item?.personalAttachments?.length && <p className="hw-block__empty">{item?.sharedText ? t.noOwnVersion : t.noOwnYet}</p>}
-              <AttachmentList files={item?.personalAttachments} />
-              {(item?.personalText || !!item?.personalAttachments?.length) && <>
-                <HomeworkDetails deadline={item.personalDeadline} submission={item.personalSubmission} dueAt={item.personalDueAt ?? (item.source === 'personal' ? item.dueAt : null)} />
-                <HomeworkHistory history={item.personalHistory ?? []} lesson={lesson} onSaved={() => refresh(true)} />
-              </>}
-            </div>
-
-            <div className="actions">
-              {canEditShared && (
-                <Button stretched size="large" onClick={() => startEditing('shared')}>
-                  {item?.sharedText || item?.sharedAttachments?.length ? t.editShared : t.writeShared}
-                </Button>
-              )}
-              <Button stretched size="large" variant={canEditShared ? 'secondary' : 'primary'} onClick={() => startEditing('personal')}>
-                {item?.personalText || item?.personalAttachments?.length ? t.editOwn : t.writeOwn}
-              </Button>
-              {(item?.personalText || !!item?.personalAttachments?.length) && (
-                <Button stretched variant="ghost" disabled={saving} onClick={() => remove('personal')}>
-                  {t.deleteOwn}
-                </Button>
-              )}
-              {canEditShared && (item?.sharedText || !!item?.sharedAttachments?.length) && (
-                <Button
-                  stretched
-                  variant={confirmDelete ? 'destructive' : 'ghost'}
-                  loading={saving && confirmDelete}
-                  onClick={() => remove('shared')}
-                >
-                  {confirmDelete ? t.confirmDelete : t.deleteShared}
-                </Button>
-              )}
-            </div>
-          </>
-        )}
-
-        {homework.status === 'ready' && editing && (
-          <div className="editor">
-            <p className="editor__scope">
-              {scope === 'shared' ? t.sharedScope : t.ownScope}
-            </p>
-            <Textarea
-              autoFocus
-              maxLength={MAX_LENGTH}
-              rows={6}
-              placeholder={t.placeholder}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-            />
-            <p className={`editor__counter${text.length > MAX_LENGTH * 0.9 ? ' is-near' : ''}`}>{text.length} / {MAX_LENGTH}</p>
-            <HomeworkDetailsEditor deadline={deadline} submission={submission} onDeadline={setDeadline} onSubmission={setSubmission} />
-            <AttachmentEditor files={files} scope={scope} onChange={setFiles} onBusy={setUploading} />
-            <div className="actions">
-              <Button stretched size="large" disabled={uploading || (!text.trim() && !files.length)} loading={saving} onClick={save}>{t.save}</Button>
-              <Button stretched variant="ghost" disabled={saving} onClick={() => setEditing(false)}>{t.cancel}</Button>
-            </div>
-          </div>
-        )}
-
-        {homework.status === 'ready' && !editing && (item?.text || !!item?.attachments?.length) && (
-          <div className="hw-block">
-            <p className="hw-block__label">{t.reminder}</p>
-            <Button stretched variant="secondary" disabled={saving} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', new Date(new Date(lessonMoment(lesson)).getTime() - 600_000).toISOString(), 'lesson', 10), t.beforeLesson)}>{t.beforeLesson}</Button>
-            {(['due-day', 'due-morning'] as const).map((mode) => <Button key={mode} stretched aria-pressed={item.reminderMode === mode} variant="secondary" disabled={saving || !item.dueAt} onClick={() => void run(() => saveHomework(lesson, null, 'reminder', item.dueAt, mode), t.reminder)}>{mode === 'due-day' ? t.dueDay : t.dueMorning}</Button>)}
-            <ReminderPicker
-              value={item.remindAt}
-              dateKey={lessonDate(lesson)}
-              now={now}
-              onChange={(value) => void run(() => saveHomework(lesson, null, 'reminder', value), value ? t.reminderSet(formatMoment(value)) : t.reminderOff)}
-            />
-          </div>
-        )}
-
-        {notice && (
-          <p className={`toast toast--${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.text}</p>
-        )}
-      </section>
+      </details>
     </div>
   );
 };

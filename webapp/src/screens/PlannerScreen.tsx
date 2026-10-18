@@ -44,7 +44,14 @@ export const PlannerScreen = ({ profile, profileRevision, onOpenLesson, onOpenPr
   const [openAnnouncement, setOpenAnnouncement] = useState<Announcement | null>(null);
   const weekStart = toDateKey(startOfWeek(fromDateKey(selected)));
   const days = Array.from({ length: 7 }, (_, index) => toDateKey(addDays(fromDateKey(weekStart), index)));
-  const [lessons, retry] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, days[0], days[6]), [profile.group.id, profile.subgroup, weekStart]);
+  const [lessons, retry] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, days[0], days[6]), [profile.group.id, profile.subgroup, weekStart], 'PlannerScreen-lessons', revision);
+  useEffect(() => {
+    const update = () => setRevision((value) => value + 1);
+    window.addEventListener('schedule-changed', update);
+    window.addEventListener('focus', update);
+    const timer = window.setInterval(() => { if (!document.hidden) update(); }, 30_000);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', update); window.removeEventListener('schedule-changed', update); };
+  }, []);
   const [homework, refresh] = useRemoteHomework(profile.group.id, days[0], days[6], `${profileRevision}:${revision}`);
 
   useEffect(() => {
@@ -57,7 +64,7 @@ export const PlannerScreen = ({ profile, profileRevision, onOpenLesson, onOpenPr
   const items = homework.status === 'ready' ? homework.data.items : [];
   // В планере видно и прошедшие дни недели: удобно проверить, что было задано.
   const tasks = buildTasks(items, announcements, weekLessons, days[0]);
-  const dayTasks = tasks.filter((task) => task.date === selected || (selected === todayKey && task.kind === 'homework' && task.item.dueAt && Date.parse(task.item.dueAt) < Date.now()));
+  const dayTasks = tasks.filter((task) => task.date === selected || (selected === todayKey && task.kind === 'homework' && !task.item.completed && task.item.dueAt && Date.parse(task.item.dueAt) < Date.now()));
   const countOn = (key: string) => tasks.filter((task) => task.date === key).length;
   const shiftWeek = (weeks: number) => setSelected(toDateKey(addDays(fromDateKey(weekStart), weeks * 7)));
 
@@ -156,7 +163,7 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const horizon = toDateKey(addDays(now, 28));
-  const [lessons] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, horizon), [profile.group.id, profile.subgroup, todayKey]);
+  const [lessons] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, horizon), [profile.group.id, profile.subgroup, todayKey], 'PlannerScreen-composer');
   const all = lessons.status === 'ready' ? lessons.data : [];
   const lessonDays = [...new Set(all.map((lesson) => lessonDate(lesson)))];
   const dayLessons = all.filter((lesson) => lessonDate(lesson) === date);

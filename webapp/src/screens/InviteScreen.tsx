@@ -13,7 +13,7 @@ type Props = {
 
 export const InviteScreen = ({ groupId, subgroup, onAccept, onOther }: Props) => {
   const { t } = useI18n();
-  const [groups, retry] = useAsync(() => loadGroups(String(groupId).split('~')[0] === 'bgu' ? 'bgu' : 'irnitu'), [groupId]);
+  const [groups, retry] = useAsync(() => loadGroups(String(groupId).split('~')[0] === 'bgu' ? 'bgu' : 'irnitu'), [groupId], 'InviteScreen-lessons');
   if (groups.status === 'loading') return <Loading />;
   if (groups.status === 'error') return <div className="screen"><ErrorState message={groups.message} onRetry={retry} /></div>;
   const group = groups.data.find((item) => item.id === groupId);

@@ -23,6 +23,7 @@ export const EntityScheduleScreen = ({ target, onBack }: { target: EntityTarget;
   const [week, retry] = useAsync(
     () => loadWeek(target.id, weekStart, target.kind),
     [target.kind, target.id, weekStart],
+    'EntityScheduleScreen-lessons',
   );
   const days = Array.from({ length: 7 }, (_, index) => toDateKey(addDays(fromDateKey(weekStart), index)));
   const lessons = week.status === 'ready' ? week.data.lessons : [];

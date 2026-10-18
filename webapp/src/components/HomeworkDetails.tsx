@@ -1,15 +1,15 @@
+import { useState } from 'react';
 import type { Deadline, Submission } from '../data/homework';
 import { useI18n } from '../lib/i18n';
 import { formatMoment } from '../lib/date';
-import { userTimeZone } from '../lib/timezone';
 import { openExternal } from '../bridge/max';
 
-type Details = { deadline?: Deadline; submission?: Submission | null; dueAt?: string | null };
-export const HomeworkDetails = ({ deadline, submission, dueAt }: Details) => {
+type Details = { deadline?: Deadline; submission?: Submission | null; dueAt?: string | null; completed?: boolean };
+export const HomeworkDetails = ({ deadline, submission, dueAt, completed }: Details) => {
   const { t } = useI18n();
   return <div className="hw-details">
-    <p>{t.deadlineLabel}: {dueAt ? `${formatMoment(dueAt)} (${userTimeZone()})` : t.deadlineKinds[deadline?.kind ?? 'lesson']}</p>
-    {dueAt && Date.parse(dueAt) < Date.now() && <p className="callout" role="status">{t.overdue}</p>}
+    <p className="hw-details__deadline">{t.deadlineLabel}: {dueAt ? `${formatMoment(dueAt)}` : t.deadlineKinds[deadline?.kind ?? 'lesson']}</p>
+    {!completed && dueAt && Date.parse(dueAt) < Date.now() && <p className="callout" role="status">{t.overdue}</p>}
     {submission && <p>{t.submissionLabel}: {t.submissionKinds[submission.kind]}{submission.label ? ` · ${submission.label}` : ''}
       {submission.url && <><br /><a href={submission.url} target="_blank" rel="noreferrer" onClick={(event) => { if (openExternal(submission.url!)) event.preventDefault(); }}>{t.openSubmission}</a></>}
     </p>}
@@ -20,8 +20,9 @@ export const HomeworkDetailsEditor = ({ deadline, submission, onDeadline, onSubm
 }) => {
   const { t } = useI18n();
   const kind = deadline?.kind ?? 'lesson';
+  const [linkTouched, setLinkTouched] = useState(false);
   const invalidLink = submission?.url && (() => { try { const url = new URL(submission.url!); return url.protocol !== 'https:' || !!url.username || !!url.password; } catch { return true; } })();
-  return <div className="hw-details-editor">
+  return <details className="hw-details-editor" open={kind !== 'lesson' || !!submission || undefined}><summary>{t.homeworkOptions}</summary><div className="hw-details-editor__fields">
     <label className="field-label">{t.deadlineLabel}
       <select className="field" value={kind} onChange={(event) => onDeadline({ kind: event.target.value as Deadline['kind'] })}>
         {Object.entries(t.deadlineKinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
@@ -31,15 +32,18 @@ export const HomeworkDetailsEditor = ({ deadline, submission, onDeadline, onSubm
       <input className="field" type="datetime-local" required value={deadline?.local ?? ''} onInput={(event) => onDeadline({ kind: 'date', local: event.currentTarget.value })} onChange={(event) => onDeadline({ kind: 'date', local: event.target.value })} />
     </label>}
     <label className="field-label">{t.submissionLabel}
-      <select className="field" value={submission?.kind ?? ''} onChange={(event) => onSubmission(event.target.value ? { kind: event.target.value as Submission['kind'], label: submission?.label ?? '', url: submission?.url ?? null } : null)}>
+      <select className="field" value={submission?.kind ?? ''} onChange={(event) => {
+        const next = event.target.value as Submission['kind'];
+        onSubmission(next ? { kind: next, label: next === 'class' || next === 'moodle' ? '' : submission?.label ?? '', url: next === 'class' || next === 'email' ? null : submission?.url ?? null } : null);
+      }}>
         <option value="">{t.optionalField}</option>
         {Object.entries(t.submissionKinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
     </label>
-    {submission && <>
-      <label className="field-label">{t.submissionNote}<input className="field" value={submission.label ?? ''} maxLength={200} onChange={(event) => onSubmission({ ...submission, label: event.target.value })} /></label>
-      <label className="field-label">{t.submissionLink}<input className="field" type="url" inputMode="url" value={submission.url ?? ''} aria-invalid={!!invalidLink} onChange={(event) => onSubmission({ ...submission, url: event.target.value || null })} /></label>
-      {invalidLink && <p className="callout callout--error" role="alert">{t.httpsOnly}</p>}
+    {submission && submission.kind !== 'class' && <>
+      {submission.kind !== 'moodle' && <label className="field-label">{t.submissionNote}<input className="field" value={submission.label ?? ''} maxLength={200} onChange={(event) => onSubmission({ ...submission, label: event.target.value })} /></label>}
+      {submission.kind !== 'email' && <label className="field-label">{t.submissionLink}<input className="field" type="url" inputMode="url" placeholder="https://…" value={submission.url ?? ''} aria-invalid={linkTouched && !!invalidLink} onBlur={() => { setLinkTouched(true); const value = submission.url?.trim(); if (value && !/^[a-z][a-z0-9+.-]*:/i.test(value)) onSubmission({ ...submission, url: `https://${value}` }); }} onChange={(event) => onSubmission({ ...submission, url: event.target.value || null })} /></label>}
+      {linkTouched && invalidLink && <p className="callout callout--error" role="alert">{t.httpsOnly}</p>}
     </>}
-  </div>;
+  </div></details>;
 };

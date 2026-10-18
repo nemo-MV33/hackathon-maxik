@@ -1,6 +1,8 @@
+import { ResourceCache } from '../lib/resource-cache.mjs';
+import { currentUser } from '../bridge/max';
 import type { HomeworkAttachment } from '../components/HomeworkAttachments';
 import { addDays, fromDateKey, toDateKey } from '../lib/date';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Lesson } from './schedule';
 import { apiRequest } from '../lib/api';
 
@@ -10,6 +12,8 @@ export type HomeworkSnapshot = { text: string; attachments?: HomeworkAttachment[
 export type HomeworkEvent = { type: string; version?: number; at: string; by?: string | number; authorName?: string; before?: HomeworkSnapshot | null; after?: HomeworkSnapshot; restoredFrom?: number; added?: HomeworkAttachment[]; removed?: HomeworkAttachment[]; from?: { date: string; time?: string }; to?: { date: string; time?: string } | null };
 export type HomeworkDetailsInput = { deadline?: Deadline; submission?: Submission | null; restoreVersion?: number };
 export type HomeworkItem = {
+  completed?: boolean;
+  completionRevision?: string;
   deadline?: Deadline;
   submission?: Submission | null;
   dueAt?: string | null;
@@ -61,6 +65,14 @@ export type HomeworkState =
 export const homeworkKey = (lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'>) =>
   `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 
+const requests = new ResourceCache(5000);
+export const homeworkChanged = () => { requests.clear(); homeworkCache.clear(); window.dispatchEvent(new Event('homework-changed')); };
+
+export const completeHomework = async (item: HomeworkItem, completed: boolean) => {
+  await apiRequest('/api/homework', { method: 'PUT', body: JSON.stringify({ groupId: item.groupId, date: item.date, lessonNumber: item.lessonNumber, subgroup: item.subgroup, scope: 'completion', revision: item.completionRevision, completed }) });
+  homeworkChanged();
+};
+
 export const loadHomework = (groupId: string | number, from: string, to: string) =>
   apiRequest<HomeworkData>(`/api/homework?groupId=${groupId}&from=${toDateKey(addDays(fromDateKey(from), -1))}&to=${toDateKey(addDays(fromDateKey(to), 1))}&includeOverdue=true`);
 
@@ -83,23 +95,42 @@ export const saveHomework = (
       minutesBefore,
       ...(remindAt !== undefined ? { remindAt } : {}),
     }),
-  });
+  }).then((data) => { homeworkChanged(); return data; });
+
+const homeworkCache = new Map<string, HomeworkData>();
 
 export const useRemoteHomework = (groupId: string | number, from: string, to: string, dependency?: unknown) => {
-  const [state, setState] = useState<HomeworkState>({ status: 'loading' });
+  const actor = currentUser()?.id ?? new URLSearchParams(location.search).get('demoUser') ?? 'anonymous';
+  const cacheKey = `${actor}:${groupId}:${from}:${to}`;
+  const latest = useRef(cacheKey);
+  const sequence = useRef(0);
+  latest.current = cacheKey;
+  const cachedState = (): HomeworkState => homeworkCache.has(cacheKey) ? { status: 'ready', data: homeworkCache.get(cacheKey)! } : { status: 'loading' };
+  const [result, setResult] = useState<{ key: string; state: HomeworkState }>(() => ({ key: cacheKey, state: cachedState() }));
   const refresh = useCallback((silent = false) => {
-    // Тихое обновление после сохранения не прячет уже показанное ДЗ за спиннером.
-    if (!silent) setState({ status: 'loading' });
-    return loadHomework(groupId, from, to)
-      .then((data) => setState({ status: 'ready', data }) as void)
-      .catch((error: Error) => setState({ status: 'error', message: error.message }));
-  }, [groupId, from, to, dependency]);
+    const request = ++sequence.current;
+    if (!silent) setResult({ key: cacheKey, state: { status: 'loading' } });
+    return requests.get(cacheKey, () => loadHomework(groupId, from, to)).then((data) => {
+      if (latest.current !== cacheKey || request !== sequence.current) return;
+      if (homeworkCache.size >= 100) homeworkCache.delete(homeworkCache.keys().next().value!);
+      homeworkCache.set(cacheKey, data);
+      setResult({ key: cacheKey, state: { status: 'ready', data } });
+    }).catch((error: Error) => {
+      if (latest.current === cacheKey && request === sequence.current) setResult({ key: cacheKey, state: { status: 'error', message: error.message } });
+    });
+  }, [cacheKey, groupId, from, to, dependency]);
   useEffect(() => {
-    void refresh();
-    const update = () => { if (!document.hidden) void refresh(true); };
+    void refresh(homeworkCache.has(cacheKey));
+    const update = () => { if (!document.hidden) { requests.clear(); void refresh(true); } };
     const timer = window.setInterval(update, 10_000);
     window.addEventListener('focus', update);
-    return () => { window.clearInterval(timer); window.removeEventListener('focus', update); };
+    window.addEventListener('homework-changed', update);
+    return () => {
+      sequence.current += 1;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', update);
+      window.removeEventListener('homework-changed', update);
+    };
   }, [refresh]);
-  return [state, refresh] as const;
+  return [result.key === cacheKey ? result.state : cachedState(), refresh] as const;
 };

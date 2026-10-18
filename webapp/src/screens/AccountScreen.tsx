@@ -14,7 +14,7 @@ export const AccountScreen = ({ profile, onBack }: { profile: LocalProfile; onBa
     [t.fieldName, [me?.user.firstName ?? user?.first_name, me?.user.lastName ?? user?.last_name].filter(Boolean).join(' ') || '—'],
     [t.fieldUsername, me?.user.username ?? user?.username ? `@${me?.user.username ?? user?.username}` : '—'],
     [t.fieldMaxId, String(me?.user.id ?? user?.id ?? '—')],
-    [t.fieldUniversity, t.universityName],
+    [t.fieldUniversity, String(profile.group.id).startsWith('bgu~') ? 'БГУ / Baikal State University' : t.universityName],
     [t.fieldInstitute, profile.group.institute || me?.profile.institute || '—'],
     [t.fieldCourse, profile.group.course ? t.course(profile.group.course) : '—'],
     [t.fieldGroup, profile.group.title],

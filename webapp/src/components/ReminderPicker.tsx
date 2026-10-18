@@ -1,3 +1,4 @@
+import { BellIcon } from './Icon';
 import { userTimeZone } from '../lib/timezone';
 import { addDays, formatMoment, fromDateKey, fromLocalInput, userMoment, toDateKey, toLocalInput } from '../lib/date';
 import { useI18n } from '../lib/i18n';
@@ -73,7 +74,7 @@ export const ReminderPicker = ({ value, onChange, dateKey, now }: Props) => {
           aria-label={t.remindCustom}
         />
       )}
-      {value && <p className="reminder__note">🔔 {formatMoment(value)}, {userTimeZone()}</p>}
+      {value && <p className="reminder__note"><BellIcon size={16} /> {formatMoment(value)}, {userTimeZone()}</p>}
     </div>
   );
 };

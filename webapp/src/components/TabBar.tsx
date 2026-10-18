@@ -28,7 +28,7 @@ export const TabBar = ({ tab, onChange, headman }: Props) => {
             onClick={() => { if (tab !== item.id) haptic.tap(); onChange(item.id); }}
           >
             <span className="tabbar__icon">{item.icon}</span>
-            <span className="tabbar__label">{item.label}</span>
+            <span className="tabbar__label"><span className="tabbar__full">{item.label}</span><span className="tabbar__compact">{item.id === 'schedule' ? t.tabScheduleCompact : item.label}</span></span>
           </button>
         ))}
       </div>

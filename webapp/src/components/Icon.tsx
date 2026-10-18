@@ -56,3 +56,5 @@ export const ShareIcon = ({ size = 20, className }: IconProps) =>
   svg(size, className, <><path d="M12 15V4M8 8l4-4 4 4" /><path d="M6 11.5V19a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-7.5" /></>);
 export const GlobeIcon = ({ size = 20, className }: IconProps) =>
   svg(size, className, <><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5s1.1-6.1 3.4-8.5Z" /></>);
+
+export const CheckIcon = ({ size = 20, className }: IconProps) => svg(size, className, <path d="m5 12 4.5 4.5L19 7" />);

@@ -24,16 +24,12 @@ export const HeadmanScreen = ({ onOpenProfile, onOpenStudent }: { onOpenProfile:
   const [section, setSection] = useState<Section>('late');
   return (
     <div className="screen screen--tabbed screen--headman">
-      <TopBar
-        onOpenProfile={onOpenProfile}
-        left={(
-          <div className="segment" role="tablist" aria-label={t.tabHeadman}>
-            <button type="button" role="tab" aria-selected={section === 'late'} onClick={() => setSection('late')}>{t.lateSection}</button>
-            <button type="button" role="tab" aria-selected={section === 'homework'} onClick={() => setSection('homework')}>{t.homeworkTitle}</button>
-            <button type="button" role="tab" aria-selected={section === 'news'} onClick={() => setSection('news')}>{t.newsSection}</button>
-          </div>
-        )}
-      />
+      <TopBar onOpenProfile={onOpenProfile} left={<h1 className="topbar__title">{t.tabHeadman}</h1>} />
+      <div className="segment headman-sections" role="tablist" aria-label={t.tabHeadman}>
+        <button type="button" role="tab" aria-selected={section === 'late'} onClick={() => setSection('late')}>{t.lateSection}</button>
+        <button type="button" role="tab" aria-selected={section === 'homework'} onClick={() => setSection('homework')}>{t.homeworkShort}</button>
+        <button type="button" role="tab" aria-selected={section === 'news'} onClick={() => setSection('news')}>{t.newsSection}</button>
+      </div>
       {section === 'homework' ? <OrphanedHomework /> : section === 'late' ? <Lateness onOpenStudent={onOpenStudent} /> : <News />}
     </div>
   );
@@ -68,7 +64,7 @@ const Lateness = ({ onOpenStudent }: { onOpenStudent: (id: number) => void }) =>
   return (
     <>
       <div className="block-head block-head--row">
-        <h1 className="block-title">{offset === 0 ? t.lateTodayTitle : t.lateYesterdayTitle}</h1>
+        <h2 className="block-title">{offset === 0 ? t.lateTodayTitle : t.lateYesterdayTitle}</h2>
         <div className="segment segment--small" role="tablist">
           <button type="button" role="tab" aria-selected={offset === -1} onClick={() => setOffset(-1)}>{t.yesterday}</button>
           <button type="button" role="tab" aria-selected={offset === 0} onClick={() => setOffset(0)}>{t.today}</button>
@@ -144,7 +140,7 @@ const News = () => {
   return (
     <>
       <div className="block-head">
-        <h1 className="block-title">{t.newAnnouncement}</h1>
+        <h2 className="block-title">{t.newAnnouncement}</h2>
         <p className="block-note">{t.newAnnouncementHint}</p>
       </div>
       <div className="composer">

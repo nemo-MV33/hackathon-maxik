@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from 'react';
 
 export type ThemeChoice = 'auto' | 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';
@@ -33,7 +33,8 @@ export const ThemeProvider = ({ children }: { children: (resolved: ResolvedTheme
   }, []);
 
   const resolved = choice === 'auto' ? system : choice;
-  useEffect(() => {
+  useLayoutEffect(() => {
+    document.documentElement.style.colorScheme = resolved;
     document.documentElement.dataset.theme = resolved;
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#161412' : '#f1ebdf');
   }, [resolved]);

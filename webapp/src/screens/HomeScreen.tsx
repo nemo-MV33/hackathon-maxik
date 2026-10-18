@@ -43,12 +43,13 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfi
     const refresh = () => setScheduleRevision((value) => value + 1);
     window.addEventListener('schedule-changed', refresh);
     window.addEventListener('focus', refresh);
-    return () => { window.removeEventListener('schedule-changed', refresh); window.removeEventListener('focus', refresh); };
+    const timer = window.setInterval(() => { if (!document.hidden) refresh(); }, 30_000);
+    return () => { window.clearInterval(timer); window.removeEventListener('schedule-changed', refresh); window.removeEventListener('focus', refresh); };
   }, []);
   const now = useNow();
   const todayKey = toDateKey(now);
   const lastKey = toDateKey(addDays(now, LOOKAHEAD_DAYS));
-  const [lessons, retry] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, lastKey), [profile.group.id, profile.subgroup, todayKey, scheduleRevision]);
+  const [lessons, retry] = useAsync(() => loadLessons(profile.group.id, profile.subgroup, todayKey, lastKey), [profile.group.id, profile.subgroup, todayKey], 'HomeScreen-lessons', scheduleRevision);
   const [homework] = useRemoteHomework(profile.group.id, todayKey, toDateKey(addDays(now, TASK_DAYS)), `${profileRevision}:${scheduleRevision}`);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [openAnnouncement, setOpenAnnouncement] = useState<Announcement | null>(null);

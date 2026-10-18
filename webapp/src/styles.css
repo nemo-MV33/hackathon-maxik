@@ -7,6 +7,7 @@
 
   /* Основные цвета: зелёный, розовый, оранжевый и жёлтый на кремовом фоне, чёрная обводка. */
   --green: #1f8a4c;
+  --success-text: #176332;
   --pink: #ee6ca6;
   --orange: #e75a24;
   --yellow: #f4c51e;
@@ -20,7 +21,7 @@
   --hard-shadow: 3px 3px 0 #141414;
   --ink: #141414;
   --ink-2: rgba(20, 20, 20, 0.64);
-  --ink-3: rgba(20, 20, 20, 0.45);
+  --ink-3: rgba(20, 20, 20, 0.66);
   --press: rgba(20, 20, 20, 0.05);
   --danger: #d63a1e;
   --highlight: var(--yellow);
@@ -512,7 +513,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .hw-block__text { font-size: 16px; font-weight: 600; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .hw-block__empty { font-size: 15px; font-weight: 600; color: var(--ink-3); }
 .hw-block__meta { font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
-.hw-block--personal { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.hw-block--personal { background: color-mix(in srgb, var(--yellow) 12%, var(--surface)); }
 .hw-block--personal .hw-block__label { color: var(--ink); }
 .hw-block--quote { background: var(--k-lecture); }
 .hw-block--quote .hw-block__text { font-size: 17px; }
@@ -748,6 +749,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 :root[data-theme='dark'] #root > * {
   --bg: #161412;
+  --success-text: #9ce5b7;
   --surface: #211e1b;
   --surface-2: #2e2a26;
   --line: #3a3530;
@@ -755,8 +757,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   --outline: #4a443d;
   --hard-shadow: 3px 3px 0 #000;
   --ink: #f3ede2;
-  --ink-2: rgba(243, 237, 226, 0.68);
-  --ink-3: rgba(243, 237, 226, 0.46);
+  --ink-2: rgba(243, 237, 226, 0.82);
+  --ink-3: rgba(243, 237, 226, 0.74);
   --press: rgba(255, 255, 255, 0.05);
   --danger: #ff6b4f;
   --on-highlight: #141414;
@@ -781,10 +783,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 :root[data-theme='dark'] .preview__card.card--past { filter: brightness(0.8); }
 :root[data-theme='dark'] .subject-4 { --kind-bg: #b3cbf2; }
 :root[data-theme='dark'] .subject-5 { --kind-bg: #cdbcf2; }
-:root[data-theme='dark'] :is(.card:not(.card--live), .lesson-head, .discipline, .hw-block--quote, .note-row__badge--late, .report-card) {
+:root[data-theme='dark'] :is(.card:not(.card--live):not(.card--skeleton), .lesson-head, .discipline, .hw-block--quote, .note-row__badge--late, .report-card) {
   --ink: #141414;
   --ink-2: rgba(20, 20, 20, 0.64);
-  --ink-3: rgba(20, 20, 20, 0.45);
+  --ink-3: rgba(20, 20, 20, 0.66);
   --press: rgba(20, 20, 20, 0.05);
   --surface: #fbf8f1;
   --surface-2: #e6dfd0;
@@ -904,8 +906,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   padding: 8px 14px 8px 10px;
   border: 1.5px solid var(--outline);
   border-radius: 999px;
-  background: var(--ink);
-  color: var(--on-ink);
+  background: var(--yellow);
+  color: #141414;
   font: inherit;
   font-size: 14px;
   font-weight: 800;
@@ -935,7 +937,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .task:active { transform: scale(0.985); }
 .task--static { padding-right: 16px; cursor: default; }
 .task--static:active { transform: none; }
-.task--personal { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.task--personal { background: color-mix(in srgb, var(--yellow) 10%, var(--surface)); }
 .task--announcement { background: color-mix(in srgb, var(--yellow) 22%, var(--surface)); }
 .task__top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .task__when, .task__time, .task__tag, .task__bell {
@@ -989,6 +991,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 .field {
   box-sizing: border-box;
+  max-width: 100%;
+  box-sizing: border-box;
   width: 100%;
   min-height: 48px;
   padding: 10px 14px;
@@ -999,7 +1003,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   font: inherit;
   font-size: 16px;
   font-weight: 700;
-  color-scheme: light dark;
+  color-scheme: inherit;
 }
 .reminder { display: flex; flex-direction: column; gap: 8px; }
 .reminder__note { font-size: 13.5px; font-weight: 700; color: var(--ink-2); }
@@ -1238,7 +1242,10 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 }
 
 /* Поля переноса используют ту же сетку и цвета, что редактор ДЗ. */
-.editor input[type="date"], .editor select {
+.editor input[type="date"], .editor input[type="time"], .editor select {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   display: block;
   width: 100%;
   min-height: 44px;
@@ -1273,7 +1280,80 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .hw-details-editor { display: grid; gap: 12px; margin-block: 16px; }
 .hw-details-editor .field-label { display: grid; gap: 8px; }
 .hw-details-editor .field { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; }
-.hw-history { margin-block: 16px; overflow-wrap: anywhere; }
+.hw-history { margin-block: 4px; overflow-wrap: anywhere; }
 .hw-history summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; text-decoration: underline; }
 .hw-history ol { padding-left: 20px; }
 .hw-history li { padding-block: 8px; border-bottom: 1px solid var(--line); }
+
+
+/* Единые поля и спокойная иерархия карточки: сначала ДЗ, затем детали пары. */
+.screen > *, .sheet > *, .field-label, .editor, .hw-block, .task-card { min-width: 0; }
+.field-label { display: grid; gap: 8px; }
+.field-label input, .field-label select { width: 100%; min-width: 0; box-sizing: border-box; }
+.field-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 12px; }
+.move-editor { padding: 16px; border: 1.5px solid var(--outline); border-radius: 20px; background: var(--surface); gap: 12px; }
+.move-editor input.field, .move-editor select.field { margin: 0; background: var(--bg); border-color: var(--outline); }
+.lesson-move__actions { display: grid; gap: 12px; margin-top: 12px; }
+.lesson-move__cancel { justify-self: center; color: var(--danger); min-height: 44px; }
+.lesson-info { padding: 16px; border: 1.5px solid var(--outline); border-radius: 22px; background: var(--surface); }
+.lesson-info > summary, .reminder-options > summary, .hw-details-editor > summary { cursor: pointer; font-size: 15px; font-weight: 800; padding: 8px 0; }
+.lesson-info .facts { border: 0; padding: 0; }
+.lesson-info > :not(summary) { margin-top: 12px; }
+.screen--lesson .lesson-head { box-shadow: none; padding: 18px; gap: 10px; }
+.screen--lesson .lesson-head .display { font-size: clamp(24px, 7vw, 30px); line-height: 1.18; }
+.screen--lesson .section-note { display: none; }
+.hw-block--shared { background: color-mix(in srgb, var(--k-practice) 24%, var(--surface)); }
+.hw-block--shared .hw-block__label { color: var(--success-text); }
+.hw-block--personal .hw-block__label { color: var(--ink-2); }
+.hw-details { font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.hw-details .callout { display: inline-block; background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); border: 0; border-radius: 8px; padding: 4px 8px; margin: 0; font-weight: 700; }
+.hw-details-editor { margin: 0; border-top: 1px solid var(--line); padding-top: 4px; }
+.hw-details-editor__fields { display: grid; gap: 14px; padding-block: 10px; }
+.task-card { border: 1.5px solid var(--outline); border-radius: 20px; background: var(--surface); overflow: hidden; }
+.task-card .task { border: 0; border-radius: 0; background: transparent; }
+.task-card > .hw-details, .task-card > .homework-attachments { margin: 0 16px 12px; }
+.task-card .completion { border-top: 1px solid var(--line); padding: 4px 12px; }
+.completion__button { display: flex; align-items: center; gap: 10px; min-height: 44px; width: 100%; background: transparent; border: 0; padding: 6px 0; font-weight: 750; text-align: left; cursor: pointer; }
+.completion__check { display: grid; place-items: center; width: 22px; height: 22px; border: 1.5px solid var(--outline); border-radius: 7px; flex-shrink: 0; }
+.completion__button[aria-pressed='true'] { color: var(--success-text); }
+.completion__button[aria-pressed='true'] .completion__check { background: var(--green); border-color: var(--success-text); color: white; }
+.task-card.is-complete .task__title { text-decoration: line-through; color: var(--ink-2); }
+.task-card.is-complete { background: color-mix(in srgb, var(--k-practice) 14%, var(--surface)); }
+.headman-sections { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
+.headman-sections button { min-width: 0; padding: 10px 4px; font-size: 12px; white-space: normal; min-height: 44px; }
+.subgroup-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.subgroup-option { border: 1.5px solid var(--outline); border-radius: 999px; padding: 11px 16px; min-height: 44px; background: var(--surface); cursor: pointer; }
+.subgroup-option .choice__title { font-size: 15px; }
+.subgroup-option[aria-checked='true'] { background: var(--yellow); color: #141414; }
+.timezone-select { width: 100%; padding: 12px; background: var(--surface); border: 1.5px solid var(--outline); border-radius: 14px; font: inherit; color: var(--ink); min-height: 44px; }
+:root[data-theme='dark'] .card--skeleton { color: var(--ink); background: var(--surface); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+
+.homework-management { border-top: 1px solid var(--line); padding-top: 6px; }
+.homework-management > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: 14px; font-weight: 700; color: var(--ink-2); }
+.hw-block > .completion { border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+:root[data-theme='dark'] .hw-block--shared { background: color-mix(in srgb, var(--k-practice) 12%, var(--surface)); }
+
+.timezone-choice { justify-content: space-between; }
+.timezone-choice[aria-checked='true'] { background: var(--highlight); color: var(--on-highlight); box-shadow: none; }
+.sheet__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sheet__header .sheet__title { min-width: 0; }
+.sheet__header .icon-button { flex-shrink: 0; }
+
+.field-label :is(input, select, textarea) { font-family: var(--sans); font-size: 16px; font-weight: 600; text-transform: none; letter-spacing: normal; }
+.field-pair input[type='time'] { padding-inline: 8px; }
+
+.field-label .field { margin: 0; }
+
+.lesson-info .move-editor, .hw-block .move-editor { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; padding: 16px 0 0; }
+.move-editor .callout { border: 0; border-radius: 12px; padding: 12px; background: color-mix(in srgb, var(--yellow) 16%, var(--surface)); }
+
+.reminder__note { display: flex; align-items: center; gap: 6px; }
+.reminder__note svg { flex-shrink: 0; }
+.tabbar__label { font-size: 12px; }
+.tabbar__compact { display: none; }
+@media (max-width: 360px) { .tabbar__full { display: none; } .tabbar__compact { display: inline; } }
+
+/* Зона нажатия остаётся удобной на телефоне, включая кнопки закрытия и недели. */
+.icon-button, .icon-button--lg, .avatar-button { width: 44px; height: 44px; min-width: 44px; }
+.back-link, .text-button, .lesson-info > summary, .reminder-options > summary, .hw-details-editor > summary { min-height: 44px; }

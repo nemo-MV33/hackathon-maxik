@@ -18,7 +18,7 @@ export const ExamsScreen = ({ profile, onBack, onOpenLesson }: Props) => {
   const { t } = useI18n();
   const todayKey = toDateKey(useNow());
   useBackButton(onBack);
-  const [exams, retry] = useAsync(() => loadExams(profile.group.id, profile.subgroup, todayKey), [profile.group.id, profile.subgroup]);
+  const [exams, retry] = useAsync(() => loadExams(profile.group.id, profile.subgroup, todayKey), [profile.group.id, profile.subgroup], 'ExamsScreen-lessons');
 
   return (
     <div className="screen screen--exams">

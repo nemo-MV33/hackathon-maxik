@@ -1,23 +1,26 @@
-import { lessonDate, lessonTime } from '../lib/timezone';
 import { useEffect, useState } from 'react';
 import { Button } from '@maxhub/max-ui';
 import { loadWeek, invalidateSchedule, type Lesson } from '../data/schedule';
 import { apiRequest } from '../lib/api';
 import { fromDateKey, startOfWeek, toDateKey } from '../lib/date';
+import { lessonDate, lessonTime } from '../lib/timezone';
 import { useI18n } from '../lib/i18n';
 
 export type Move = { id: string; from: Lesson; to: Lesson | null; status: string; authorName: string; at: string };
 export const scheduleChanged = () => {
   invalidateSchedule();
   window.dispatchEvent(new Event('schedule-changed'));
+  window.dispatchEvent(new Event('homework-changed'));
 };
 
 export const LessonMove = ({ lesson, groupId, orphanId, onSaved }: {
   lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup'> & Partial<Lesson>; groupId: string | number; orphanId?: string; onSaved?: () => void;
 }) => {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
-  const [date, setDate] = useState(lesson.time ? lessonDate(lesson as Lesson) : lesson.date);
+  const [mode, setMode] = useState<'move' | 'cancel' | null>(null);
+  const [date, setDate] = useState(lesson.date);
+  const [begin, setBegin] = useState(lesson.time?.slice(0, 5) ?? '08:15');
+  const [end, setEnd] = useState(lesson.time?.slice(6, 11) ?? '09:45');
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [target, setTarget] = useState('');
   const [moves, setMoves] = useState<Move[]>([]);
@@ -27,44 +30,51 @@ export const LessonMove = ({ lesson, groupId, orphanId, onSaved }: {
   const existing = moves.find((item) => item.status === 'pending' && key(item.to ?? item.from) === key(lesson));
   useEffect(() => {
     apiRequest<{ items: Move[] }>('/api/lesson-changes').then((data) => setMoves(data.items)).catch(() => {});
-  }, [open]);
+  }, [mode]);
   useEffect(() => {
-    if (!open || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    if (mode !== 'move' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
     let active = true;
-    setLessons([]);
     setTarget('');
     loadWeek(groupId, toDateKey(startOfWeek(fromDateKey(date)))).then((week) => {
-      if (active) setLessons(week.lessons.filter((item) => lessonDate(item) === date && item.subgroup === lesson.subgroup && key(item) !== key(lesson)));
+      if (active) setLessons(week.lessons.filter((item) => item.date === date && (orphanId ? item.subgroup === lesson.subgroup : !item.subgroup || !lesson.subgroup || item.subgroup === lesson.subgroup) && key(item) !== key(lesson)));
     }).catch((failure: Error) => active && setError(failure.message));
     return () => { active = false; };
-  }, [date, open, groupId]);
-  const submit = async (to: Lesson | null, revoke = false) => {
-    setBusy(true);
-    setError('');
+  }, [date, mode, groupId, orphanId]);
+  const overlaps = !orphanId && lessons.some((item) => item.time.slice(0, 5) < end && item.time.slice(6, 11) > begin);
+  const submit = async (revoke = false) => {
+    revoke ||= Boolean(existing && mode === 'move' && date === existing.from.date && `${begin}–${end}` === existing.from.time);
+    setBusy(true); setError('');
     try {
+      const to = mode === 'cancel' ? null : orphanId ? lessons.find((item) => key(item) === target) : { custom: true, date, time: `${begin}–${end}` };
       const path = revoke ? `/api/lesson-changes/${existing!.id}` : orphanId ? '/api/homework/orphaned' : '/api/lesson-changes';
       await apiRequest(path, { method: revoke ? 'DELETE' : orphanId ? 'PUT' : 'POST',
-        ...(!revoke ? { body: JSON.stringify(orphanId ? { groupId, id: orphanId, to } : { groupId, from: lesson, to }) } : {}) });
-      scheduleChanged();
-      setOpen(false);
-      setMoves([]);
-      onSaved?.();
+        ...(!revoke ? { body: JSON.stringify(orphanId ? { groupId, id: orphanId, to } : { groupId, from: existing?.from ?? lesson, to }) } : {}) });
+      scheduleChanged(); setMode(null); setMoves([]); onSaved?.();
     } catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   };
-  return <div className="hw-block">
-    {!open && <Button stretched variant="secondary" onClick={() => setOpen(true)}>{orphanId ? t.moveRebind : t.moveAction}</Button>}
-    {open && <div className="editor">
-      {existing ? <Button stretched disabled={busy} onClick={() => void submit(null, true)}>{t.moveUndo}</Button> : <>
-        <label className="field-label">{t.moveDate}<input type="date" value={date} onInput={(event) => setDate(event.currentTarget.value)} /></label>
-        <label className="field-label">{t.moveChoose}<select value={target} onChange={(event) => setTarget(event.target.value)}>
-          <option value="">{t.moveChoose}</option>
-          {lessons.map((item) => <option key={key(item)} value={key(item)}>{lessonTime(item)} · {item.subject}</option>)}
-        </select></label>
-        <Button stretched loading={busy} disabled={!target || busy} onClick={() => void submit(lessons.find((item) => key(item) === target)!)}>{t.save}</Button>
-        {!orphanId && <Button stretched disabled={busy} variant="secondary" onClick={() => void submit(null)}>{t.moveCancelled}</Button>}
+  return <div className="lesson-move">
+    {!mode && <div className="lesson-move__actions">
+      <Button stretched variant="secondary" onClick={() => setMode('move')}>{existing ? t.moveManage : orphanId ? t.moveRebind : t.moveAction}</Button>
+      {!existing && !orphanId && <button type="button" className="text-button lesson-move__cancel" onClick={() => setMode('cancel')}>{t.cancelLessonAction}</button>}
+    </div>}
+    {mode && <div className="editor move-editor">
+      {mode === 'cancel' ? <>
+        <p className="lead">{t.cancelLessonQuestion}</p><p className="hint">{t.cancelLessonHint}</p>
+        <Button stretched variant="destructive" disabled={busy} onClick={() => void submit()}>{t.cancelLessonConfirm}</Button>
+      </> : <>
+        {existing && <p className="hint">{t.moveAlreadyMarked}</p>}
+        <p className="hint">{t.moveUniversityTime}</p>
+        <label className="field-label">{t.moveDate}<input className="field" type="date" value={date} onChange={(event) => setDate(event.currentTarget.value)} onInput={(event) => setDate(event.currentTarget.value)} /></label>
+        {orphanId ? <label className="field-label">{t.moveChoose}<select className="field" value={target} onChange={(event) => setTarget(event.target.value)}><option value="">{t.moveChoose}</option>{lessons.map((item) => <option key={key(item)} value={key(item)}>{lessonTime(item)} · {item.subject}</option>)}</select></label> : <div className="field-pair">
+          <label className="field-label">{t.classStarts}<input className="field" type="time" value={begin} onInput={(event) => setBegin(event.currentTarget.value)} onChange={(event) => setBegin(event.target.value)} /></label>
+          <label className="field-label">{t.classEnds}<input className="field" type="time" value={end} onInput={(event) => setEnd(event.currentTarget.value)} onChange={(event) => setEnd(event.target.value)} /></label>
+        </div>}
+        {overlaps && <p className="callout" role="status">{t.moveOverlap}</p>}
+        <Button stretched loading={busy} disabled={busy || !date || (orphanId ? !target : !begin || end <= begin || (date === lesson.date && `${begin}–${end}` === lesson.time))} onClick={() => void submit()}>{orphanId ? t.save : t.moveSave}</Button>
+        {existing && <Button stretched variant="secondary" disabled={busy} onClick={() => void submit(true)}>{t.moveUndo}</Button>}
       </>}
-      <Button stretched variant="ghost" disabled={busy} onClick={() => setOpen(false)}>{t.cancel}</Button>
+      <Button stretched variant="ghost" disabled={busy} onClick={() => setMode(null)}>{t.closeForm}</Button>
     </div>}
     {error && <p className="toast toast--error" role="alert">{error}</p>}
   </div>;

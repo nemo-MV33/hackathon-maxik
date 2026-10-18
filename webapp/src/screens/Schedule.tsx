@@ -84,7 +84,8 @@ export const Schedule = ({
     const refresh = () => setScheduleRevision((value) => value + 1);
     window.addEventListener('schedule-changed', refresh);
     window.addEventListener('focus', refresh);
-    return () => { window.removeEventListener('schedule-changed', refresh); window.removeEventListener('focus', refresh); };
+    const timer = window.setInterval(() => { if (!document.hidden) refresh(); }, 30_000);
+    return () => { window.clearInterval(timer); window.removeEventListener('schedule-changed', refresh); window.removeEventListener('focus', refresh); };
   }, []);
   const now = useNow();
   const todayKey = toDateKey(now);
@@ -104,8 +105,8 @@ export const Schedule = ({
   const weekStart = toDateKey(startOfWeek(fromDateKey(selected)));
   const days = Array.from({ length: 7 }, (_, index) => toDateKey(addDays(fromDateKey(weekStart), index)));
 
-  const [meta] = useAsync(loadMeta, []);
-  const [week, retry] = useAsync(() => loadWeek(profile.group.id, weekStart), [profile.group.id, weekStart, scheduleRevision]);
+  const [meta] = useAsync(loadMeta, [], 'Schedule-meta');
+  const [week, retry] = useAsync(() => loadWeek(profile.group.id, weekStart), [profile.group.id, weekStart], 'Schedule-lessons', scheduleRevision);
 
   const [homework] = useRemoteHomework(profile.group.id, days[0], days[6], `${profileRevision}:${scheduleRevision}`);
   const remoteHomework = homework.status === 'ready'

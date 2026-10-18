@@ -48,7 +48,7 @@ const collect = (lessons: Lesson[], todayKey: string) => {
 
 const useDisciplines = (profile: LocalProfile) => {
   const todayKey = toDateKey(useNow());
-  const [lessons, retry] = useAsync(() => loadSemesterLessons(profile.group.id, profile.subgroup), [profile.group.id, profile.subgroup]);
+  const [lessons, retry] = useAsync(() => loadSemesterLessons(profile.group.id, profile.subgroup), [profile.group.id, profile.subgroup], 'DisciplinesScreen-lessons');
   const list = lessons.status === 'ready' ? collect(lessons.data, todayKey) : [];
   return { lessons, retry, list };
 };

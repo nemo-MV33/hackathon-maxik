@@ -43,12 +43,11 @@ export const UniversityScreen = ({ profile, onBack, onChangeGroup }: { profile: 
       </div>
 
       <p className="field-label">{t.subgroupField}</p>
-      <div className="choice-list" role="radiogroup" aria-label={t.subgroupField}>
+      <div className="subgroup-options" role="radiogroup" aria-label={t.subgroupField}>
         {([1, 2, null] as const).map((value) => (
-          <button key={String(value)} type="button" role="radio" className="choice" aria-checked={subgroup === value} data-current={t.current} onClick={() => choose(value)}>
+          <button key={String(value)} type="button" role="radio" className="subgroup-option" aria-checked={subgroup === value} data-current={t.current} onClick={() => choose(value)}>
             <span className="choice__text">
               <span className="choice__title">{value ? t.subgroup(value) : t.wholeGroupTitle}</span>
-              <span className="choice__hint">{value === 1 ? t.subgroupOne : value === 2 ? t.subgroupTwo : t.subgroupAllHint}</span>
             </span>
           </button>
         ))}

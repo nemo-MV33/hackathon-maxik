@@ -18,7 +18,7 @@ export const buildTasks = (homework: HomeworkItem[], announcements: Announcement
       kind: 'announcement', key: `an:${item.id}`, date: announcementDay(item), time: toLocalInput(item.myRemindAt ?? item.createdAt).slice(11, 16), item,
     })),
   ];
-  return items.sort((left, right) => `${left.date} ${left.time}`.localeCompare(`${right.date} ${right.time}`));
+  return items.sort((left, right) => Number(left.kind === 'homework' && left.item.completed) - Number(right.kind === 'homework' && right.item.completed) || `${left.date} ${left.time}`.localeCompare(`${right.date} ${right.time}`));
 };
 
 // Если пары нет в загруженных неделях, открываем карточку по данным ДЗ.
