@@ -10,8 +10,9 @@ export type Deadline = { kind: 'lesson' | 'next' | 'date'; local?: string; at?: 
 export type Submission = { kind: 'class' | 'moodle' | 'system' | 'email' | 'other'; label?: string; url?: string | null };
 export type HomeworkSnapshot = { text: string; attachments?: HomeworkAttachment[]; deadline?: Deadline; submission?: Submission | null };
 export type HomeworkEvent = { type: string; version?: number; at: string; by?: string | number; authorName?: string; before?: HomeworkSnapshot | null; after?: HomeworkSnapshot; restoredFrom?: number; added?: HomeworkAttachment[]; removed?: HomeworkAttachment[]; from?: { date: string; time?: string }; to?: { date: string; time?: string } | null };
-export type HomeworkDetailsInput = { deadline?: Deadline; submission?: Submission | null; restoreVersion?: number };
+export type HomeworkDetailsInput = { standalone?: boolean; subject?: string; deadline?: Deadline; submission?: Submission | null; restoreVersion?: number };
 export type HomeworkItem = {
+  standalone?: boolean;
   completed?: boolean;
   completionRevision?: string;
   deadline?: Deadline;
@@ -78,12 +79,13 @@ export const loadHomework = (groupId: string | number, from: string, to: string)
 
 // remindAt: undefined — напоминание не трогаем, null — снять, ISO — поставить (напоминание личное).
 export const saveHomework = (
-  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup' | 'groupId'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null, reminderMode?: 'fixed' | 'lesson' | 'due-day' | 'due-morning', minutesBefore?: number, attachments?: HomeworkAttachment[], details?: HomeworkDetailsInput,
+  lesson: Pick<Lesson, 'date' | 'lessonNumber' | 'subgroup' | 'groupId' | 'standalone'>, text: string | null, scope: 'shared' | 'personal' | 'reminder', remindAt?: string | null, reminderMode?: 'fixed' | 'lesson' | 'due-day' | 'due-morning', minutesBefore?: number, attachments?: HomeworkAttachment[], details?: HomeworkDetailsInput,
 ) =>
   apiRequest<{ item?: HomeworkItem }>('/api/homework', {
     method: 'PUT',
     body: JSON.stringify({
       groupId: lesson.groupId,
+      ...(lesson.standalone ? { standalone: true } : {}),
       date: lesson.date,
       lessonNumber: lesson.lessonNumber,
       subgroup: lesson.subgroup,

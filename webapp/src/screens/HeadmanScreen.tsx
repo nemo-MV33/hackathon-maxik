@@ -1,4 +1,3 @@
-import { OrphanedHomework } from '../components/OrphanedHomework';
 import { useEffect, useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import {
@@ -15,7 +14,7 @@ import { NoteRow, StudentList } from '../components/Dossier';
 import { Empty, ErrorState, Loading } from '../components/Status';
 import { BellIcon, TrashIcon } from '../components/Icon';
 
-type Section = 'late' | 'news' | 'homework';
+type Section = 'late' | 'news';
 const MAX_TEXT = 1_500;
 
 // Инструменты старосты: кто опаздывает, досье группы и объявления с напоминанием.
@@ -27,10 +26,9 @@ export const HeadmanScreen = ({ onOpenProfile, onOpenStudent }: { onOpenProfile:
       <TopBar onOpenProfile={onOpenProfile} left={<h1 className="topbar__title">{t.tabHeadman}</h1>} />
       <div className="segment headman-sections" role="tablist" aria-label={t.tabHeadman}>
         <button type="button" role="tab" aria-selected={section === 'late'} onClick={() => setSection('late')}>{t.lateSection}</button>
-        <button type="button" role="tab" aria-selected={section === 'homework'} onClick={() => setSection('homework')}>{t.homeworkShort}</button>
         <button type="button" role="tab" aria-selected={section === 'news'} onClick={() => setSection('news')}>{t.newsSection}</button>
       </div>
-      {section === 'homework' ? <OrphanedHomework /> : section === 'late' ? <Lateness onOpenStudent={onOpenStudent} /> : <News />}
+      {section === 'late' ? <Lateness onOpenStudent={onOpenStudent} /> : <News />}
     </div>
   );
 };
@@ -143,9 +141,9 @@ const News = () => {
         <h2 className="block-title">{t.newAnnouncement}</h2>
         <p className="block-note">{t.newAnnouncementHint}</p>
       </div>
-      <div className="composer">
-        <div className="editor">
-          <Textarea rows={4} maxLength={MAX_TEXT} placeholder={t.announcementPlaceholder} value={text} onChange={(event) => setText(event.target.value)} />
+      <div className="composer composer--announcement">
+        <div className="announcement-text">
+          <Textarea aria-label={t.newAnnouncement} rows={4} maxLength={MAX_TEXT} placeholder={t.announcementPlaceholder} value={text} onChange={(event) => setText(event.target.value)} />
         </div>
         <p className="field-label">{t.remindGroup}</p>
         <ReminderPicker value={remindAt} onChange={setRemindAt} now={now} />

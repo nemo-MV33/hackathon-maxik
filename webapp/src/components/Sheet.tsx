@@ -5,6 +5,7 @@ import { CloseIcon } from './Icon';
 
 type Props = { title: string; hint?: ReactNode; onClose: () => void; busy?: boolean; children: ReactNode; labelId: string };
 let openSheets = 0;
+let pageScroll = 0;
 
 export const Sheet = ({ title, hint, onClose, busy = false, children, labelId }: Props) => {
   const { t } = useI18n();
@@ -28,13 +29,14 @@ export const Sheet = ({ title, hint, onClose, busy = false, children, labelId }:
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     window.addEventListener('keydown', onKey);
+    if (!openSheets) { pageScroll = window.scrollY; document.body.style.top = `-${pageScroll}px`; }
     openSheets += 1;
     document.body.classList.add('has-sheet');
     return () => {
       window.removeEventListener('keydown', onKey);
       openSheets -= 1;
-      if (!openSheets) document.body.classList.remove('has-sheet');
-      if (previous?.isConnected) previous.focus();
+      if (!openSheets) { document.body.classList.remove('has-sheet'); document.body.style.top = ''; window.scrollTo(0, pageScroll); }
+      if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, []);
   return <div className="sheet-backdrop" onClick={() => !busy && onClose()}>

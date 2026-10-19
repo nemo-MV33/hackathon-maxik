@@ -1357,3 +1357,70 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 /* Зона нажатия остаётся удобной на телефоне, включая кнопки закрытия и недели. */
 .icon-button, .icon-button--lg, .avatar-button { width: 44px; height: 44px; min-width: 44px; }
 .back-link, .text-button, .lesson-info > summary, .reminder-options > summary, .hw-details-editor > summary { min-height: 44px; }
+
+/* Формы на телефоне: одна поверхность, нативный календарь без ширины содержимого iOS. */
+html, body, #root { max-width: 100%; overflow-x: clip; }
+body.has-sheet { position: fixed; left: 0; right: 0; width: 100%; }
+.sheet-backdrop { overflow: hidden; overscroll-behavior: contain; }
+.sheet { max-width: min(560px, 100vw); overflow-x: hidden; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
+.sheet :is(fieldset, textarea, input, select), .composer :is(textarea, input) { box-sizing: border-box; min-width: 0; max-width: 100%; }
+.date-field { display: grid; min-width: 0; gap: 8px; width: 100%; }
+.date-field__label { font-family: var(--mono); font-size: 12px; color: var(--ink-2); text-transform: uppercase; }
+.date-field__control { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; min-height: 48px; border: 1.5px solid var(--outline); border-radius: 14px; padding: 10px 12px; box-sizing: border-box; background: var(--surface); font: 600 15px/1.4 var(--sans); }
+.date-field__control > span { overflow-wrap: anywhere; }
+.date-field__control > svg { flex-shrink: 0; color: var(--ink-2); }
+.date-field__control input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; min-width: 0; max-width: 100%; margin: 0; padding: 0; cursor: pointer; font-size: 16px; }
+.date-field__control:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
+.homework-compose { display: grid; min-width: 0; gap: 18px; }
+.compose-lessons { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
+.compose-lessons legend { margin-bottom: 10px; }
+.compose-scope { display: grid; gap: 8px; }
+.homework-compose .choice[aria-checked='true'] { box-shadow: none; border-width: 1.5px; background: color-mix(in srgb, var(--yellow) 40%, var(--surface)); }
+.task-editor, .screen--lesson .editor:not(.move-editor) { display: grid; gap: 10px; padding: 14px; border: 1.5px solid var(--outline); border-radius: 18px; background: color-mix(in srgb, var(--k-practice) 18%, var(--surface)); }
+.task-editor textarea, .screen--lesson .editor:not(.move-editor) textarea { background: transparent; border: 0; box-shadow: none; padding: 4px 0; min-height: 90px; }
+.attachment-editor .attach-label { display: inline-grid; place-items: center; position: relative; width: 44px; height: 44px; min-height: 44px; border: 1.5px solid var(--outline); border-radius: 12px; background: var(--yellow); color: #141414; padding: 0; cursor: pointer; box-shadow: none; }
+.attachment-editor .attach-label input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; display: block; cursor: pointer; }
+.attachment-editor .attach-label:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
+.attachment-files:empty, .attachment-photos:empty { display: none; }
+.hw-details-editor { padding: 12px 14px; margin: 0; border: 1.5px solid var(--outline); border-radius: 18px; background: color-mix(in srgb, var(--yellow) 12%, var(--surface)); }
+.hw-details-editor > summary, .lesson-info > summary, .reminder-options > summary { min-height: 24px; padding: 0; font-size: 15px; line-height: 24px; }
+.hw-details-editor__fields { padding-bottom: 0; }
+.reminder-options { padding: 14px; border: 1.5px solid var(--outline); border-radius: 18px; background: color-mix(in srgb, var(--k-lecture) 12%, var(--surface)); }
+.reminder-options[open] > .reminder { margin-top: 12px; }
+.reminder-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.reminder-presets .chip-option { white-space: normal; font: 700 13px/1.35 var(--sans); padding: 10px; min-height: 44px; border: 1.5px solid var(--outline); border-radius: 12px; text-align: center; }
+.reminder-presets .chip-option[aria-checked='true'] { background: var(--yellow); color: #141414; box-shadow: none; }
+.reminder { display: grid; min-width: 0; gap: 12px; }
+.reminder__note { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
+.composer--announcement { padding: 16px; gap: 16px; background: color-mix(in srgb, var(--k-lecture) 22%, var(--surface)); }
+.composer--announcement textarea { background: transparent; border: 0; box-shadow: none; padding: 0; min-height: 110px; }
+.composer--announcement .announcement-text { padding: 0; margin: 0; }
+.headman-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.screen--lesson .lesson-head { padding: 14px 16px; gap: 6px; }
+.screen--lesson .lesson-head .display { font-size: 22px; line-height: 1.25; letter-spacing: -0.025em; }
+.lesson-info { padding: 14px; border-radius: 18px; background: color-mix(in srgb, var(--k-lab) 12%, var(--surface)); }
+.lesson-info .facts { padding: 0; margin: 0; }
+.lesson-info .facts > div { padding: 8px 0; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
+.lesson-info .facts dt { font-size: 11px; }
+.lesson-info .facts dd { font-size: 15px; line-height: 1.35; }
+.homework-edit-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.homework-edit-actions > button { min-width: 0; min-height: 46px; height: auto; padding: 10px 8px; font-size: 14px; line-height: 1.25; }
+.lesson-move__actions { gap: 8px; }
+.lesson-move__actions > button:first-child { background: var(--yellow); color: #141414; box-shadow: none; }
+.move-editor { display: grid; gap: 14px; }
+.move-editor .field-pair { gap: 12px; }
+.move-editor > .hint { margin: 0; }
+.planner-day { display: grid; gap: 12px; min-height: 180px; touch-action: pan-y pinch-zoom; }
+.schedule-status, .schedule-maintenance { padding: 14px; border: 1.5px solid var(--outline); border-radius: 18px; background: var(--surface); }
+.schedule-maintenance > summary { min-height: 24px; cursor: pointer; }
+.composer--announcement [class*='Textarea_mode'], .task-editor [class*='Textarea_mode'], .screen--lesson .editor:not(.move-editor) [class*='Textarea_mode'] { background: transparent; border: 0; box-shadow: none; padding: 0; }
+.lesson-info .facts { background: transparent; border-radius: 0; }
+.lesson-info .move-editor { display: grid; gap: 14px; padding: 14px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
+.move-editor button:not(:disabled):not([class*='ghost']):not([class*='destructive']):first-of-type { background: var(--yellow); color: #141414; }
+.planner-calendar { min-width: 0; }
+.planner-calendar .date-field__label { display: none; }
+.planner-calendar .date-field__control { border: 0; background: transparent; padding: 4px; min-height: 44px; font-size: 14px; }
+.planner-calendar .date-field__control > svg { width: 16px; height: 16px; }
+.homework-edit-actions [class*='Button__content'] { font-size: 14px; line-height: 1.3; white-space: normal; overflow: visible; text-overflow: clip; }
+.reminder-presets .chip-option:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.homework-edit-actions > button:only-child { grid-column: 1 / -1; }

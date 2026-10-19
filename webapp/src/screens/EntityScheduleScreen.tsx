@@ -10,7 +10,6 @@ import { DayTimeline } from '../components/Timeline';
 import { Empty, ErrorState, ScheduleSkeleton } from '../components/Status';
 import { ChevronLeft, ChevronRight } from '../components/Icon';
 import { DayHeading } from './Schedule';
-import { ScheduleFreshness } from '../components/ScheduleFreshness';
 
 export type EntityTarget = { kind: 'group' | 'teacher' | 'auditory'; id: string | number; title: string };
 
@@ -41,7 +40,7 @@ export const EntityScheduleScreen = ({ target, onBack }: { target: EntityTarget;
         </span>
         <button type="button" className="icon-button" aria-label={t.nextWeek} onClick={() => shift(1)}><ChevronRight size={18} /></button>
       </div>
-      {week.status === 'ready' && <ScheduleFreshness at={week.data.updatedAt} stale={week.data.stale} />}
+
       {week.status === 'loading' && <ScheduleSkeleton rows={4} />}
       {week.status === 'error' && <ErrorState message={week.message} onRetry={retry} />}
       {week.status === 'ready' && busyDays.length === 0 && <Empty title={t.emptyWeekTitle}>{t.emptyWeekText}</Empty>}

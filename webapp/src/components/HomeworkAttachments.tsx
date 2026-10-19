@@ -1,3 +1,4 @@
+import { PaperclipIcon } from './Icon';
 import { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../lib/api';
 import { webApp, openExternal } from '../bridge/max';
@@ -74,7 +75,7 @@ export const AttachmentEditor = ({ files, scope, onChange, onBusy }: {
   };
   const pendingIds = new Set(drafts.map((draft) => draft.item?.id));
   return <div className="attachment-editor">
-    <label className="pill-button attach-label">{t.attachFiles}<input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.zip,.7z,.rar,.gz,.tar,audio/*,video/*" onChange={(event) => {
+    <label className="attach-label" title={t.attachFiles}><PaperclipIcon size={22} /><input aria-label={t.attachFiles} type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.zip,.7z,.rar,.gz,.tar,audio/*,video/*" onChange={(event) => {
       const selected = Array.from(event.target.files ?? []).map((file): Draft => {
         const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
         if (preview) urls.current.push(preview);

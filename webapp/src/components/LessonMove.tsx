@@ -1,3 +1,4 @@
+import { DateField } from './DateField';
 import { useEffect, useState } from 'react';
 import { Button } from '@maxhub/max-ui';
 import { loadWeek, invalidateSchedule, type Lesson } from '../data/schedule';
@@ -65,10 +66,10 @@ export const LessonMove = ({ lesson, groupId, orphanId, onSaved }: {
       </> : <>
         {existing && <p className="hint">{t.moveAlreadyMarked}</p>}
         <p className="hint">{t.moveUniversityTime}</p>
-        <label className="field-label">{t.moveDate}<input className="field" type="date" value={date} onChange={(event) => setDate(event.currentTarget.value)} onInput={(event) => setDate(event.currentTarget.value)} /></label>
+        <DateField label={t.moveDate} value={date} onChange={setDate} />
         {orphanId ? <label className="field-label">{t.moveChoose}<select className="field" value={target} onChange={(event) => setTarget(event.target.value)}><option value="">{t.moveChoose}</option>{lessons.map((item) => <option key={key(item)} value={key(item)}>{lessonTime(item)} · {item.subject}</option>)}</select></label> : <div className="field-pair">
-          <label className="field-label">{t.classStarts}<input className="field" type="time" value={begin} onInput={(event) => setBegin(event.currentTarget.value)} onChange={(event) => setBegin(event.target.value)} /></label>
-          <label className="field-label">{t.classEnds}<input className="field" type="time" value={end} onInput={(event) => setEnd(event.currentTarget.value)} onChange={(event) => setEnd(event.target.value)} /></label>
+          <DateField type="time" label={t.classStarts} value={begin} onChange={setBegin} />
+          <DateField type="time" label={t.classEnds} value={end} onChange={setEnd} />
         </div>}
         {overlaps && <p className="callout" role="status">{t.moveOverlap}</p>}
         <Button stretched loading={busy} disabled={busy || !date || (orphanId ? !target : !begin || end <= begin || (date === lesson.date && `${begin}–${end}` === lesson.time))} onClick={() => void submit()}>{orphanId ? t.save : t.moveSave}</Button>

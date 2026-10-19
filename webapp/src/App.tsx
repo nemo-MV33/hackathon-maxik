@@ -29,7 +29,7 @@ import { MeProvider, useMe } from './lib/me';
 
 // Экраны поверх вкладок: открываются стопкой, «Назад» возвращает к предыдущему.
 type Screen =
-  | { name: 'lesson'; lesson: Lesson }
+  | { name: 'lesson'; lesson: Lesson; homework?: boolean }
   | { name: 'profile' }
   | { name: 'section'; section: ProfileSection }
   | { name: 'discipline'; subject: string }
@@ -210,7 +210,7 @@ const Main = ({ profile, profileRevision, onChangeGroup, onAccountDeleted }: Mai
   const [launch, setLaunch] = useState(launchTarget);
   const scroll = useRef(new Map<string, number>());
   const top = stack.at(-1);
-  const isHeadman = me?.role === 'headman' || me?.role === 'editor';
+  const isHeadman = me?.role === 'headman';
   const key = top ? `${stack.length}:${top.name}` : `tab:${tab}`;
 
   // Каждая вкладка и экран помнит, где его листали.
@@ -231,6 +231,7 @@ const Main = ({ profile, profileRevision, onChangeGroup, onAccountDeleted }: Mai
     setTabState(next);
   };
   const openLesson = (lesson: Lesson) => push({ name: 'lesson', lesson });
+  const openHomework = (lesson: Lesson) => push({ name: 'lesson', lesson, homework: true });
   const openProfile = () => push({ name: 'profile' });
 
   useEffect(() => {
@@ -238,7 +239,7 @@ const Main = ({ profile, profileRevision, onChangeGroup, onAccountDeleted }: Mai
   }, [tab, me, isHeadman]);
 
   if (top?.name === 'lesson') {
-    return <LessonScreen lesson={top.lesson} profile={profile} profileRevision={profileRevision} onBack={pop} />;
+    return <LessonScreen homeworkFirst={top.homework} lesson={top.lesson} profile={profile} profileRevision={profileRevision} onBack={pop} />;
   }
   if (top?.name === 'exams') return <ExamsScreen profile={profile} onBack={pop} onOpenLesson={openLesson} />;
   if (top?.name === 'entity') return <EntityScheduleScreen target={top.target} onBack={pop} />;
@@ -277,6 +278,7 @@ const Main = ({ profile, profileRevision, onChangeGroup, onAccountDeleted }: Mai
           onOpenProfile={openProfile}
           onOpenExams={() => push({ name: 'exams' })}
           onOpenPlanner={() => setTab('planner')}
+          onOpenHomework={openHomework}
         />
       )}
       {tab === 'schedule' && (
@@ -291,7 +293,7 @@ const Main = ({ profile, profileRevision, onChangeGroup, onAccountDeleted }: Mai
         />
       )}
       {tab === 'planner' && (
-        <PlannerScreen profile={profile} profileRevision={profileRevision} onOpenLesson={openLesson} onOpenProfile={openProfile} />
+        <PlannerScreen profile={profile} profileRevision={profileRevision} onOpenLesson={openHomework} onOpenProfile={openProfile} />
       )}
       {tab === 'headman' && isHeadman && (
         <HeadmanScreen onOpenProfile={openProfile} onOpenStudent={(id) => push({ name: 'student', id })} />

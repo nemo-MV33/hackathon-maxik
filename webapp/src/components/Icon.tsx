@@ -58,3 +58,5 @@ export const GlobeIcon = ({ size = 20, className }: IconProps) =>
   svg(size, className, <><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.3 2.4 3.4 5.2 3.4 8.5s-1.1 6.1-3.4 8.5c-2.3-2.4-3.4-5.2-3.4-8.5s1.1-6.1 3.4-8.5Z" /></>);
 
 export const CheckIcon = ({ size = 20, className }: IconProps) => svg(size, className, <path d="m5 12 4.5 4.5L19 7" />);
+
+export const PaperclipIcon = ({ size = 20 }: { size?: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8 13 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7l9-9a2 2 0 0 1 3 3l-9 9a1 1 0 0 1-1-1l8-8" /></svg>;

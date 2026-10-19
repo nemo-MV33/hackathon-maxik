@@ -1,3 +1,9 @@
+import { ScheduleFreshness } from '../components/ScheduleFreshness';
+import { OrphanedHomework } from '../components/OrphanedHomework';
+import { loadWeek } from '../data/schedule';
+import { useAsync } from '../lib/useAsync';
+import { useMe } from '../lib/me';
+import { startOfWeek, toDateKey } from '../lib/date';
 import { useState } from 'react';
 import type { LocalProfile } from '../lib/profile';
 import { useI18n } from '../lib/i18n';
@@ -9,6 +15,8 @@ import { ChevronRight } from '../components/Icon';
 // Университет: здесь меняют группу и подгруппу.
 export const UniversityScreen = ({ profile, onBack, onChangeGroup }: { profile: LocalProfile; onBack: () => void; onChangeGroup: () => void }) => {
   const { t } = useI18n();
+  const { me } = useMe();
+  const [schedule] = useAsync(() => loadWeek(profile.group.id, toDateKey(startOfWeek(new Date()))), [profile.group.id], 'University-status');
   const [, saveProfile] = useProfile();
   const [subgroup, setSubgroup] = useState(profile.subgroup);
   const choose = (value: 1 | 2 | null) => {
@@ -53,6 +61,9 @@ export const UniversityScreen = ({ profile, onBack, onChangeGroup }: { profile: 
         ))}
       </div>
       <p className="hint">{t.groupChangeWarning}</p>
+      <section className="schedule-status"><h2 className="section-title">{t.scheduleStatus}</h2>{schedule.status === 'ready' && <ScheduleFreshness at={schedule.data.updatedAt} stale={schedule.data.stale} />}</section>
+      {(me?.role === 'headman' || me?.role === 'editor') && <details className="schedule-maintenance"><summary>{t.orphanedList}</summary><OrphanedHomework /></details>}
+
     </div>
   );
 };

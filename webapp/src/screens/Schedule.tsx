@@ -1,9 +1,9 @@
+import { lessonFromHomework } from '../lib/tasks';
 import { lessonDate } from '../lib/timezone';
-import { ScheduleFreshness } from '../components/ScheduleFreshness';
 import { useEffect, useRef, useState } from 'react';
 import { loadMeta, loadWeek, type Lesson } from '../data/schedule';
 import {
-  addDays, formatDay, formatRange, formatUpdatedAt, fromDateKey, startOfWeek, toDateKey,
+  addDays, formatDay, formatRange, fromDateKey, startOfWeek, toDateKey,
 } from '../lib/date';
 import { useI18n } from '../lib/i18n';
 import type { LocalProfile } from '../lib/profile';
@@ -137,16 +137,19 @@ export const Schedule = ({
   }, [mode, week.status]);
 
   useEffect(() => {
-    if (!launch || week.status !== 'ready') return;
+    if (!launch || (week.status !== 'ready' && (launch.lessonNumber ?? 0) < 1000000)) return;
+    if ((launch.lessonNumber ?? 0) >= 1000000 && homework.status !== 'ready') return;
     if (launch.groupId && launch.groupId !== profile.group.id) { onLaunchHandled?.(); return; }
     if (mode !== 'day') setMode('day');
-    const target = launch.lessonNumber
+    const scheduled = launch.lessonNumber && week.status === 'ready'
       ? week.data.lessons.find((lesson) => lesson.date === launch.date
         && lesson.lessonNumber === launch.lessonNumber && (lesson.subgroup ?? null) === (launch.subgroup ?? null))
       : undefined;
+    const task = homework.status === 'ready' ? homework.data.items.find((item) => item.date === launch.date && item.lessonNumber === launch.lessonNumber && (item.subgroup ?? null) === (launch.subgroup ?? null)) : undefined;
+    const target = scheduled ?? (task?.standalone ? lessonFromHomework(task) : undefined);
     onLaunchHandled?.();
     if (target) onOpenLesson(target);
-  }, [launch, week.status]);
+  }, [launch, week.status, homework.status]);
 
   const onTouchStart = (event: React.TouchEvent) => {
     const touch = event.touches[0];
@@ -190,7 +193,7 @@ export const Schedule = ({
 
       {mode === 'day' && <DayHeading dateKey={selected} todayKey={todayKey} lessons={selectedLessons} loading={week.status !== 'ready'} />}
 
-      {week.status === 'ready' && <ScheduleFreshness at={week.data.updatedAt} stale={week.data.stale} />}
+
 
       <div className="week-nav">
         <button type="button" className="icon-button" aria-label={t.previousWeek} disabled={!canShift(-1)} onClick={() => shiftWeek(-1)}>
@@ -256,9 +259,7 @@ export const Schedule = ({
 
       {absence && <AbsenceSheet kind={absence.kind} lesson={absence.lesson} onClose={() => setAbsence(null)} />}
 
-      {meta.status === 'ready' && (
-        <p className="footnote">{t.footnote(formatUpdatedAt(week.status === 'ready' && week.data.updatedAt ? week.data.updatedAt : meta.data.updatedAt))}</p>
-      )}
+
       </>)}
     </div>
   );

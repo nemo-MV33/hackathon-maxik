@@ -9,6 +9,7 @@ const DATA_URL = `${import.meta.env.BASE_URL}data/`;
 export type Group = { id: string | number; universityId?: string; title: string; institute: string; course: number | null };
 
 export type Lesson = {
+  standalone?: boolean;
   stale?: boolean;
   groupId?: string | number;
   startsAt?: string; endsAt?: string; timeZone?: string;

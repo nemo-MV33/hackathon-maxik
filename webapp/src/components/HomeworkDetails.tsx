@@ -1,3 +1,4 @@
+import { DateField } from './DateField';
 import { useState } from 'react';
 import type { Deadline, Submission } from '../data/homework';
 import { useI18n } from '../lib/i18n';
@@ -15,22 +16,21 @@ export const HomeworkDetails = ({ deadline, submission, dueAt, completed }: Deta
     </p>}
   </div>;
 };
-export const HomeworkDetailsEditor = ({ deadline, submission, onDeadline, onSubmission }: Details & {
+export const HomeworkDetailsEditor = ({ deadline, submission, onDeadline, onSubmission, standalone = false }: Details & {
+  standalone?: boolean;
   onDeadline: (value: Deadline) => void; onSubmission: (value: Submission | null) => void;
 }) => {
   const { t } = useI18n();
   const kind = deadline?.kind ?? 'lesson';
   const [linkTouched, setLinkTouched] = useState(false);
   const invalidLink = submission?.url && (() => { try { const url = new URL(submission.url!); return url.protocol !== 'https:' || !!url.username || !!url.password; } catch { return true; } })();
-  return <details className="hw-details-editor" open={kind !== 'lesson' || !!submission || undefined}><summary>{t.homeworkOptions}</summary><div className="hw-details-editor__fields">
-    <label className="field-label">{t.deadlineLabel}
+  return <details className="hw-details-editor" open><summary>{t.homeworkOptions}</summary><div className="hw-details-editor__fields">
+    {!standalone && <label className="field-label">{t.deadlineLabel}
       <select className="field" value={kind} onChange={(event) => onDeadline({ kind: event.target.value as Deadline['kind'] })}>
         {Object.entries(t.deadlineKinds).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select>
-    </label>
-    {kind === 'date' && <label className="field-label">{t.deadlineUniversityTime}
-      <input className="field" type="datetime-local" required value={deadline?.local ?? ''} onInput={(event) => onDeadline({ kind: 'date', local: event.currentTarget.value })} onChange={(event) => onDeadline({ kind: 'date', local: event.target.value })} />
     </label>}
+    {kind === 'date' && <DateField type="datetime-local" label={t.deadlineUniversityTime} required value={deadline?.local ?? ''} onChange={(local) => onDeadline({ kind: 'date', local })} />}
     <label className="field-label">{t.submissionLabel}
       <select className="field" value={submission?.kind ?? ''} onChange={(event) => {
         const next = event.target.value as Submission['kind'];

@@ -23,6 +23,6 @@ export const buildTasks = (homework: HomeworkItem[], announcements: Announcement
 
 // Если пары нет в загруженных неделях, открываем карточку по данным ДЗ.
 export const lessonFromHomework = (item: HomeworkItem): Lesson => ({
-  groupId: item.groupId, date: item.date, lessonNumber: item.lessonNumber, time: item.lessonTime, subject: item.subject,
+  standalone: item.standalone, groupId: item.groupId, date: item.date, lessonNumber: item.lessonNumber, time: item.lessonTime, subject: item.subject,
   lessonType: '', subgroup: item.subgroup, teachers: [], auditories: [],
 });

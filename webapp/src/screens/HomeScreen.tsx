@@ -1,5 +1,4 @@
 import { lessonDate, lessonMoment } from '../lib/timezone';
-import { ScheduleFreshness } from '../components/ScheduleFreshness';
 import { useEffect, useState } from 'react';
 import type { Lesson } from '../data/schedule';
 import { useRemoteHomework } from '../data/homework';
@@ -29,6 +28,7 @@ type Props = {
   profile: LocalProfile;
   profileRevision: number;
   onOpenLesson: (lesson: Lesson) => void;
+  onOpenHomework: (lesson: Lesson) => void;
   onOpenProfile: () => void;
   onOpenExams: () => void;
   onOpenPlanner: () => void;
@@ -36,7 +36,7 @@ type Props = {
 
 // Главная: что у меня сейчас. Если сегодня ещё есть пары — весь день; если нет — ближайшая пара.
 // Ниже — задачи: ДЗ и объявления от ближайшего к дальнему.
-export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfile, onOpenExams, onOpenPlanner }: Props) => {
+export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenHomework, onOpenProfile, onOpenExams, onOpenPlanner }: Props) => {
   const { t } = useI18n();
   const [scheduleRevision, setScheduleRevision] = useState(0);
   useEffect(() => {
@@ -104,7 +104,7 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfi
             </span>
           )}
         </div>
-        <ScheduleFreshness at={focusLessons[0]?.updatedAt} stale={focusLessons[0]?.stale} />
+
         {lessons.status === 'loading' && <ScheduleSkeleton rows={2} />}
         {lessons.status === 'error' && <ErrorState message={lessons.message} onRetry={retry} />}
         {lessons.status === 'ready' && !focusDay && <Empty title={t.noUpcomingTitle}>{t.noUpcomingText}</Empty>}
@@ -133,7 +133,7 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenProfi
           <TaskList
             tasks={tasks}
             todayKey={todayKey}
-            onOpenHomework={(task) => onOpenLesson(task.lesson ?? lessonFromHomework(task.item))}
+            onOpenHomework={(task) => onOpenHomework(task.lesson ?? lessonFromHomework(task.item))}
             onOpenAnnouncement={setOpenAnnouncement}
           />
         )}
