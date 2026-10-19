@@ -173,3 +173,67 @@ test('completed homework does not send its scheduled reminder; new content enabl
   assert.equal(await notifications.sendScheduled(), 1);
   assert.equal(sent.length, 1);
 });
+
+test('standalone homework accepts next-year deadlines without requesting a schedule; titles remain independent', async (t) => {
+  const { preferences, community } = await setup(t);
+  let requests = 0;
+  const service = { groupSchedule: async () => { requests++; throw Error('no_schedule'); } };
+  const save = (subject) => putHomework({ user: { id: 1 }, preferences, community, service, body: { standalone: true, scope: 'shared', date: '2100-05-20', lessonNumber: 0, subgroup: null, subject, text: 'Подготовить проект', deadline: { kind: 'date', local: '2100-05-20T18:00' } } });
+  const first = (await save('Курсовая')).item;
+  const second = (await save('Курсовая')).item;
+  assert.equal(first.standalone, true); assert.equal(first.dueAt, '2100-05-20T10:00:00.000Z');
+  assert.notEqual(first.lessonNumber, second.lessonNumber);
+  const list = await getHomework({ user: { id: 2 }, preferences, community, service, url: new URL('http://test/api/homework?groupId=11&from=2100-05-20&to=2100-05-20') });
+  assert.equal(list.items.length, 2); assert.equal(requests, 0);
+});
+
+test('standalone homework keeps personal versions, completion, reminders and attachments private', async (t) => {
+  const { preferences, community, service } = await setup(t);
+  const file = await community.attachmentStore.upload(Buffer.from('Личный проект'), { userId: 2, groupId: group.id, scope: 'personal', name: 'project.txt' });
+  const body = { standalone: true, scope: 'personal', date: '2100-05-20', lessonNumber: 0, subgroup: null, subject: 'Курсовая', text: '', attachmentIds: [file.id], deadline: { kind: 'date', local: '2100-05-20T18:00' }, remindAt: '2100-05-19T10:00:00Z' };
+  const put = (id, patch) => putHomework({ user: { id }, preferences, community, service, body: { ...body, ...patch } });
+  const item = (await put(2, {})).item;
+  assert.equal(item.attachments[0].id, file.id);
+  await put(2, { lessonNumber: item.lessonNumber, scope: 'completion', completed: true, revision: item.completionRevision });
+  const url = new URL('http://test/api/homework?groupId=11&from=2100-05-20&to=2100-05-20');
+  assert.equal((await getHomework({ user: { id: 2 }, preferences, community, service, url })).items[0].completed, true);
+  assert.equal((await getHomework({ user: { id: 4 }, preferences, community, service, url })).items.length, 0);
+  await assert.rejects(put(4, { lessonNumber: item.lessonNumber, text: 'Чужая правка' }), { status: 404 });
+  await put(2, { lessonNumber: item.lessonNumber, text: 'Новая редакция' });
+  assert.equal((await getHomework({ user: { id: 2 }, preferences, community, service, url })).items[0].completed, false);
+  await putHomework({ user: { id: 2 }, preferences, community, service, body: { standalone: true, scope: 'personal', date: body.date, lessonNumber: item.lessonNumber, subgroup: null, text: null } });
+  assert.equal((await preferences.get(2)).homeworkReminders[`${body.date}:${item.lessonNumber}:0`], undefined);
+  assert.equal((await getHomework({ user: { id: 2 }, preferences, community, service, url })).items.length, 0);
+});
+
+test('standalone validation enforces group editing rights, a title and explicit university time', async (t) => {
+  const { save } = await setup(t);
+  const body = { standalone: true, lessonNumber: 0, subject: 'Проект', deadline: { kind: 'date', local: '2100-05-20T18:00' } };
+  await assert.rejects(save(2, 'Задание', 'shared', body), { status: 403 });
+  for (const patch of [{ subject: '' }, { subject: ['Проект'] }, { subject: 'а'.repeat(201) }]) await assert.rejects(save(1, 'Задание', 'shared', { ...body, ...patch }), { error: 'invalid_subject' });
+  for (const deadline of [{ kind: 'lesson' }, { kind: 'next' }, { kind: 'date', local: '2100-02-30T12:00' }]) await assert.rejects(save(1, 'Задание', 'shared', { ...body, deadline }), { error: 'invalid_deadline' });
+});
+
+test('failed standalone attachment validation does not create a task or a phantom reminder', async (t) => {
+  const { save, preferences, community } = await setup(t);
+  const before = await preferences.get(1);
+  await assert.rejects(save(1, 'Проект', 'shared', { standalone: true, lessonNumber: 0, subject: 'Курс', deadline: { kind: 'date', local: '2100-05-20T18:00' }, attachmentIds: ['missing'], remindAt: '2100-05-19T10:00:00Z' }));
+  assert.deepEqual(await preferences.get(1), before);
+  assert.equal((await community.attachmentRecords()).length, 0);
+});
+
+test('standalone shared versions can be restored; deleting the shared task preserves a student personal version and its reminder', async (t) => {
+  const { preferences, community, service } = await setup(t);
+  const body = { standalone: true, date: '2100-05-20', lessonNumber: 0, subgroup: null, scope: 'shared', subject: 'Проект', text: 'Первая версия', deadline: { kind: 'date', local: '2100-05-20T18:00' } };
+  const initial = (await putHomework({ user: { id: 1 }, preferences, community, service, body })).item;
+  const put = (id, patch) => putHomework({ user: { id }, preferences, community, service, body: { ...body, lessonNumber: initial.lessonNumber, ...patch } });
+  await put(2, { scope: 'personal', text: 'Личный план', remindAt: '2100-05-19T10:00:00Z' });
+  await put(3, { text: 'Вторая версия' });
+  const restored = (await put(1, { restoreVersion: 1 })).item;
+  assert.equal(restored.text, 'Первая версия'); assert.equal(restored.standalone, true);
+  assert.equal(restored.sharedHistory.at(-1).restoredFrom, 1);
+  await put(1, { text: null });
+  assert.ok((await preferences.get(2)).homeworkReminders[`${body.date}:${initial.lessonNumber}:0`]);
+  const own = await community.homeworkForUser(group.id, 2, { from: body.date, to: body.date });
+  assert.equal(own[0].text, 'Личный план'); assert.equal(own[0].sharedText, null);
+});

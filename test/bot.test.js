@@ -744,7 +744,7 @@ test('бот: текст и фото одним сообщением, серия
 
 test('необязательные срок, способ сдачи, напоминание и история после сохранения ДЗ в боте', async (t) => {
   const { say, press, community, preferences } = await setup(t);
-  const day = toDateKey(addDays(startOfWeek(new Date()), 7));
+  const day = toDateKey(addDays(dateFromKey(irkutskDateKey()), 1));
   await preferences.set(HEADMAN.user_id, { selection: { kind: 'group', id: 11, title: GROUPS[0].title }, lang: 'ru' });
   await preferences.set(STUDENT.user_id, { selection: { kind: 'group', id: 11, title: GROUPS[0].title }, lang: 'ru' });
   await community.setChat(GROUP_CHAT.chat_id, { group: { id: 11, title: GROUPS[0].title }, headman: { userId: HEADMAN.user_id } });

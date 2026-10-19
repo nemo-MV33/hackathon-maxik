@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { completionRevision, homeworkCompleted } from '../../lib/homework-completion.js';
 import { detailsInput, withDeadline, dueReminderAt } from '../../lib/homework-details.js';
 import { sameGroup, groupKey } from '../../universities/identity.js';
@@ -39,8 +40,8 @@ const lessonInput = (body) => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new HttpError(400, 'invalid_body', 'Ожидался JSON-объект');
   }
-  if (!DATE_PATTERN.test(body.date ?? '')) throw new HttpError(400, 'invalid_date', 'Некорректная дата пары');
-  if (!Number.isInteger(body.lessonNumber) || body.lessonNumber < 1) {
+  if (typeof body.date !== 'string' || !parseDateKey(body.date)) throw new HttpError(400, 'invalid_date', 'Некорректная дата пары');
+  if (!Number.isInteger(body.lessonNumber) || body.lessonNumber < (body.standalone === true ? 0 : 1)) {
     throw new HttpError(400, 'invalid_lesson', 'Некорректный номер пары');
   }
   if (![null, 1, 2].includes(body.subgroup ?? null)) {
@@ -86,6 +87,7 @@ const findLesson = async (service, groupId, input) => {
 };
 
 const serialize = (item, reminders = {}, profile = {}) => ({
+  standalone: Boolean(item.standalone),
   completed: homeworkCompleted(item, profile),
   completionRevision: completionRevision(item),
   deadline: item.deadline ?? { kind: 'lesson' },
@@ -188,15 +190,33 @@ export const putHomework = async ({ user, preferences, community, service, body,
     await preferences.set(user.id, { ...current, homeworkCompleted: completed });
     return { completed: body.completed };
   }
-  const lesson = await findLesson(service, group.id, input);
+  let lesson;
+  if (body.standalone === true) {
+    const records = await community.homeworkForUser(group.id, user.id, { from: input.lessonDate, to: input.lessonDate });
+    const current = records.find((item) => item.standalone && reminderKey(item) === reminderKey(input));
+    if (input.lessonNumber === 0) {
+      if (!['shared', 'personal'].includes(input.scope) || input.text === null || body.restoreVersion !== undefined) throw new HttpError(400, 'invalid_lesson');
+      if (typeof body.subject !== 'string' || !body.subject.trim() || body.subject.trim().length > 200) throw new HttpError(400, 'invalid_subject');
+      if (body.deadline?.kind !== 'date') throw new HttpError(400, 'invalid_deadline');
+      const occupied = new Set((await community.attachmentRecords()).map((item) => item.lessonNumber));
+      let number; do { number = randomInt(1000000, 2147483647); } while (occupied.has(number));
+      lesson = { date: input.lessonDate, lessonNumber: number, subgroup: input.subgroup, subject: body.subject.trim(), time: '00:00–00:00', standalone: true };
+    } else {
+      if (!current) throw new HttpError(404, 'homework_not_found');
+      lesson = { date: current.lessonDate, lessonNumber: current.lessonNumber, subgroup: current.subgroup, subject: current.subject, time: current.lessonTime, standalone: true };
+      if (body.deadline !== undefined && body.deadline?.kind !== 'date') throw new HttpError(400, 'invalid_deadline');
+    }
+  } else lesson = await findLesson(service, group.id, input);
   const details = detailsInput(body, group.id);
+  if (lesson.standalone && details.deadline?.kind === 'date') { const clock = details.deadline.local.slice(11); lesson.time = `${clock}–${clock}`; }
   const effective = (await community.homeworkForUser(group.id, user.id, { from: lesson.date, to: lesson.date })).find((item) => reminderKey(item) === reminderKey(lesson));
   const deadlineItem = await withDeadline({ ...effective, groupId: group.id, lessonDate: lesson.date, lessonTime: lesson.time, subject: lesson.subject, subgroup: lesson.subgroup, ...details }, service);
-  const reminders = await saveReminder(preferences, user.id, lesson, input.remindAt, body, deadlineItem);
   if (input.scope === 'reminder') {
+    const reminders = await saveReminder(preferences, user.id, lesson, input.remindAt, body, deadlineItem);
     return { scope: 'reminder', remindAt: reminders[`${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`]?.at ?? null };
   }
   const target = {
+    ...(lesson.standalone ? { standalone: true } : {}),
     groupId: group.id,
     groupTitle: group.title,
     lessonDate: lesson.date,
@@ -206,6 +226,13 @@ export const putHomework = async ({ user, preferences, community, service, body,
     subject: lesson.subject,
   };
 
+  const clearUnusedReminder = async (id) => {
+    if (!lesson.standalone) return;
+    const remaining = await community.homeworkForUser(group.id, id, { from: lesson.date, to: lesson.date });
+    if (remaining.some((item) => reminderKey(item) === reminderKey({ ...lesson, lessonDate: lesson.date }))) return;
+    await saveReminder(preferences, id, lesson, null);
+  };
+
   const records = await community.attachmentRecords();
   const current = records.find((item) => sameGroup(item.groupId, group.id) && item.lessonDate === lesson.date
     && item.lessonNumber === lesson.lessonNumber && (item.subgroup ?? null) === (lesson.subgroup ?? null)
@@ -213,6 +240,7 @@ export const putHomework = async ({ user, preferences, community, service, body,
   const attachments = body.attachmentIds === undefined ? current?.attachments ?? []
     : await community.attachmentStore?.resolveInput(body.attachmentIds, { userId: user.id, groupId: group.id, scope: input.scope, current: current?.attachments ?? [] });
   if (body.attachmentIds?.length && !attachments) throw new HttpError(503, 'attachments_unavailable');
+  const reminders = await saveReminder(preferences, user.id, lesson, input.remindAt, body, deadlineItem);
 
   if (body.restoreVersion !== undefined) {
     if (input.scope !== 'shared' || !Number.isInteger(body.restoreVersion)) throw new HttpError(400, 'invalid_version');
@@ -225,6 +253,9 @@ export const putHomework = async ({ user, preferences, community, service, body,
     if (role === 'student') throw new HttpError(403, 'homework_forbidden', 'Нет прав на изменение общего ДЗ');
     if (input.text === null) {
       await community.removeHomework(target);
+      if (lesson.standalone) for (const [id, prefs] of await preferences.entries()) {
+        if (prefs.selection?.kind === 'group' && sameGroup(prefs.selection.id, group.id)) await clearUnusedReminder(id);
+      }
       return { deleted: true, scope: input.scope };
     }
     const item = await community.upsertHomework({
@@ -241,6 +272,7 @@ export const putHomework = async ({ user, preferences, community, service, body,
 
   if (input.text === null) {
     await community.removePersonalHomework(user.id, target);
+    await clearUnusedReminder(user.id);
     return { deleted: true, scope: input.scope };
   }
   const item = await community.setPersonalHomework(user.id, { ...target, ...details, text: input.text, attachments, authorId: user.id, authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') });

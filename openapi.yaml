@@ -551,7 +551,7 @@ paths:
               required: [date, lessonNumber, subgroup, scope]
               properties:
                 date: { type: string, format: date }
-                lessonNumber: { type: integer, minimum: 1 }
+                lessonNumber: { type: integer, minimum: 0, description: '0 создаёт новое ДЗ без пары только с standalone true; сохранённый номер нужен для последующих правок.' }
                 subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
                 text: { type: [string, 'null'], maxLength: 2000, description: 'null удаляет версию; пустая строка допустима с attachmentIds' }
                 attachmentIds:
@@ -560,6 +560,8 @@ paths:
                   description: 'Полный выбранный список; отсутствие поля сохраняет прежние вложения. [] удаляет вложения. Лимит ATTACHMENT_MAX_COUNT, по умолчанию 8.'
                   items: { type: string, format: uuid }
                 scope: { type: string, enum: [shared, personal, reminder, completion], description: 'reminder — личное напоминание; completion — личная отметка выполнения. text для них не нужен.' }
+                standalone: { type: boolean, description: 'ДЗ без пары: создание с lessonNumber 0, subject и deadline.kind date; редактирование с сохранённым номером. Не требует расписания и не создаёт пару. Права shared/personal прежние.' }
+                subject: { type: string, minLength: 1, maxLength: 200, description: 'Название нового ДЗ без пары.' }
                 completed: { type: boolean, description: 'Обязательно при scope completion; состояние только текущего пользователя.' }
                 revision: { type: string, pattern: '^[a-f0-9]{64}$', description: 'completionRevision из GET, обязательно для completion; несовпадение возвращает 409 homework_changed.' }
                 remindAt: { type: [string, 'null'], format: date-time, description: Личное напоминание о ДЗ; null снимает }
@@ -953,6 +955,7 @@ components:
       type: object
       required: [groupId, date, lessonNumber, subgroup, subject, lessonTime, sharedText, personalText, text, source, updatedAt, version]
       properties:
+        standalone: { type: boolean, description: 'Задание без привязки к расписанию. Номер от 1000000 — внутренний ключ задания, не номер пары.' }
         completed: { type: boolean, description: 'Личная отметка выполнения текущей версии содержимого. Перенос её сохраняет, изменение текста/файлов/срока/способа сдачи сбрасывает.' }
         completionRevision: { type: string, pattern: '^[a-f0-9]{64}$' }
         groupId: { $ref: '#/components/schemas/GroupKey' }
