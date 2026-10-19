@@ -6,7 +6,7 @@ import { inventory, encryptArchive, restoreArchive, verifyArchive } from './arch
 export const retentionKeys = (keys, { daily = 14, weekly = 8 } = {}) => {
   for (const count of [daily, weekly]) if (!Number.isInteger(count) || count < 1) throw new Error('backup_invalid_retention');
   const sorted = keys.filter((key) => /\/\d{4}-\d{2}-\d{2}T[\d-]+Z\.enc$/.test(key)).sort().reverse();
-  // One recovery point per UTC calendar day and ISO week; union avoids duplicating archives.
+  // Одна точка восстановления на календарный день UTC и на неделю ISO; объединение не дублирует архивы.
   const keep = new Set(); const days = new Set(); const weeks = new Set();
   for (const key of sorted) {
     const date = key.split('/').at(-1).slice(0, 10);
@@ -34,7 +34,7 @@ export const prepareBackup = async ({ root, archive, key, snapshotAt = new Date(
   const space = await statfs(join(archive, '..'));
   const budget = manifest.inventory.files.reduce((total, file) => total + file.size, 0) * 1.02 + 512 * 1024 * 1024;
   if (space.bavail * space.bsize < budget) throw new Error('backup_disk_full');
-  // /snapshot itself is disposable; its three data subdirectories are read-only mounts.
+  // Сам /snapshot временный, три каталога данных в нём смонтированы только для чтения.
   await writeFile(join(root, 'manifest.json'), JSON.stringify(manifest), { mode: 0o600 });
   await encryptArchive(root, archive, key);
   return { archive, manifest };
@@ -57,7 +57,7 @@ export const backup = async ({ storage, capture, prepared, key, prefix = 'norfly
       archive = join(workspace, 'backup.enc'); await encryptArchive(root, archive, key);
     }
     const snapshotAt = manifest.snapshotAt;
-    // Every upload must survive authenticated streaming verification before rotation.
+    // До ротации каждая выгрузка проходит потоковую проверку с подписью.
     const name = `${prefix}${snapshotAt.replace(/[:.]/g, '-')}.enc`;
     await storage.put(name, archive);
     await rm(archive);

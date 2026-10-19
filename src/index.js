@@ -7,6 +7,8 @@ import { createBot } from './bot/create-bot.js';
 import { createHttpServer } from './http/server.js';
 import { UniversityService } from './universities/service.js';
 import { BguProvider } from './universities/bgu/provider.js';
+import { SpbpuProvider } from './universities/spbpu/provider.js';
+import { SpbuProvider } from './universities/spbu/provider.js';
 import { IrnituClient } from './irnitu/client.js';
 import { ScheduleService } from './services/schedule-service.js';
 import { ReminderService } from './services/reminder-service.js';
@@ -20,8 +22,14 @@ if (!config.botToken) {
 }
 
 const client = new IrnituClient(config.irnitu);
-const service = installDemo(new UniversityService({ irnitu: new ScheduleService(client), bgu: new BguProvider(config.bgu) }));
-Promise.allSettled([service.groups(), service.teachers(), service.auditories()]);
+const service = installDemo(new UniversityService({
+  irnitu: new ScheduleService(client),
+  bgu: new BguProvider(config.bgu),
+  spbpu: new SpbpuProvider(config.spbpu),
+  spbu: new SpbuProvider(config.spbu),
+}));
+// Справочники прогреваются в фоне, чтобы первый поиск группы не ждал источник.
+Promise.allSettled(service.universities().flatMap((item) => [service.groups(item.id), service.teachers(item.id), service.auditories(item.id)]));
 const preferences = new PreferencesStore(
   fileURLToPath(new URL('../data/preferences.json', import.meta.url)),
 );

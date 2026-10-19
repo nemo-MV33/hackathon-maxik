@@ -1,6 +1,8 @@
 import { zonedDateKey } from '../src/lib/timezone.js';
 import { UniversityService } from '../src/universities/service.js';
 import { BguProvider } from '../src/universities/bgu/provider.js';
+import { SpbpuProvider } from '../src/universities/spbpu/provider.js';
+import { SpbuProvider } from '../src/universities/spbu/provider.js';
 import { groupKey } from '../src/universities/identity.js';
 import 'dotenv/config';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
@@ -72,12 +74,13 @@ const service = new UniversityService({ irnitu: new ScheduleService(new IrnituCl
   cacheDir,
   retries: Math.max(config.irnitu.retries, 3),
   timeoutMs: Math.max(config.irnitu.timeoutMs, 15_000),
-})), bgu: new BguProvider(config.bgu) });
+})), bgu: new BguProvider(config.bgu), spbpu: new SpbpuProvider(config.spbpu), spbu: new SpbuProvider(config.spbu) });
 
 const startedAt = Date.now();
 const irnituGroups = config.irnitu.token ? await service.groups() : [];
-const bguGroups = await service.groups('bgu').catch((error) => { console.warn(error.message); return []; });
-const allGroups = [...irnituGroups, ...bguGroups];
+const otherGroups = (await Promise.all(['bgu', 'spbpu', 'spbu'].map((id) => service.groups(id)
+  .catch((error) => { console.warn(`${id}: ${error.message}`); return []; })))).flat();
+const allGroups = [...irnituGroups, ...otherGroups];
 const readStore = async (name) => { try { return JSON.parse(await readFile(resolve(`data/${name}.json`), 'utf8')); } catch (error) { if (error.code === 'ENOENT') return {}; throw error; } };
 const savedPreferences = await readStore('preferences');
 const savedCommunity = await readStore('community');
@@ -96,7 +99,8 @@ await writeJson(join(outDir, 'groups.json'), allGroups.map(({ id, universityId, 
 })));
 
 let failed = 0;
-const tasks = groups.filter((group) => group.universityId !== 'bgu' || active.has(group.id)).flatMap((group) => weekStarts.map((week) => async () => {
+// У ИРНИТУ официальный API с токеном, остальные источники открытые: выгружаем только группы, где есть пользователи.
+const tasks = groups.filter((group) => group.universityId === 'irnitu' || active.has(group.id)).flatMap((group) => weekStarts.map((week) => async () => {
   try {
     const schedule = await service.groupSchedule(group.id, { week, fresh: true, raw: true });
     if (schedule.stale) throw new Error('source_stale');

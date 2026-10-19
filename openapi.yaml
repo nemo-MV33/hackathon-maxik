@@ -258,7 +258,7 @@ paths:
             schema:
               type: object
               properties:
-                universityId: { type: string, enum: [irnitu, bgu] }
+                universityId: { type: string, enum: [irnitu, bgu, spbpu, spbu] }
                 timeZone: { type: string, example: Europe/Moscow, description: Часовой пояс IANA }
                 quietHours: { anyOf: [{ $ref: '#/components/schemas/QuietHours' }, { type: 'null' }] }
                 groupId: { $ref: '#/components/schemas/GroupInput' }
@@ -584,10 +584,10 @@ paths:
   /api/institutes:
     get:
       operationId: listInstitutes
-      summary: Институты ИРНИТУ
+      summary: Институты и факультеты вуза
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
-        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu, spbpu, spbu], default: irnitu } }
       responses:
         '200':
           description: Список институтов
@@ -599,9 +599,11 @@ paths:
     get:
       operationId: searchGroups
       summary: Поиск учебной группы
+      description: С параметром id возвращает одну группу по составному идентификатору без загрузки справочника в клиент.
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
-        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu, spbpu, spbu], default: irnitu } }
+        - { name: id, in: query, schema: { $ref: '#/components/schemas/GroupKey' }, example: spbpu~45680 }
         - { name: q, in: query, schema: { type: string }, example: истб-25 }
         - { name: institute, in: query, schema: { type: string } }
         - { name: course, in: query, schema: { type: integer } }
@@ -626,13 +628,46 @@ paths:
                         course: { type: [integer, 'null'] }
                         institute: { type: string }
         '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/catalog:
+    get:
+      operationId: browseCatalog
+      summary: Каталог групп вуза без поиска по названию
+      description: >-
+        Для СПбГУ: пустой path — направления, «PHYS» — программы, «PHYS/<программа>» — годы набора,
+        «PHYS/<программа>/<id набора>» — группы. Ответы кэшируются на неделю из-за суточной квоты API вуза.
+      security: [{ serviceKey: [] }, { maxInitData: [] }]
+      parameters:
+        - { name: universityId, in: query, required: true, schema: { type: string, enum: [spbu] } }
+        - { name: path, in: query, schema: { type: string, default: '' }, example: PHYS }
+      responses:
+        '200':
+          description: Узлы каталога или группы
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, title, kind]
+                      properties:
+                        id: { type: string }
+                        title: { type: string }
+                        hint: { type: string }
+                        course: { type: [integer, 'null'] }
+                        kind: { type: string, enum: [node, group] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '501': { description: У вуза нет каталога, группа ищется через /api/groups }
   /api/teachers:
     get:
       operationId: searchTeachers
       summary: Поиск преподавателя
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
-        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu, spbpu, spbu], default: irnitu } }
         - { name: q, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 50 } }
       responses:
@@ -648,7 +683,7 @@ paths:
       summary: Поиск аудитории
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
-        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu, spbpu, spbu], default: irnitu } }
         - { name: q, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 50 } }
       responses:
@@ -664,7 +699,7 @@ paths:
       summary: Расписание группы, преподавателя или аудитории на неделю
       security: [{ serviceKey: [] }, { maxInitData: [] }]
       parameters:
-        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu], default: irnitu } }
+        - { name: universityId, in: query, schema: { type: string, enum: [irnitu, bgu, spbpu, spbu], default: irnitu } }
         - { name: kind, in: path, required: true, schema: { type: string, enum: [group, teacher, auditory] } }
         - { name: id, in: path, required: true, schema: { $ref: '#/components/schemas/GroupInput' }, example: irnitu~478237 }
         - { name: week, in: query, description: Любая дата недели, schema: { type: string, format: date } }
@@ -687,7 +722,7 @@ paths:
                     properties:
                       from: { type: string, format: date }
                       to: { type: string, format: date }
-                  universityId: { type: string, enum: [irnitu, bgu] }
+                  universityId: { type: string, enum: [irnitu, bgu, spbpu, spbu] }
                   timeZone: { type: string, example: Asia/Irkutsk }
                   stale: { type: boolean, description: Источник недоступен или срок кэша истёк; время updatedAt не меняется }
                   weekEven: { type: boolean }
@@ -742,7 +777,7 @@ components:
   schemas:
     GroupKey:
       type: string
-      pattern: '^(irnitu|bgu)~[1-9][0-9]*$'
+      pattern: '^(irnitu|bgu|spbpu|spbu)~[1-9][0-9]*$'
       example: bgu~32982
       description: Составной идентификатор вуза и сущности; source id не уникален между вузами
     GroupInput:
@@ -761,7 +796,7 @@ components:
       type: object
       required: [id, name, city, timeZone, lessonTimes, parityRule, source, access, capabilities]
       properties:
-        id: { type: string, enum: [irnitu, bgu] }
+        id: { type: string, enum: [irnitu, bgu, spbpu, spbu] }
         name: { type: object, properties: { ru: { type: string }, en: { type: string } } }
         fullName: { type: object, properties: { ru: { type: string }, en: { type: string } } }
         city: { type: object, properties: { ru: { type: string }, en: { type: string } } }
@@ -834,7 +869,7 @@ components:
       type: object
       required: [group, institute, course, subgroup, remindersEnabled]
       properties:
-        universityId: { type: [string, 'null'], enum: [irnitu, bgu, null] }
+        universityId: { type: [string, 'null'], enum: [irnitu, bgu, spbpu, spbu, null] }
         timeZone: { type: [string, 'null'], description: IANA; null означает часовой пояс вуза }
         quietHours: { anyOf: [{ $ref: '#/components/schemas/QuietHours' }, { type: 'null' }] }
         group: { anyOf: [{ $ref: '#/components/schemas/Group' }, { type: 'null' }] }

@@ -50,7 +50,7 @@ const formatLesson = (language, lesson, scheduleKind, ordinal) => {
   ].filter(Boolean).join('   ');
   return [
     `${numberIcon(ordinal)} **${lesson.time}**`,
-    lesson.universityTime && lesson.universityTime !== lesson.time ? `_${lesson.universityTime} ${language === 'en' ? 'university time' : 'по Иркутску'}_` : '',
+    lesson.universityTime && lesson.universityTime !== lesson.time ? `_${lesson.universityTime} ${language === 'en' ? 'university time' : 'по времени вуза'}_` : '',
     `${kindIcon(lesson.lessonType)} **${lesson.subject}**`,
     details ? `_${capitalize(details)}_` : '',
     where,

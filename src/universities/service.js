@@ -2,10 +2,11 @@ import { addDays, startOfWeek, toDateKey } from '../lib/date.js';
 import { lessonMoments, zonedDateKey } from '../lib/timezone.js';
 import { universities, university } from './config.js';
 import { groupKey, splitGroupKey } from './identity.js';
+import { UnsupportedScheduleError } from './provider.js';
 
-// Контракт провайдера: groups, institutes, searchGroups, teachers, auditories,
-// searchTeachers, searchAuditories, groupSchedule, teacherSchedule, auditorySchedule.
-// Неподдерживаемые справочники возвращают []; возможности объявлены в конфиге.
+// Единая точка доступа к расписаниям вузов. Провайдер отдаёт числовые идентификаторы
+// источника, сервис добавляет к ним вуз («spbpu~45680») и часовой пояс пар.
+// Неподдерживаемые справочники возвращают []; возможности объявлены в config.js.
 export class UniversityService {
   constructor(providers) { this.providers = providers; }
   universities() { return universities.filter((item) => this.providers[item.id]); }
@@ -14,6 +15,19 @@ export class UniversityService {
     return (await this.provider(universityId).groups()).map((group) => ({ ...group, id: groupKey(group.id, universityId), universityId }));
   }
   institutes(universityId) { return this.provider(universityId).institutes(); }
+  // Каталог для вузов без поиска групп по названию (СПбГУ): направление → программа → год → группа.
+  async browse(universityId, path = '') {
+    const provider = this.provider(universityId);
+    if (!provider.browse) throw new UnsupportedScheduleError();
+    return (await provider.browse(path)).map((item) => (item.kind === 'group' ? { ...item, id: groupKey(item.id, universityId), universityId } : item));
+  }
+  // Проверка ссылки на группу без загрузки всего справочника.
+  async hasGroup(id) {
+    const { universityId, sourceId } = splitGroupKey(id);
+    const provider = this.provider(universityId);
+    if (provider.hasGroup) return provider.hasGroup(sourceId);
+    return (await provider.groups()).some((group) => Number(group.id) === sourceId);
+  }
   async searchGroups(query, { universityId = 'irnitu', ...options } = {}) {
     return (await this.provider(universityId).searchGroups(query, options)).map((group) => ({ ...group, id: groupKey(group.id, universityId), universityId }));
   }

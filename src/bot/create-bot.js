@@ -3,14 +3,14 @@ import { detailsInput, withDeadline, detailsText, dueReminderAt } from '../lib/h
 import { historyText } from './homework-history.js';
 import { HomeworkAttachmentBatch, incomingHomeworkAttachments, downloadMaxAttachment, attachmentSummary } from './homework-attachments.js';
 import { userDayLessons } from '../services/user-schedule.js';
-import { groupKey, sameGroup, splitGroupKey } from '../universities/identity.js';
-import { universities } from '../universities/config.js';
-import { lessonInTimeZone, profileTimeZone, zonedClock, zonedDateKey, zonedMoment } from '../lib/timezone.js';
+import { GROUP_ID, UNIVERSITY_PATTERN, groupKey, sameGroup, splitGroupKey } from '../universities/identity.js';
+import { universities, university } from '../universities/config.js';
+import { lessonInTimeZone, profileTimeZone, universityTimeZone, zonedClock, zonedDateKey, zonedMinutes, zonedMoment } from '../lib/timezone.js';
 import { randomUUID } from 'node:crypto';
 import { Bot, Keyboard } from '@maxhub/max-bot-api';
 import { addDays, startOfWeek, toDateKey } from '../lib/date.js';
 import {
-  dateFromKey, irkutskClock, irkutskDateKey, irkutskMinutes, irkutskMoment, lessonEndMinutes,
+  dateFromKey, lessonEndMinutes,
 } from '../lib/irkutsk.js';
 import {
   NOTIFICATION_KINDS, REMINDER_MINUTES, isMuted, notificationEnabled, reminderMinutes, summaryTime,
@@ -169,7 +169,9 @@ export const createBot = ({
     ?? (ownGroup(ctx.prefs)?.id ? splitGroupKey(ownGroup(ctx.prefs).id).universityId : 'irnitu');
   const universityPrompt = (ctx, mode) => {
     setSession(ctx, { step: 'university', mode });
-    return show(ctx, ctx.lang === 'en' ? 'Choose your university' : 'Выберите вуз', universities.map((item) =>
+    // Только вузы с подключённым провайдером: конфиг может описывать источник раньше, чем он включён.
+    const available = service.universities?.() ?? universities;
+    return show(ctx, ctx.lang === 'en' ? 'Choose your university' : 'Выберите вуз', available.map((item) =>
       [button(item.name[ctx.lang] ?? item.name.ru, `uni:${mode}:${item.id}`)]));
   };
 
@@ -415,12 +417,15 @@ export const createBot = ({
 
   // Домашнее задание
 
+  // «Сегодня» считается по часам вуза группы: у Иркутска и Петербурга разные даты после полуночи.
+  const groupToday = (groupId) => zonedDateKey(new Date(), universityTimeZone(groupId));
+
   const upcomingLessons = async (groupId, subgroup) => {
+    const today = groupToday(groupId);
     const [thisWeek, nextWeek] = await Promise.all([
-      service.groupSchedule(groupId, { week: dateFromKey(irkutskDateKey()), subgroup }),
-      service.groupSchedule(groupId, { week: addDays(dateFromKey(irkutskDateKey()), 7), subgroup }),
+      service.groupSchedule(groupId, { week: dateFromKey(today), subgroup }),
+      service.groupSchedule(groupId, { week: addDays(dateFromKey(today), 7), subgroup }),
     ]);
-    const today = irkutskDateKey();
     const seen = new Set();
     return [...thisWeek.lessons, ...nextWeek.lessons]
       .filter((lesson) => lesson.date >= today)
@@ -665,8 +670,8 @@ export const createBot = ({
 
   // Ближайшая пара сегодня: к ней и относится «опоздаю» или «не приду».
   const currentLesson = async (groupId, subgroup) => {
-    const today = irkutskDateKey();
-    const now = irkutskMinutes();
+    const today = groupToday(groupId);
+    const now = zonedMinutes(new Date(), universityTimeZone(groupId));
     try {
       const schedule = await service.groupSchedule(groupId, { week: dateFromKey(today), subgroup });
       return schedule.lessons.find((lesson) => lesson.date === today && lessonEndMinutes(lesson) > now) ?? null;
@@ -698,7 +703,7 @@ export const createBot = ({
     const target = lesson === undefined ? await currentLesson(group.id, prefs.subgroup ?? null) : lesson;
     const notice = {
       id: randomUUID(),
-      date: irkutskDateKey(),
+      date: groupToday(group.id),
       chatId: chat.chatId,
       groupId: group.id,
       groupTitle: chat.group.title,
@@ -974,7 +979,7 @@ export const createBot = ({
   // Контрольные: экзамены, зачёты и консультации до конца семестра
 
   const upcomingExams = async (groupId, subgroup) => {
-    const today = irkutskDateKey();
+    const today = groupToday(groupId);
     const weeks = await Promise.all(Array.from({ length: SEMESTER_WEEKS }, (_, index) =>
       service.groupSchedule(groupId, { week: addDays(dateFromKey(today), index * 7), subgroup }).catch(() => ({ lessons: [] }))));
     const seen = new Set();
@@ -1016,7 +1021,7 @@ export const createBot = ({
   };
 
   const invitePrompt = async (ctx, payload) => {
-    const match = /^group_((?:(?:irnitu|bgu)~)?\d+)_([012])$/.exec((payload ?? '').replace(/(irnitu|bgu)-(?=\d)/g, '$1~'));
+    const match = new RegExp(`^group_(${GROUP_ID})_([012])$`).exec((payload ?? '').replace(new RegExp(`(${UNIVERSITY_PATTERN})-(?=\\d)`, 'g'), '$1~'));
     if (!match) return null;
     const group = await findGroup(match[1]);
     if (!group) return null;
@@ -1150,7 +1155,7 @@ export const createBot = ({
       ctx.prefs = await preferences.set(id, { ...ctx.prefs, name: displayName(sender) });
     }
     const callback = ctx.update.callback;
-    const scoped = callback?.payload?.match(/^(.*)\|((?:irnitu|bgu)~\d+)$/);
+    const scoped = callback?.payload?.match(new RegExp(`^(.*)\\|((?:${UNIVERSITY_PATTERN})~\\d+)$`));
     if (scoped) {
       const base = scoped[1];
       const group = /^(gh|gp|mv|mt|mo|md|mu):/.test(base) ? (await groupConfigFor(ctx))?.group
@@ -1178,29 +1183,33 @@ export const createBot = ({
     await switchLanguage(ctx, ctx.match[1]);
     return privateMenu(ctx);
   });
-  bot.action(/^uni:(own|link):(irnitu|bgu)$/, async (ctx) => {
+  bot.action(new RegExp(`^uni:(own|link):(${UNIVERSITY_PATTERN})$`), async (ctx) => {
     const [, mode, universityId] = ctx.match;
     if (mode === 'link' && !await isChatManager(ctx)) return toast(ctx, ctx.t.needChatAdmin);
     setSession(ctx, { step: mode === 'link' ? 'setup' : 'own-group', universityId });
     if (mode === 'own') await savePrefs(ctx, { universityId });
+    // Вуз без поиска по названию (СПбГУ): группа выбирается в каталоге мини-приложения.
+    if (university(universityId).capabilities.catalog) {
+      return show(ctx, ctx.t.catalogPrompt, [[appButton(ctx.t)].filter(Boolean), [button(ctx.t.cancel, 'cancel')]].filter((row) => row.length));
+    }
     return show(ctx, mode === 'link' ? ctx.t.setupSearchPrompt : ctx.t.searchPrompt,
-      [...(universityId === 'irnitu' && mode === 'own' ? [[button(ctx.t.chooseByInstitute, 'inst:0')]] : []), [button(ctx.t.cancel, 'cancel')]]);
+      [...(university(universityId).capabilities.institutes && mode === 'own' ? [[button(ctx.t.chooseByInstitute, 'inst:0')]] : []), [button(ctx.t.cancel, 'cancel')]]);
   });
   bot.action('university', (ctx) => universityPrompt(ctx, 'own'));
   bot.action('find', (ctx) => {
     setSession(ctx, { step: 'search' });
     return show(ctx, ctx.t.searchPrompt, [[button(ctx.t.menu, 'menu')]]);
   });
-  bot.action(/^s:(group|teacher|auditory):((?:(?:irnitu|bgu)~)?\d+):([dw])(-?\d+)$/, (ctx) =>
+  bot.action(new RegExp(`^s:(group|teacher|auditory):(${GROUP_ID}):([dw])(-?\\d+)$`), (ctx) =>
     showSchedule(ctx, ctx.match[1], ctx.match[2], ctx.match[3], Number(ctx.match[4])));
   bot.action(/^g:([dw])(-?\d+)$/, (ctx) => showChatSchedule(ctx, ctx.match[1], Number(ctx.match[2])));
 
-  bot.action(/^mine:((?:(?:irnitu|bgu)~)?\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^mine:(${GROUP_ID})$`), async (ctx) => {
     const group = await findGroup(ctx.match[1]);
     if (!group) return toast(ctx, ctx.t.selectionExpired);
     return subgroupPrompt(ctx, group, 'sub');
   });
-  bot.action(/^sub:((?:(?:irnitu|bgu)~)?\d+):(all|1|2)$/, async (ctx) => {
+  bot.action(new RegExp(`^sub:(${GROUP_ID}):(all|1|2)$`), async (ctx) => {
     const group = await findGroup(ctx.match[1]);
     if (!group) return toast(ctx, ctx.t.selectionExpired);
     return saveOwnGroup(ctx, group, subgroupFromCode(ctx.match[2]));
@@ -1364,7 +1373,7 @@ export const createBot = ({
     ]);
   });
   bot.action('set:group', (ctx) => universityPrompt(ctx, 'own'));
-  bot.action(/^set:sub:((?:(?:irnitu|bgu)~)?\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^set:sub:(${GROUP_ID})$`), async (ctx) => {
     const group = await findGroup(ctx.match[1]);
     if (!group) return toast(ctx, ctx.t.selectionExpired);
     return subgroupPrompt(ctx, group, 'sub');
@@ -1419,7 +1428,8 @@ export const createBot = ({
     const [, id, kind] = ctx.match; const item = await detailItem(ctx, id, true);
     if (kind === 'date') {
       setSession(ctx, { step: 'homework-date', id });
-      return show(ctx, ctx.lang === 'en' ? 'Enter YYYY-MM-DD HH:mm in university time (Asia/Irkutsk)' : 'Введи ГГГГ-ММ-ДД ЧЧ:мм по времени вуза (Asia/Irkutsk)', [[button(ctx.t.cancel, 'cancel')]]);
+      const zone = universityTimeZone(item.groupId);
+      return show(ctx, ctx.lang === 'en' ? `Enter YYYY-MM-DD HH:mm in university time (${zone})` : `Введи ГГГГ-ММ-ДД ЧЧ:мм по времени вуза (${zone})`, [[button(ctx.t.cancel, 'cancel')]]);
     }
     await updateDetails(ctx, item, { deadline: { kind } }); return showDetails(ctx, id);
   });
@@ -1609,13 +1619,13 @@ ${historyText(item.history, ctx.lang, profileTimeZone(ctx.prefs))}`, [...version
   });
 
   bot.action('setup', (ctx) => beginSetup(ctx));
-  bot.action(/^link:((?:(?:irnitu|bgu)~)?\d+)$/, async (ctx) => {
+  bot.action(new RegExp(`^link:(${GROUP_ID})$`), async (ctx) => {
     if (!await isChatManager(ctx)) return toast(ctx, ctx.t.needChatAdmin);
     const group = await findGroup(ctx.match[1]);
     if (!group) return toast(ctx, ctx.t.selectionExpired);
     return subgroupPrompt(ctx, group, 'lsub');
   });
-  bot.action(/^lsub:((?:(?:irnitu|bgu)~)?\d+):(all|1|2)$/, async (ctx) => {
+  bot.action(new RegExp(`^lsub:(${GROUP_ID}):(all|1|2)$`), async (ctx) => {
     if (!await isChatManager(ctx)) return toast(ctx, ctx.t.needChatAdmin);
     const group = await findGroup(ctx.match[1]);
     if (!group) return toast(ctx, ctx.t.selectionExpired);

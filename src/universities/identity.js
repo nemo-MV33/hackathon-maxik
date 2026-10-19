@@ -1,7 +1,13 @@
+import { UNIVERSITY_IDS } from './config.js';
+
 // «~» не пересекается с разделителями старых callback payload и ключей уроков.
+export const UNIVERSITY_PATTERN = UNIVERSITY_IDS.join('|');
+// Идентификатор группы с вузом: «spbpu~45680». Старые числовые без префикса относятся к ИРНИТУ.
+export const GROUP_ID = `(?:(?:${UNIVERSITY_PATTERN})~)?\\d+`;
+const SCOPED = new RegExp(`^(${UNIVERSITY_PATTERN})~[1-9]\\d*$`);
 export const groupKey = (value, universityId = 'irnitu') => {
   const text = String(value ?? '');
-  if (/^(irnitu|bgu)~[1-9]\d*$/.test(text)) return text;
+  if (SCOPED.test(text)) return text;
   if (/^[1-9]\d*$/.test(text)) return `${universityId}~${text}`;
   throw new Error('invalid_group_id');
 };

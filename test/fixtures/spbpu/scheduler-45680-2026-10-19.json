@@ -1,0 +1,764 @@
+{
+ "week": {
+  "date_start": "2026.10.19",
+  "date_end": "2026.10.25",
+  "is_odd": false
+ },
+ "days": [
+  {
+   "weekday": 2,
+   "date": "2026-10-20",
+   "lessons": [
+    {
+     "subject": "Технологии разработки мобильных приложений",
+     "subject_short": "Технологии разработки мобильных приложений",
+     "type": 0,
+     "additional_info": "",
+     "time_start": "10:00",
+     "time_end": "11:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 27,
+      "name": "Практика",
+      "abbr": "Пр"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 29057,
+       "oid": 38005,
+       "full_name": "Пивоваров Антон Олегович",
+       "first_name": "Пивоваров",
+       "middle_name": "Антон",
+       "last_name": "Олегович",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 694,
+       "name": "215",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": "https://dl.spbstu.ru//course/view.php?id=8261"
+    },
+    {
+     "subject": "Информационная безопасность",
+     "subject_short": "Информационная безопасность",
+     "type": 0,
+     "additional_info": "",
+     "time_start": "12:00",
+     "time_end": "13:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 27,
+      "name": "Практика",
+      "abbr": "Пр"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 15473,
+       "oid": 31893,
+       "full_name": "Сергеев Анатолий Васильевич",
+       "first_name": "Сергеев",
+       "middle_name": "Анатолий",
+       "last_name": "Васильевич",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 700,
+       "name": "341",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": "https://dl.spbstu.ru//course/view.php?id=8120"
+    },
+    {
+     "subject": "Информационная безопасность",
+     "subject_short": "Информационная безопасность",
+     "type": 2,
+     "additional_info": "Поток",
+     "time_start": "14:00",
+     "time_end": "15:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 14,
+      "name": "Лекции",
+      "abbr": "Лек"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      },
+      {
+       "id": 45681,
+       "name": "5130903/30302",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      },
+      {
+       "id": 45672,
+       "name": "5130203/30101",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      },
+      {
+       "id": 45673,
+       "name": "5130203/30102",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 15473,
+       "oid": 31893,
+       "full_name": "Сергеев Анатолий Васильевич",
+       "first_name": "Сергеев",
+       "middle_name": "Анатолий",
+       "last_name": "Васильевич",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 669,
+       "name": "143",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": "https://dl.spbstu.ru//course/view.php?id=8120"
+    },
+    {
+     "subject": "Разработка пользовательских интерфейсов",
+     "subject_short": "Разработка пользовательских интерфейсов",
+     "type": 2,
+     "additional_info": "Поток",
+     "time_start": "16:00",
+     "time_end": "17:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 14,
+      "name": "Лекции",
+      "abbr": "Лек"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      },
+      {
+       "id": 45681,
+       "name": "5130903/30302",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 10470,
+       "oid": 33853,
+       "full_name": "Пархоменко Владимир Андреевич",
+       "first_name": "Пархоменко",
+       "middle_name": "Владимир",
+       "last_name": "Андреевич",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 675,
+       "name": "102",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": "https://dl.spbstu.ru//course/view.php?id=8215"
+    }
+   ]
+  },
+  {
+   "weekday": 3,
+   "date": "2026-10-21",
+   "lessons": [
+    {
+     "subject": "Военная подготовка",
+     "subject_short": "Военная подготовка",
+     "type": 0,
+     "additional_info": "Поток",
+     "time_start": "08:30",
+     "time_end": "17:20",
+     "parity": 0,
+     "typeObj": {
+      "id": 27,
+      "name": "Практика",
+      "abbr": "Пр"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      },
+      {
+       "id": 45681,
+       "name": "5130903/30302",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": null,
+     "auditories": [
+      {
+       "id": 986,
+       "name": "кафедра",
+       "building": {
+        "id": 34,
+        "name": "Военная кафедра",
+        "abbr": "Военная каф.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": ""
+    }
+   ]
+  },
+  {
+   "weekday": 4,
+   "date": "2026-10-22",
+   "lessons": [
+    {
+     "subject": "Технологии разработки мобильных приложений",
+     "subject_short": "Технологии разработки мобильных приложений",
+     "type": 2,
+     "additional_info": "Поток",
+     "time_start": "10:00",
+     "time_end": "11:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 14,
+      "name": "Лекции",
+      "abbr": "Лек"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      },
+      {
+       "id": 45681,
+       "name": "5130903/30302",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 29057,
+       "oid": 38005,
+       "full_name": "Пивоваров Антон Олегович",
+       "first_name": "Пивоваров",
+       "middle_name": "Антон",
+       "last_name": "Олегович",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 675,
+       "name": "102",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": "https://dl.spbstu.ru//course/view.php?id=8261"
+    },
+    {
+     "subject": "Разработка пользовательских интерфейсов",
+     "subject_short": "Разработка пользовательских интерфейсов",
+     "type": 0,
+     "additional_info": "",
+     "time_start": "12:00",
+     "time_end": "13:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 27,
+      "name": "Практика",
+      "abbr": "Пр"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 29698,
+       "oid": 38431,
+       "full_name": "Булыкина Елена Сергеевна",
+       "first_name": "Булыкина",
+       "middle_name": "Елена",
+       "last_name": "Сергеевна",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 700,
+       "name": "341",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": ""
+    },
+    {
+     "subject": "Интеллектуальный анализ данных",
+     "subject_short": "Интеллектуальный анализ данных",
+     "type": 0,
+     "additional_info": "",
+     "time_start": "14:00",
+     "time_end": "15:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 27,
+      "name": "Практика",
+      "abbr": "Пр"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 21683,
+       "oid": 34510,
+       "full_name": "Хитров Егор Германович",
+       "first_name": "Хитров",
+       "middle_name": "Егор",
+       "last_name": "Германович",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 695,
+       "name": "218",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": "https://dl.spbstu.ru//course/view.php?id=8118"
+    },
+    {
+     "subject": "Интеллектуальный анализ данных",
+     "subject_short": "Интеллектуальный анализ данных",
+     "type": 2,
+     "additional_info": "Поток",
+     "time_start": "16:00",
+     "time_end": "17:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 14,
+      "name": "Лекции",
+      "abbr": "Лек"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      },
+      {
+       "id": 45681,
+       "name": "5130903/30302",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 7229,
+       "oid": 29701,
+       "full_name": "Туральчук Константин Анатольевич",
+       "first_name": "Туральчук",
+       "middle_name": "Константин",
+       "last_name": "Анатольевич",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 675,
+       "name": "102",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": "https://dl.spbstu.ru//course/view.php?id=8118"
+    }
+   ]
+  },
+  {
+   "weekday": 6,
+   "date": "2026-10-24",
+   "lessons": [
+    {
+     "subject": "Программирование веб-приложений",
+     "subject_short": "Программирование веб-приложений",
+     "type": 0,
+     "additional_info": "5130903/30301 п/г 01",
+     "time_start": "10:00",
+     "time_end": "11:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 27,
+      "name": "Практика",
+      "abbr": "Пр"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 29588,
+       "oid": 38172,
+       "full_name": "Жаранова Анастасия Олеговна",
+       "first_name": "Жаранова",
+       "middle_name": "Анастасия",
+       "last_name": "Олеговна",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 674,
+       "name": "328",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": "https://dl.spbstu.ru//course/view.php?id=8200"
+    },
+    {
+     "subject": "Программирование веб-приложений",
+     "subject_short": "Программирование веб-приложений",
+     "type": 2,
+     "additional_info": "Поток",
+     "time_start": "12:00",
+     "time_end": "13:40",
+     "parity": 0,
+     "typeObj": {
+      "id": 14,
+      "name": "Лекции",
+      "abbr": "Лек"
+     },
+     "groups": [
+      {
+       "id": 45680,
+       "name": "5130903/30301",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      },
+      {
+       "id": 45681,
+       "name": "5130903/30302",
+       "level": 4,
+       "type": "common",
+       "kind": 0,
+       "spec": "",
+       "year": 2026,
+       "faculty": {
+        "id": 125,
+        "name": "Институт компьютерных наук и кибербезопасности",
+        "abbr": "ИКНК"
+       }
+      }
+     ],
+     "teachers": [
+      {
+       "id": 29588,
+       "oid": 38172,
+       "full_name": "Жаранова Анастасия Олеговна",
+       "first_name": "Жаранова",
+       "middle_name": "Анастасия",
+       "last_name": "Олеговна",
+       "grade": "",
+       "chair": "51/03 Высшая школа программной инженерии"
+      }
+     ],
+     "auditories": [
+      {
+       "id": 672,
+       "name": "319",
+       "building": {
+        "id": 25,
+        "name": "11-й учебный корпус",
+        "abbr": "11 к.",
+        "address": ""
+       }
+      }
+     ],
+     "webinar_url": "",
+     "lms_url": "https://dl.spbstu.ru//course/view.php?id=8200"
+    }
+   ]
+  }
+ ],
+ "group": {
+  "id": 45680,
+  "name": "5130903/30301",
+  "level": 4,
+  "type": "common",
+  "kind": 0,
+  "spec": "",
+  "year": 2026,
+  "faculty": {
+   "id": 125,
+   "name": "Институт компьютерных наук и кибербезопасности",
+   "abbr": "ИКНК"
+  }
+ }
+}

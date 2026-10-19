@@ -7,7 +7,7 @@ const hmac = (key, value) => createHmac('sha256', key).update(value).digest();
 const escape = (value) => encodeURIComponent(value).replace(/[!'()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
 const xml = (value) => value.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
 
-// S3 Signature V4. No credentials or signed request headers are logged.
+// Подпись S3 Signature V4. Ключи и подписанные заголовки в журнал не попадают.
 export class ObjectStorage {
   constructor({ bucket, accessKeyId, secretAccessKey, endpoint = 'https://storage.yandexcloud.net', region = 'ru-central1', fetchImpl = fetch }) {
     if (!/^[a-z0-9][a-z0-9.-]+$/.test(bucket ?? '') || !accessKeyId || !secretAccessKey) throw new Error('backup_storage_not_configured');

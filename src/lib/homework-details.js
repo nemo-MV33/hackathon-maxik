@@ -41,7 +41,7 @@ export const deadlineAt = async (item, service) => {
   const start = zonedMoment(item.lessonDate, item.lessonTime.slice(0, 5), universityTimeZone(item.groupId)).toISOString();
   if (deadline.kind === 'lesson') return start;
   if (!service) return null;
-  // Search at most eight weeks; unknown next lesson stays explicitly unresolved.
+  // Ищем не дальше восьми недель; неизвестная следующая пара остаётся явно неопределённой.
   for (let offset = 0; offset < 56; offset += 7) {
     const schedule = await service.groupSchedule(item.groupId, { week: addDays(parseDateKey(item.lessonDate), offset), subgroup: item.subgroup });
     const candidates = schedule.lessons.filter((lesson) => lesson.subject === item.subject

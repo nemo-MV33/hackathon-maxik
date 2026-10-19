@@ -37,6 +37,39 @@ checks:
       statusCodes: [200]
       contentType: application/json
       requiredFields: [items, "items[].id", "items[].title"]
+  - name: spbpu-group-search
+    role: service
+    request:
+      method: GET
+      path: /api/groups
+      query: { universityId: spbpu, q: 5130903/30301 }
+      headers: { Authorization: "Bearer <API_ACCESS_KEY>" }
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [items, "items[].id", "items[].title"]
+  - name: spbpu-week
+    role: service
+    request:
+      method: GET
+      path: /api/schedule/group/spbpu~45680
+      query: { week: '2026-10-19' }
+      headers: { Authorization: "Bearer <API_ACCESS_KEY>" }
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [universityId, timeZone, updatedAt, lessons, "lessons[].startsAt", "lessons[].endsAt"]
+  - name: spbu-catalog
+    role: service
+    request:
+      method: GET
+      path: /api/catalog
+      query: { universityId: spbu, path: '' }
+      headers: { Authorization: "Bearer <API_ACCESS_KEY>" }
+    expected:
+      statusCodes: [200]
+      contentType: application/json
+      requiredFields: [items, "items[].id", "items[].title", "items[].kind"]
   - name: bgu-week
     role: service
     request:
@@ -233,7 +266,7 @@ checks:
 # Все личные методы: Authorization: tma <initData>; служебный Bearer не заменяет роль.
 # Расписание возвращает updatedAt, у ручной отметки пары — markedBy, markedAt, moveId.
 
-# Составные id включают вуз: irnitu~478237 и bgu~32982. Числовые id входящих
+# Составные id включают вуз: irnitu~478237, bgu~32982, spbpu~45680, spbu~474610. Числовые id входящих
 # запросов совместимы с ИРНИТУ. week, lesson.date и ключи ДЗ — даты вуза.
 # startsAt/endsAt — ISO-моменты. Отображение, сводка и тихие часы используют IANA
 # из профиля; PUT /api/me принимает timeZone, quietHours и groupId.

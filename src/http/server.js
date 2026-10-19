@@ -113,7 +113,7 @@ const route = async (request, response, options) => {
       return sendJson(response, 200, await store.link(id, user.id));
     }
     if (id && request.method === 'GET' && parts.length === 3) {
-      // A supplied signature is always checked, even in development mode.
+      // Переданная подпись проверяется всегда, даже в режиме разработки.
       const userId = url.searchParams.has('signature') ? await store.signedUser(id, url) : user?.id;
       if (!userId) throw new HttpError(401, 'unauthorized');
       return sendAttachment({ response, store, id, userId });
@@ -214,6 +214,14 @@ const route = async (request, response, options) => {
   }
 
   if (url.pathname === '/api/groups') {
+    // Поиск одной группы по идентификатору: приглашение и пересланное ДЗ не тянут весь справочник.
+    const id = url.searchParams.get('id');
+    if (id) {
+      let key;
+      try { key = groupKey(id); } catch { return sendJson(response, 400, { error: 'invalid_group_id' }); }
+      const items = await service.groups(key.split('~')[0]);
+      return sendJson(response, 200, { items: items.filter((group) => sameGroup(group.id, key)) });
+    }
     const items = await service.searchGroups(url.searchParams.get('q'), {
       institute: url.searchParams.get('institute') || undefined,
       course: url.searchParams.get('course') || undefined,
@@ -221,6 +229,11 @@ const route = async (request, response, options) => {
       limit: positiveInteger(url.searchParams.get('limit'), 50),
     });
     return sendJson(response, 200, { items });
+  }
+
+  if (url.pathname === '/api/catalog') {
+    const universityId = url.searchParams.get('universityId') || 'irnitu';
+    return sendJson(response, 200, { items: await service.browse(universityId, url.searchParams.get('path') ?? '') });
   }
 
   if (url.pathname === '/api/teachers') {
@@ -248,8 +261,11 @@ const route = async (request, response, options) => {
     }
     if (kind === 'group' && service.groups && !isDemo(id)) {
       assertDemoAccess(id, actor?.id);
-      const known = await service.groups(id.split('~')[0]).catch(() => null);
-      if (known && !known.some((group) => sameGroup(group.id, id))) throw new HttpError(404, 'not_found');
+      // Неизвестный идентификатор не уходит в источник вуза: это бережёт квоты открытых API.
+      const known = service.hasGroup
+        ? await service.hasGroup(id).catch(() => null)
+        : await service.groups(id.split('~')[0]).then((items) => items.some((group) => sameGroup(group.id, id))).catch(() => null);
+      if (known === false) throw new HttpError(404, 'not_found');
     }
     const schedule = await service[`${kind}Schedule`](id, { ...scheduleOptions(url), universityId: url.searchParams.get('universityId') || undefined });
     return sendJson(response, 200, serializeSchedule(schedule));

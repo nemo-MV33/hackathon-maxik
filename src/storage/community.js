@@ -183,7 +183,7 @@ export class CommunityStore {
     const current = (await this.attachmentRecords()).find((item) => item.userId == null && this.#sameLesson(item, { ...target, groupId }));
     if (!current) throw new HttpError(404, 'homework_not_found');
     const event = (current.history ?? []).find((item) => item.version === version && item.after);
-    // Older records have no snapshots. Never invent old text or silently discard files.
+    // У старых записей нет снимков версий: прежний текст не выдумываем и файлы молча не теряем.
     const snapshot = event?.after;
     if (!snapshot || version >= current.version) throw new HttpError(409, 'version_unavailable');
     for (const file of snapshot.attachments ?? []) {

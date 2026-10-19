@@ -20,6 +20,16 @@ export const config = {
     ttlMs: numberFromEnv('SCHEDULE_CACHE_TTL_MS', 15 * 60 * 1000),
     directoryTtlMs: numberFromEnv('DIRECTORY_CACHE_TTL_MS', 3 * 60 * 60 * 1000),
   },
+  spbpu: {
+    cacheDir: process.env.SPBPU_CACHE_DIR?.trim() ?? './data/spbpu-cache',
+    ttlMs: numberFromEnv('SCHEDULE_CACHE_TTL_MS', 15 * 60 * 1000),
+    directoryTtlMs: numberFromEnv('DIRECTORY_CACHE_TTL_MS', 3 * 60 * 60 * 1000),
+  },
+  spbu: {
+    cacheDir: process.env.SPBU_CACHE_DIR?.trim() ?? './data/spbu-cache',
+    // У СПбГУ суточная квота запросов на IP, поэтому расписание обновляется раз в час.
+    ttlMs: numberFromEnv('SPBU_SCHEDULE_TTL_MS', 60 * 60 * 1000),
+  },
   irnitu: {
     concurrency: numberFromEnv('IRNITU_CONCURRENCY', 4),
     baseUrl: process.env.IRNITU_API_URL?.trim() ?? 'https://schedule.istu.edu/api/',

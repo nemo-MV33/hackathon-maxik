@@ -68,7 +68,7 @@ const canonical = (value) => JSON.stringify(value, (_, entry) => entry && typeof
   ? Object.fromEntries(Object.keys(entry).sort().map((key) => [key, entry[key]])) : entry);
 const textField = (buffer) => buffer.toString('utf8').replace(/\0.*$/s, '');
 
-// Streaming tar verifier: no second archive or extracted attachment tree on the VM disk.
+// Потоковая проверка tar: без второй копии архива и распаковки вложений на диск ВМ.
 export const verifyArchive = async (source, key) => {
   const start = performance.now();
   const input = await decrypted(source, key);
@@ -158,7 +158,7 @@ export const restoreArchive = async (source, destination, key) => {
     // BSD tar может завершиться на конечных нулевых блоках до EOF входа.
     // Архив уже аутентифицирован; ниже обязательно сверяются извлечённые файлы.
     if (pumped.status === 'rejected' && pumped.reason.code !== 'EPIPE') throw pumped.reason;
-    // Verify bytes actually written, as well as the downloaded archive.
+    // Проверяем и записанные байты, и скачанный архив.
     const actual = await inventory(workspace); const manifest = JSON.parse(await readFile(join(workspace, 'manifest.json'), 'utf8'));
     if (canonical(actual) !== canonical(manifest.inventory)) throw new Error('backup_verification_failed');
     await rm(destination, { recursive: true, force: true });

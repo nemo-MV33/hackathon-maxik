@@ -25,7 +25,7 @@ export const detectAttachmentType = async (bytes) => {
       if (bytes.includes(Buffer.from(stream, 'utf16le'))) return { ext, mime };
     }
   }
-  // UTF-8 text only. Active HTML/XML/SVG are deliberately excluded.
+  // Только текст в UTF-8. Активные HTML, XML и SVG исключены намеренно.
   if (!type && bytes.length) {
     try {
       const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
@@ -147,7 +147,7 @@ export class AttachmentStore {
           await unlink(this.path(item.id, '.json'));
         }
       }
-      // Interrupted uploads can leave a blob without its sidecar.
+      // Прерванная загрузка может оставить файл без описания рядом.
       const known = new Set(items.map((item) => item.id));
       const { stat } = await import('node:fs/promises');
       for (const file of await readdir(this.directory)) {

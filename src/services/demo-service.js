@@ -4,7 +4,7 @@ import { lessonMoments } from '../lib/timezone.js';
 import { addDays, startOfWeek, toDateKey } from '../lib/date.js';
 import { HttpError } from '../http/routes/me.js';
 
-// Reserved source id; never exported into the public static schedule directory.
+// Зарезервированный идентификатор: в публичную выгрузку расписания не попадает.
 export const DEMO_GROUP = { id: 'irnitu~999999991', title: 'ДЕМО-25-1', universityId: 'irnitu', institute: 'Демонстрация', course: 1 };
 export const demoContext = new AsyncLocalStorage();
 export const demoAllowed = (userId = demoContext.getStore()?.userId) => userId === 'internal' || (process.env.DEMO_MAX_IDS || '').split(',').map((id) => id.trim()).filter(Boolean).includes(String(userId));

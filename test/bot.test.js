@@ -687,6 +687,26 @@ test('БГУ: выбор вуза в личном чате и /setup, поиск
   assert.equal((await preferences.get(STUDENT.user_id)).selection.id, 'irnitu~11');
 });
 
+test('СПбПУ и СПбГУ в боте: выбор по институту у Политеха, каталог приложения у СПбГУ', async (t) => {
+  const { UniversityService } = await import('../src/universities/service.js');
+  const spbpu = { ...service, institutes: async () => ['ИКНК'],
+    searchGroups: async () => [{ id: 45680, title: '5130903/30301', institute: 'ИКНК', course: 4 }],
+    groups: async () => [{ id: 45680, title: '5130903/30301', institute: 'ИКНК', course: 4 }] };
+  const spbu = { ...service, searchGroups: async () => [], groups: async () => [] };
+  const multi = new UniversityService({ irnitu: service, spbpu, spbu });
+  const { say, press, payloads, preferences } = await setup(t, multi);
+  const [universities] = await press(STUDENT, 'lang:ru');
+  assert.deepEqual(payloads(universities), ['uni:own:irnitu', 'uni:own:spbpu', 'uni:own:spbu']);
+  const [polytech] = await press(STUDENT, 'uni:own:spbpu');
+  assert.ok(payloads(polytech).includes('inst:0'));
+  const [subgroup] = await say(STUDENT, '5130903/30301');
+  await press(STUDENT, payloads(subgroup).find((item) => item.endsWith(':all')));
+  assert.equal((await preferences.get(STUDENT.user_id)).selection.id, 'spbpu~45680');
+  const [catalog] = await press(STUDENT, 'uni:own:spbu');
+  assert.match(catalog.text, /нет поиска групп по названию/);
+  assert.equal(payloads(catalog).includes('inst:0'), false);
+});
+
 test('кнопка пары с вузом отвергается после смены группы; старая кнопка работает', async (t) => {
   const { press, say, payloads, preferences } = await setup(t);
   await preferences.set(STUDENT.user_id, { lang: 'ru', selection: { kind: 'group', id: 11, title: 'ИСТб-25-1' } });

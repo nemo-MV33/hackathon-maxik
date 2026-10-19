@@ -31,7 +31,7 @@ export const downloadMaxAttachment = async (item, limit, fetcher = fetch) => {
   throw new HttpError(502, 'attachment_download');
 };
 
-// Media can arrive in one update or several. Commit once, after a quiet window.
+// Медиа приходят одним обновлением или несколькими. Сохраняем один раз, после паузы.
 export class HomeworkAttachmentBatch {
   constructor({ windowMs = 10_000, save, failed }) { Object.assign(this, { windowMs, save, failed }); this.batches = new Map(); }
   cancel(key) { const batch = this.batches.get(key); if (batch) clearTimeout(batch.timer); this.batches.delete(key); }

@@ -179,7 +179,7 @@ export class LessonChangeService {
         else line = t.changeTeacher(when(lesson), lesson.subject, (lesson.teachers ?? []).join(', '));
         return line + (change.homework ? `\n${t.homework}: ${change.homework}` : '');
       }).join('\n');
-      const mark = manual && manual.status !== 'revoked' ? `\n${t.moveMarked(manual.authorName, new Intl.DateTimeFormat(t.locale, { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Irkutsk' }).format(new Date(manual.at)))}` : '';
+      const mark = manual && manual.status !== 'revoked' ? `\n${t.moveMarked(manual.authorName, new Intl.DateTimeFormat(t.locale, { dateStyle: 'short', timeStyle: 'short', timeZone: universityTimeZone(groupId) }).format(new Date(manual.at)))}` : '';
       if (text) await this.bot?.api.sendMessageToChat(chat.chatId, `${text}${mark}`).catch(console.error);
     }
   }
