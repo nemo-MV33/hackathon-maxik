@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@maxhub/max-ui';
-import { loadWeek, loadGroups, type Group } from '../data/schedule';
+import { findGroup, loadWeek, type Group } from '../data/schedule';
 import { saveHomework } from '../data/homework';
 import { haptic } from '../bridge/max';
 import { syncProfile } from '../lib/api';
@@ -13,11 +13,10 @@ import { Wordmark } from '../components/Wordmark';
 import { useI18n } from '../lib/i18n';
 
 const findContext = async (shared: SharedHomework) => {
-  const [groups, week] = await Promise.all([
-    loadGroups(String(shared?.groupId).startsWith('bgu~') ? 'bgu' : 'irnitu'),
+  const [group, week] = await Promise.all([
+    findGroup(shared.groupId),
     loadWeek(shared.groupId, toDateKey(startOfWeek(fromDateKey(shared.date)))).catch(() => null),
   ]);
-  const group = groups.find((item) => item.id === shared.groupId);
   const lesson = week?.lessons.find((item) =>
     item.date === shared.date && item.lessonNumber === shared.lessonNumber
     && (item.subgroup ?? null) === shared.subgroup);

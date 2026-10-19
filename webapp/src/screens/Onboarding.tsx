@@ -1,26 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Input } from '@maxhub/max-ui';
-import { loadGroups, type Group } from '../data/schedule';
+import { loadCatalog, searchGroups, type CatalogItem, type Group } from '../data/schedule';
 import type { LocalProfile } from '../lib/profile';
-import { useAsync } from '../lib/useAsync';
 import { useBackButton } from '../lib/useBackButton';
 import { hasNativeBackButton } from '../bridge/max';
 import { ErrorState, Loading } from '../components/Status';
-import { ChevronLeft, ChevronRight, SearchIcon } from '../components/Icon';
+import { ChevronLeft, SearchIcon } from '../components/Icon';
 import { Wordmark } from '../components/Wordmark';
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { useI18n } from '../lib/i18n';
-
-const normalize = (value: string) => value.toLowerCase().replace(/ё/g, 'е').replace(/[\s.\-–—]+/g, '');
-const LATIN: Record<string, string> = { а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'h', ц: 'c', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya' };
-// Группу можно искать и латиницей: «istb-25-1» найдёт «ИСТб-25-1».
-const transliterate = (value: string) => [...value].map((char) => LATIN[char] ?? char).join('');
-const position = (title: string, needle: string) => {
-  const target = normalize(title);
-  const found = target.indexOf(needle);
-  return found >= 0 ? found : transliterate(target).indexOf(needle);
-};
-
+import { UNIVERSITIES, universityCity, universityFullName, universityName, universityOf } from '../lib/universities';
 
 type Props = {
   current: LocalProfile | null;
@@ -77,8 +66,9 @@ const SubgroupStep = ({ group, current, onPick, onBack }: {
     <div className="screen">
       <BackLink label={t.otherGroup} onClick={onBack} />
       <div className="intro">
-        <p className="eyebrow">{[group.institute, group.course && t.course(group.course)].filter(Boolean).join(', ')}</p>
+        <p className="eyebrow">3 / 3 · {t.subgroupField}</p>
         <h1 className="display">{group.title}</h1>
+        <p className="hint">{[group.institute, group.course && t.course(group.course)].filter(Boolean).join(', ')}</p>
       </div>
       <div className="subgroup-options" role="radiogroup" aria-label={t.subgroupField}>
         {subgroups.map((option) => (
@@ -101,23 +91,78 @@ const SubgroupStep = ({ group, current, onPick, onBack }: {
   );
 };
 
+// Каталог вуза без поиска групп (СПбГУ): направление → программа → год набора → группа.
+const CatalogStep = ({ universityId, onPick }: { universityId: string; onPick: (group: Group) => void }) => {
+  const { t } = useI18n();
+  const [path, setPath] = useState<CatalogItem[]>([]);
+  const [items, setItems] = useState<CatalogItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState('');
+  const [attempt, setAttempt] = useState(0);
+  const key = path.map((item) => item.id).join('/');
+  useEffect(() => {
+    let active = true;
+    setItems(null); setError(null); setFilter('');
+    loadCatalog(universityId, key)
+      .then((value) => { if (active) setItems(value); })
+      .catch((failure: Error) => { if (active) setError(failure.message); });
+    return () => { active = false; };
+  }, [universityId, key, attempt]);
+  const needle = filter.trim().toLowerCase().replace(/ё/g, 'е');
+  const visible = (items ?? []).filter((item) => !needle || `${item.title} ${item.hint ?? ''}`.toLowerCase().replace(/ё/g, 'е').includes(needle));
+  return (
+    <>
+      {path.length > 0 && <BackLink label={path.at(-1)!.title} onClick={() => setPath((current) => current.slice(0, -1))} />}
+      <p className="field-label">{t.catalogSteps[Math.min(path.length, 3)]}</p>
+      {items && items.length > 12 && (
+        <label className="search-field">
+          <SearchIcon size={18} />
+          <input type="search" placeholder={t.catalogFilter} value={filter} onChange={(event) => setFilter(event.target.value)} aria-label={t.catalogFilter} />
+        </label>
+      )}
+      {!items && !error && <Loading />}
+      {error && <ErrorState message={error} onRetry={() => setAttempt((value) => value + 1)} />}
+      {items && visible.length === 0 && <p className="hint">{t.searchNothing}</p>}
+      <ul className="result-list">
+        {visible.map((item) => (
+          <li key={item.id}>
+            <button type="button" className="result" onClick={() => (item.kind === 'group'
+              ? onPick({ id: item.id, universityId, title: item.title, institute: item.institute ?? '', course: item.course ?? null })
+              : setPath((current) => [...current, item]))}>
+              <span className="result__title">{item.title}</span>
+              {item.hint && <span className="result__meta">{item.hint}</span>}
+              {item.course && <span className="result__course">{t.course(item.course)}</span>}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+};
+
 export const Onboarding = ({ current, onDone, onCancel }: Props) => {
   const [universityId, setUniversityId] = useState<string | null>(null);
-  const [groups, retry] = useAsync(() => universityId ? loadGroups(universityId) : Promise.resolve([]), [universityId], 'Onboarding-lessons');
   const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Group[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [picked, setPicked] = useState<Group | null>(null);
   useBackButton(picked ? undefined : universityId ? () => setUniversityId(null) : onCancel);
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
+  const text = query.trim();
+  const searching = text.length >= 2;
 
-  const results = useMemo(() => {
-    if (groups.status !== 'ready') return [];
-    const needle = normalize(query);
-    if (needle.length < 2) return [];
-    return groups.data
-      .filter((group) => position(group.title, needle) >= 0)
-      .sort((a, b) => Number(position(a.title, needle) > 0) - Number(position(b.title, needle) > 0))
-      .slice(0, 30);
-  }, [groups, query]);
+  // Поиск с паузой 250 мс: запрос уходит, когда студент перестал печатать.
+  useEffect(() => {
+    if (!universityId || !searching) { setResults(null); setError(null); return undefined; }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      searchGroups(universityId, text)
+        .then((items) => { if (active) { setResults(items); setError(null); } })
+        .catch((failure: Error) => { if (active) setError(failure.message); });
+    }, 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [universityId, text, attempt]);
 
   if (picked) {
     return (
@@ -132,19 +177,23 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
 
   if (!universityId) return (
     <div className="screen screen--onboarding">
-      {onCancel && <BackLink label={t.back} onClick={onCancel} />}
-      <LanguageSwitch />
+      <div className="onboarding-top">
+        {onCancel ? <BackLink label={t.back} onClick={onCancel} /> : <Wordmark />}
+        <LanguageSwitch />
+      </div>
       <div className="intro"><p className="eyebrow">1 / 3</p><h1 className="display">{t.fieldUniversity}</h1></div>
       <div className="choice-list">
-        {(['irnitu', 'bgu'] as const).map((id) => <button type="button" className="choice" key={id} onClick={() => setUniversityId(id)}>
-          <span className="choice__text"><span className="choice__title">{id === 'bgu' ? (lang === 'en' ? 'BSU' : 'БГУ') : t.universityName}</span>
-            <span className="choice__hint">{id === 'bgu' ? t.universityBgu : t.universityIrnitu}</span></span><ChevronRight size={18} />
+        {UNIVERSITIES.map((item) => <button type="button" className="choice" key={item.id} onClick={() => setUniversityId(item.id)}>
+          <span className="choice__text">
+            <span className="choice__head"><span className="choice__title">{universityName(item)}</span><span className="badge">{universityCity(item)}</span></span>
+            <span className="choice__hint">{universityFullName(item)}</span>
+          </span>
         </button>)}
       </div>
     </div>
   );
 
-  const searching = normalize(query).length >= 2;
+  const university = universityOf(`${universityId}~0`);
 
   return (
     <div className="screen screen--onboarding">
@@ -165,7 +214,8 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
         </div>
       )}
       <BackLink label={t.fieldUniversity} onClick={() => { setUniversityId(null); setQuery(''); }} />
-      <p className="eyebrow">2 / 3 · {universityId === 'bgu' ? 'БГУ' : 'ИРНИТУ'}</p>
+      <p className="eyebrow">2 / 3 · {universityName(university)}</p>
+      {university.catalog ? <CatalogStep universityId={university.id} onPick={setPicked} /> : <>
       <div className="search">
         <label className="field-label" htmlFor="group-search">{t.groupField}</label>
         <Input
@@ -174,7 +224,7 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
           size="large"
           mode="contrast"
           iconBefore={<SearchIcon size={20} />}
-          placeholder={universityId === 'bgu' ? 'ГМУ-25-1' : 'ИСТб-25-1'}
+          placeholder={university.example}
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
@@ -183,18 +233,16 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
-      {groups.status === 'loading' && searching && <Loading />}
-      {groups.status === 'error' && <ErrorState message={groups.message} onRetry={retry} />}
-      {groups.status === 'ready' && searching && results.length === 0 && (
-        <p className="hint">{t.searchEmpty}</p>
-      )}
-      {results.length > 0 && (
+      {searching && !results && !error && <Loading />}
+      {error && <ErrorState message={error} onRetry={() => setAttempt((value) => value + 1)} />}
+      {results && results.length === 0 && <p className="hint">{t.searchEmpty(university.example)}</p>}
+      {results && results.length > 0 && (
         <ul className="result-list" aria-label={t.foundGroups}>
           {results.map((group) => (
             <li key={group.id}>
               <button type="button" className="result" onClick={() => setPicked(group)}>
                 <span className="result__title">{group.title}</span>
-                <span className="result__meta">{group.institute}</span>
+                {group.institute && <span className="result__meta">{group.institute}</span>}
                 {group.course && <span className="result__course">{t.course(group.course)}</span>}
               </button>
             </li>
@@ -207,6 +255,7 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
           <Preview />
         </>
       )}
+      </>}
     </div>
   );
 };

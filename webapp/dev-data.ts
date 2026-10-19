@@ -74,8 +74,26 @@ export const devData = (): Plugin => ({
     const community = new CommunityStore(join(directory, 'community.json'));
     const preferences = new PreferencesStore(join(directory, 'preferences.json'));
     community.attachmentStore = new AttachmentStore(join(directory, 'files'), { community, preferences, secret: 'local-demo' });
+    // СПбПУ и СПбГУ в демо работают на ответах их API, сохранённых в test/fixtures.
+    const { SpbpuProvider } = await backend('../src/universities/spbpu/provider.js');
+    const { SpbuProvider } = await backend('../src/universities/spbu/provider.js');
+    const fixtureFetcher = (folder: string, routes: Record<string, string>) => async (url: URL) => {
+      const path = decodeURIComponent(new URL(url).pathname).replace(/^\/api\/v1\/(ruz\/)?/, '');
+      const name = Object.entries(routes).find(([prefix]) => path.startsWith(prefix))?.[1];
+      const body = name ? JSON.parse(await readFile(new URL(`../test/fixtures/${folder}/${name}`, import.meta.url), 'utf8')) : {};
+      return { ok: Boolean(name), status: name ? 200 : 404, headers: new Headers(), json: async () => body };
+    };
+    const spb = {
+      spbpu: new SpbpuProvider({ cacheDir: join(directory, 'spbpu'), fetcher: fixtureFetcher('spbpu', {
+        'faculties/125/groups': 'groups-125.json', 'faculties': 'faculties.json', 'scheduler/45680': 'scheduler-45680-2026-10-19.json' }) }),
+      spbu: new SpbuProvider({ cacheDir: join(directory, 'spbu'), fetcher: fixtureFetcher('spbu', {
+        'study/divisions/PHYS': 'levels-phys.json', 'study/divisions': 'divisions.json', 'programs/18250/groups': 'program-18250-groups.json',
+        'groups/474610/events': 'group-474610-2026-10-19.json' }) }),
+    } as Record<string, { groupSchedule: (id: number, options: object) => Promise<{ lessons: object[]; weekEven: boolean | null; updatedAt: string }>; browse?: (path: string) => Promise<{ id: string | number; kind: string }[]> }>;
     const groups = [
       { id: 'irnitu~1', universityId: 'irnitu', title: 'ДЕМО-25-1', institute: 'Демо-институт', course: 1 },
+      { id: 'spbpu~45680', universityId: 'spbpu', title: '5130903/30301', institute: 'Институт компьютерных наук и кибербезопасности', course: 4 },
+      { id: 'spbu~474610', universityId: 'spbu', title: '25.Б20-фз', institute: 'Физика', course: 2 },
       { id: 'irnitu~2', universityId: 'irnitu', title: 'ДЕМО-24-2', institute: 'Демо-институт', course: 2 },
       { id: 'bgu~32982', universityId: 'bgu', title: 'ГМУ-25-1', institute: '', course: null },
       { id: 'bgu~33340', universityId: 'bgu', title: 'БИ-26-1', institute: '', course: null },
@@ -97,6 +115,9 @@ export const devData = (): Plugin => ({
       teachers: async () => [], auditories: async () => [],
       searchTeachers: async () => [], searchAuditories: async () => [],
       institutes: async () => ['Демо-институт'],
+      browse: async (universityId: string, path = '') => (await spb[universityId].browse!(path))
+        .map((item) => (item.kind === 'group' ? { ...item, id: `${universityId}~${item.id}`, universityId } : item)),
+      hasGroup: async (id: string) => groups.some((group) => group.id === id),
       searchGroups: async (query: string, { universityId = 'irnitu' } = {}) => groups.filter((group) => group.universityId === universityId && (!query || group.title.toLowerCase().includes(query.toLowerCase()))),
       groupSchedule: async (id: string | number, { week: requested = new Date(), subgroup = null, raw = false } = {}) => {
         const start = new Date(requested);
@@ -104,6 +125,14 @@ export const devData = (): Plugin => ({
         const key = dateKey(start);
         const value = weeks.find((item) => item.weekStart === key);
         const end = new Date(start); end.setUTCDate(end.getUTCDate() + 6);
+        const [prefix, sourceId] = String(id).split('~');
+        if (spb[prefix]) {
+          const week = await spb[prefix].groupSchedule(Number(sourceId), { week: start });
+          let spbLessons = week.lessons as { date: string }[];
+          if (!raw) spbLessons = await lessonChanges.overlay(id, spbLessons, key, dateKey(end));
+          return { kind: 'group', entityId: id, period: { from: start, to: end }, weekEven: week.weekEven, updatedAt: week.updatedAt,
+            lessons: spbLessons.map((item) => ({ ...lessonMoments(item, 'Europe/Moscow'), groupId: id, updatedAt: week.updatedAt })) };
+        }
         const source = bguSources[String(id)];
         const bgu = source ? parseSchedule(source.html, { week: start, groupId: Number(String(id).split('~')[1]) }) : null;
         const sourceUpdatedAt = source?.updatedAt ?? updatedAt;
@@ -168,7 +197,7 @@ export const devData = (): Plugin => ({
       }
       if (url.pathname === '/data/groups.json') return send(groups);
       if (url.pathname === '/data/meta.json') return send({ updatedAt, weeks: weeks.map((item) => item.weekStart), groups: groups.length, failed: 0 });
-      const match = url.pathname.match(/^\/data\/schedule\/((?:irnitu|bgu)~\d+)\/(\d{4}-\d{2}-\d{2})\.json$/);
+      const match = url.pathname.match(/^\/data\/schedule\/((?:irnitu|bgu|spbpu|spbu)~\d+)\/(\d{4}-\d{2}-\d{2})\.json$/);
       if (match) {
         if (!groups.some((group) => group.id === match[1])) { response.statusCode = 404; response.end(); return; }
         void service.groupSchedule(match[1], { week: new Date(`${match[2]}T00:00:00Z`) }).then((value) => send({ ...value, weekStart: match[2] }))

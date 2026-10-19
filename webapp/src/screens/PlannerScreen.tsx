@@ -3,7 +3,8 @@ import { DateField } from '../components/DateField';
 import { HomeworkDetailsEditor } from '../components/HomeworkDetails';
 import type { Deadline, Submission } from '../data/homework';
 import { AttachmentEditor, type HomeworkAttachment } from '../components/HomeworkAttachments';
-import { lessonDate, dateInZone, localMoment } from '../lib/timezone';
+import { dateInZone, localMoment, lessonTime } from '../lib/timezone';
+import { lessonKindName } from '../lib/lessonKind';
 import { useEffect, useRef, useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
@@ -22,6 +23,7 @@ import { TaskList } from '../components/TaskList';
 import { AnnouncementSheet } from '../components/AnnouncementSheet';
 import { ReminderPicker } from '../components/ReminderPicker';
 import { Sheet } from '../components/Sheet';
+import { groupTimeZone } from '../lib/universities';
 import { Empty, ErrorState, ScheduleSkeleton } from '../components/Status';
 import { ChevronLeft, ChevronRight, PlusIcon } from '../components/Icon';
 
@@ -188,7 +190,7 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
   useEffect(() => {
     setDeadline(standalone ? { kind: 'date', local: `${date}T18:00` } : { kind: 'lesson' });
   }, [standalone, date]);
-  const reminderDate = standalone && deadline.kind === 'date' && deadline.local?.length === 16 ? dateInZone(new Date(localMoment(deadline.local.slice(0, 10), deadline.local.slice(11), 'Asia/Irkutsk'))) : date;
+  const reminderDate = standalone && deadline.kind === 'date' && deadline.local?.length === 16 ? dateInZone(new Date(localMoment(deadline.local.slice(0, 10), deadline.local.slice(11), groupTimeZone(profile.group.id)))) : date;
   const save = async () => {
     if ((!lesson && !subject.trim()) || (!text.trim() && !files.length) || saving || uploading || lessons.status === 'loading') return;
     setSaving(true); setError(null);
@@ -209,9 +211,9 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
       {dayLessons.length > 0 && <fieldset className="compose-lessons"><legend className="field-label">{t.fieldSubject}</legend>
         <div className="choice-list choice-list--compact" role="radiogroup" aria-label={t.fieldSubject}>
           {dayLessons.map((item) => <button key={homeworkKey(item)} type="button" role="radio" className="choice choice--compact" aria-checked={homeworkKey(item) === lessonKey} onClick={() => setLessonKey(homeworkKey(item))}>
-            <span className="choice__text"><span className="choice__title">{item.subject}</span><span className="choice__hint">{item.time} · {item.lessonType}</span></span>
+            <span className="choice__text"><span className="choice__title">{item.subject}</span><span className="choice__hint">{lessonTime(item)} · {lessonKindName(item.lessonType)}</span></span>
           </button>)}
-          <button type="button" role="radio" className="choice choice--compact" aria-checked={standalone} onClick={() => setLessonKey(null)}>{t.withoutLesson}</button>
+          <button type="button" role="radio" className="choice choice--compact" aria-checked={standalone} onClick={() => setLessonKey(null)}><span className="choice__text"><span className="choice__title">{t.withoutLesson}</span></span></button>
         </div>
       </fieldset>}
       {standalone && lessons.status !== 'loading' && <label className="field-label">{t.assignmentTitle}<input className="field" value={subject} maxLength={200} onChange={(event) => setSubject(event.target.value)} placeholder={t.assignmentExample} /></label>}
@@ -221,12 +223,12 @@ const CreateHomeworkSheet = ({ profile, initialDate, canShare, now, onClose, onS
           <button type="button" role="radio" disabled={uploading} aria-selected={scope === 'shared'} aria-checked={scope === 'shared'} onClick={() => setScope('shared')}>{t.forGroup}</button>
         </div>
       </div>}
-      <div className="task-editor"><label className="field-label" htmlFor="new-task-text">{t.fieldTask}</label>
-        <Textarea id="new-task-text" rows={3} maxLength={MAX_LENGTH} placeholder={t.placeholder} value={text} onChange={(event) => setText(event.target.value)} />
+      <div className="editor__body"><label className="field-label" htmlFor="new-task-text">{t.fieldTask}</label>
+        <Textarea id="new-task-text" rows={4} maxLength={MAX_LENGTH} placeholder={t.placeholder} value={text} onChange={(event) => setText(event.target.value)} />
         <AttachmentEditor key={scope} files={files} scope={scope} onChange={(next) => setFilesByScope((current) => ({ ...current, [scope]: next }))} onBusy={setUploading} />
       </div>
-      <HomeworkDetailsEditor standalone={standalone} deadline={deadline} submission={submission} onDeadline={setDeadline} onSubmission={setSubmission} />
-      <details className="reminder-options" open><summary>{t.reminder}</summary><ReminderPicker value={remindAt} onChange={setRemindAt} dateKey={reminderDate} now={now} /></details>
+      <HomeworkDetailsEditor groupId={profile.group.id} standalone={standalone} deadline={deadline} submission={submission} onDeadline={setDeadline} onSubmission={setSubmission} />
+      <ReminderPicker value={remindAt} onChange={setRemindAt} dateKey={reminderDate} now={now} />
       {error && <p className="toast toast--error" role="alert">{error}</p>}
       <Button stretched size="large" disabled={lessons.status === 'loading' || (standalone && !subject.trim()) || uploading || (!text.trim() && !files.length)} loading={saving} onClick={save}>{t.save}</Button>
     </div>

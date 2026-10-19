@@ -1,5 +1,5 @@
 import { Button } from '@maxhub/max-ui';
-import { loadGroups, type Group } from '../data/schedule';
+import { findGroup, type Group } from '../data/schedule';
 import { useAsync } from '../lib/useAsync';
 import { useI18n } from '../lib/i18n';
 import { ErrorState, Loading } from '../components/Status';
@@ -13,10 +13,10 @@ type Props = {
 
 export const InviteScreen = ({ groupId, subgroup, onAccept, onOther }: Props) => {
   const { t } = useI18n();
-  const [groups, retry] = useAsync(() => loadGroups(String(groupId).split('~')[0] === 'bgu' ? 'bgu' : 'irnitu'), [groupId], 'InviteScreen-lessons');
-  if (groups.status === 'loading') return <Loading />;
-  if (groups.status === 'error') return <div className="screen"><ErrorState message={groups.message} onRetry={retry} /></div>;
-  const group = groups.data.find((item) => item.id === groupId);
+  const [found, retry] = useAsync(() => findGroup(groupId), [groupId], 'InviteScreen-group');
+  if (found.status === 'loading') return <Loading />;
+  if (found.status === 'error') return <div className="screen"><ErrorState message={found.message} onRetry={retry} /></div>;
+  const group = found.data;
   if (!group) {
     return (
       <div className="screen">

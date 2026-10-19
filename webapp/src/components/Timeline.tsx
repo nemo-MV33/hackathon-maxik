@@ -5,6 +5,7 @@ import { homeworkKey, type HomeworkItem } from '../data/homework';
 import { clockLabel, formatDuration, formatStamp, timeToMinutes } from '../lib/date';
 import { isControlLesson, lessonKindClass, lessonKindName } from '../lib/lessonKind';
 import { useI18n } from '../lib/i18n';
+import { groupTimeZone, universityClock } from '../lib/universities';
 import type { AbsenceKind } from '../lib/api';
 
 export const lessonStart = (lesson: Lesson) => lessonTime(lesson).slice(0, 5);
@@ -49,7 +50,7 @@ const LessonCard = ({ lesson, state, homework, onOpen, metaKind }: CardProps) =>
         </span>
         <span className="card__kind">{kind}</span>
       </span>
-      {userTimeZone() !== (lesson.timeZone || 'Asia/Irkutsk') && <span className="card__meta">{lesson.time.slice(0, 5)} {t.irkutskTime}</span>}
+      {userTimeZone() !== (lesson.timeZone || groupTimeZone(lesson.groupId)) && <span className="card__meta">{lesson.time.slice(0, 5)} {universityClock(lesson.groupId)}</span>}
       <span className="card__subject">
         {lesson.transferred && <span className="flag">{t.transferred}</span>}
         {lesson.subject}

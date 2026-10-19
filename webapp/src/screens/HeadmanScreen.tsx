@@ -61,12 +61,9 @@ const Lateness = ({ onOpenStudent }: { onOpenStudent: (id: number) => void }) =>
 
   return (
     <>
-      <div className="block-head block-head--row">
-        <h2 className="block-title">{offset === 0 ? t.lateTodayTitle : t.lateYesterdayTitle}</h2>
-        <div className="segment segment--small" role="tablist">
-          <button type="button" role="tab" aria-selected={offset === -1} onClick={() => setOffset(-1)}>{t.yesterday}</button>
-          <button type="button" role="tab" aria-selected={offset === 0} onClick={() => setOffset(0)}>{t.today}</button>
-        </div>
+      <div className="chips" role="radiogroup" aria-label={t.lateSection}>
+        <button type="button" role="radio" className="chip-option" aria-checked={offset === 0} onClick={() => setOffset(0)}>{t.today}</button>
+        <button type="button" role="radio" className="chip-option" aria-checked={offset === -1} onClick={() => setOffset(-1)}>{t.yesterday}</button>
       </div>
       {!notes && !error && <Loading />}
       {error && <ErrorState message={error} onRetry={() => setAttempt((value) => value + 1)} />}
@@ -86,7 +83,7 @@ const Lateness = ({ onOpenStudent }: { onOpenStudent: (id: number) => void }) =>
         <p className="block-note">{t.dossierHint}</p>
       </div>
       {!students && <Loading />}
-      {students && students.length === 0 && <Empty title={t.dossierEmpty} />}
+      {students && students.length === 0 && <Empty title={t.dossierEmpty}>{t.dossierEmptyText}</Empty>}
       {students && students.length > 0 && <StudentList students={students} onOpen={onOpenStudent} />}
     </>
   );
@@ -141,17 +138,12 @@ const News = () => {
         <h2 className="block-title">{t.newAnnouncement}</h2>
         <p className="block-note">{t.newAnnouncementHint}</p>
       </div>
-      <div className="composer composer--announcement">
-        <div className="announcement-text">
-          <Textarea aria-label={t.newAnnouncement} rows={4} maxLength={MAX_TEXT} placeholder={t.announcementPlaceholder} value={text} onChange={(event) => setText(event.target.value)} />
-        </div>
-        <p className="field-label">{t.remindGroup}</p>
-        <ReminderPicker value={remindAt} onChange={setRemindAt} now={now} />
-        <div className="actions">
-          <Button stretched size="large" disabled={!text.trim()} loading={sending} onClick={publish}>{t.publish}</Button>
-        </div>
-        {notice && <p className={`toast toast--${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.text}</p>}
+      <div className="editor__body">
+        <Textarea aria-label={t.newAnnouncement} rows={4} maxLength={MAX_TEXT} placeholder={t.announcementPlaceholder} value={text} onChange={(event) => setText(event.target.value)} />
       </div>
+      <ReminderPicker title={t.remindGroup} value={remindAt} onChange={setRemindAt} now={now} />
+      <Button stretched size="large" disabled={!text.trim()} loading={sending} onClick={publish}>{t.publish}</Button>
+      {notice && <p className={`toast toast--${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.text}</p>}
 
       <div className="block-head">
         <h2 className="block-title">{t.publishedTitle}</h2>
@@ -165,12 +157,12 @@ const News = () => {
             <li key={item.id} className="task task--announcement task--static">
               <span className="task__top">
                 <span className="task__when">{formatMoment(item.createdAt)}</span>
-                {item.remindAt && <span className="task__bell"><BellIcon size={14} /> {formatMoment(item.remindAt)}</span>}
+                {item.remindAt && <span className="task__bell"><BellIcon size={13} />{formatMoment(item.remindAt)}</span>}
               </span>
               <span className="task__text task__text--full">{item.text}</span>
               {item.mine && (
                 <button type="button" className={`text-button text-button--danger${confirm === item.id ? ' is-confirm' : ''}`} onClick={() => remove(item.id)}>
-                  <TrashIcon size={16} /> {confirm === item.id ? t.confirmRemove : t.remove}
+                  <TrashIcon size={16} />{confirm === item.id ? t.confirmRemove : t.remove}
                 </button>
               )}
             </li>

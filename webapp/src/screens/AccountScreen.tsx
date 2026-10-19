@@ -4,6 +4,7 @@ import { useI18n } from '../lib/i18n';
 import { useMe } from '../lib/me';
 import { BackHeader } from '../components/BackHeader';
 import { Loading } from '../components/Status';
+import { universityFullName, universityOf } from '../lib/universities';
 
 // Аккаунт: только чтение. Имя приходит из MAX, группа — из выбора в разделе «Университет».
 export const AccountScreen = ({ profile, onBack }: { profile: LocalProfile; onBack: () => void }) => {
@@ -14,7 +15,7 @@ export const AccountScreen = ({ profile, onBack }: { profile: LocalProfile; onBa
     [t.fieldName, [me?.user.firstName ?? user?.first_name, me?.user.lastName ?? user?.last_name].filter(Boolean).join(' ') || '—'],
     [t.fieldUsername, me?.user.username ?? user?.username ? `@${me?.user.username ?? user?.username}` : '—'],
     [t.fieldMaxId, String(me?.user.id ?? user?.id ?? '—')],
-    [t.fieldUniversity, String(profile.group.id).startsWith('bgu~') ? 'БГУ / Baikal State University' : t.universityName],
+    [t.fieldUniversity, universityFullName(universityOf(profile.group.id))],
     [t.fieldInstitute, profile.group.institute || me?.profile.institute || '—'],
     [t.fieldCourse, profile.group.course ? t.course(profile.group.course) : '—'],
     [t.fieldGroup, profile.group.title],

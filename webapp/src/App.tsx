@@ -26,6 +26,7 @@ import { Loading } from './components/Status';
 import { loadMe, syncProfile } from './lib/api';
 import { isLang, useI18n } from './lib/i18n';
 import { MeProvider, useMe } from './lib/me';
+import { GROUP_ID, SCOPED_GROUP_ID, scopedGroupId } from './lib/universities';
 
 // Экраны поверх вкладок: открываются стопкой, «Назад» возвращает к предыдущему.
 type Screen =
@@ -50,9 +51,9 @@ export type LaunchTarget = { date: string; groupId?: string; lessonNumber?: numb
 
 const launchTarget = (): LaunchTarget | undefined => {
   const value = startParam() ?? '';
-  const day = value.match(/^day_(\d{4}-\d{2}-\d{2})(?:_((?:irnitu|bgu)~\d+))?$/);
+  const day = value.match(new RegExp(`^day_(\\d{4}-\\d{2}-\\d{2})(?:_(${SCOPED_GROUP_ID}))?$`));
   if (day) return { date: day[1], groupId: day[2] };
-  const lesson = value.match(/^lesson_(\d{4}-\d{2}-\d{2})_(\d+)_([012])(?:_((?:irnitu|bgu)~\d+))?$/);
+  const lesson = value.match(new RegExp(`^lesson_(\\d{4}-\\d{2}-\\d{2})_(\\d+)_([012])(?:_(${SCOPED_GROUP_ID}))?$`));
   if (lesson) return { date: lesson[1], groupId: lesson[4], lessonNumber: Number(lesson[2]), subgroup: Number(lesson[3]) || null };
   return undefined;
 };
@@ -68,8 +69,8 @@ const initialTab = (): Tab => {
 const initialRoute = (): Route => {
   const value = startParam() ?? '';
   if (value.startsWith('hw')) return { name: 'decoding' };
-  const invite = value.match(/^group_((?:(?:irnitu|bgu)~)?\d+)_([012])$/);
-  if (invite) return { name: 'invite', groupId: invite[1].includes('~') ? invite[1] : `irnitu~${invite[1]}`, subgroup: invite[2] === '0' ? null : (Number(invite[2]) as 1 | 2) };
+  const invite = value.match(new RegExp(`^group_(${GROUP_ID})_([012])$`));
+  if (invite) return { name: 'invite', groupId: scopedGroupId(invite[1]), subgroup: invite[2] === '0' ? null : (Number(invite[2]) as 1 | 2) };
   return { name: 'main' };
 };
 

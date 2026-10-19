@@ -59,4 +59,17 @@ export const GlobeIcon = ({ size = 20, className }: IconProps) =>
 
 export const CheckIcon = ({ size = 20, className }: IconProps) => svg(size, className, <path d="m5 12 4.5 4.5L19 7" />);
 
-export const PaperclipIcon = ({ size = 20 }: { size?: number }) => <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m8 13 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7l9-9a2 2 0 0 1 3 3l-9 9a1 1 0 0 1-1-1l8-8" /></svg>;
+export const PaperclipIcon = ({ size = 20, className }: IconProps) =>
+  svg(size, className, <path d="m8 13 7-7a3 3 0 0 1 4 4l-9 9a5 5 0 0 1-7-7l9-9a2 2 0 0 1 3 3l-9 9a1 1 0 0 1-1-1l8-8" />);
+export const FileIcon = ({ size = 20, className }: IconProps) =>
+  svg(size, className, <><path d="M13.5 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8.5z" /><path d="M13.5 3.5v5h5" /></>);
+export const DownloadIcon = ({ size = 20, className }: IconProps) =>
+  svg(size, className, <><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5" /><path d="M5 19.5h14" /></>);
+export const MoveIcon = ({ size = 20, className }: IconProps) =>
+  svg(size, className, <><rect x="3.5" y="5" width="12" height="12" rx="2.5" /><path d="M7 3.5v3M12 3.5v3M3.5 9.5h12M15.5 15.5h5M18 13l2.5 2.5L18 18" /></>);
+export const HistoryIcon = ({ size = 20, className }: IconProps) =>
+  svg(size, className, <><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9" /><path d="M4.5 4.5V9H9M12 8v4.2l2.8 1.8" /></>);
+export const LinkIcon = ({ size = 20, className }: IconProps) =>
+  svg(size, className, <><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" /><path d="M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 11 18.7l1-1" /></>);
+export const SendIcon = ({ size = 20, className }: IconProps) =>
+  svg(size, className, <><path d="M4 12 20 4l-4.5 16-4-6.5z" /><path d="m11.5 13.5 4-4" /></>);

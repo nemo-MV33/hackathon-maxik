@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button } from '@maxhub/max-ui';
 import { apiRequest } from '../lib/api';
-import { formatStamp } from '../lib/date';
+import { formatShortDay, formatStamp } from '../lib/date';
 import { useI18n } from '../lib/i18n';
 import type { HomeworkItem } from '../data/homework';
 import { LessonMove, scheduleChanged, type Move } from './LessonMove';
@@ -30,20 +29,25 @@ export const OrphanedHomework = () => {
       await reload();
     } catch (failure) { setError((failure as Error).message); }
   };
-  return <section>
-    <div className="block-head"><h2 className="block-title">{t.moveMarks}</h2></div>
-    {moves.map((item) => <div key={item.id} className="hw-block">
-      <p>{item.from.subject} · {item.from.date} · {item.to ? `${item.to.date}, ${item.to.time}` : t.moveCancelled}</p>
-      <p>{t.moveMarked(item.authorName, formatStamp(item.at))}</p>
-      <Button stretched variant="secondary" onClick={() => void revoke(item.id)}>{t.moveUndo}</Button>
-    </div>)}
-    <div className="block-head"><h2 className="block-title">{t.orphanedList}</h2></div>
-    {error && <p role="alert">{error}</p>}
-    {items.length === 0 && <p className="block-note">{t.orphanedEmpty}</p>}
-    {items.map((item) => <div key={item.id} className="hw-block">
-      <p>{item.date} · {item.subject}</p><p>{t.orphaned}</p><p>{item.text}</p>
+  return <div className="orphans">
+    {error && <p className="callout callout--error" role="alert">{error}</p>}
+    {moves.length > 0 && <>
+      <p className="field-label">{t.moveMarks}</p>
+      {moves.map((item) => <article key={item.id} className="hw-block">
+        <p className="task__title">{item.from.subject}</p>
+        <p className="hw-block__meta">{formatShortDay(item.from.date)}, {item.from.time?.slice(0, 5)} → {item.to ? `${formatShortDay(item.to.date)}, ${item.to.time?.slice(0, 5)}` : t.moveCancelled}</p>
+        <p className="hw-block__meta">{t.moveMarked(item.authorName, formatStamp(item.at))}</p>
+        <button type="button" className="text-button" onClick={() => void revoke(item.id)}>{t.moveUndo}</button>
+      </article>)}
+    </>}
+    <p className="field-label">{t.orphanedList}</p>
+    {items.length === 0 && <p className="hint">{t.orphanedEmpty}</p>}
+    {items.map((item) => <article key={item.id} className="hw-block">
+      <p className="task__title">{item.subject}</p>
+      <p className="hw-block__meta">{formatShortDay(item.date)} · {t.orphaned}</p>
+      {item.text && <p className="hw-block__text">{item.text}</p>}
       <LessonMove lesson={item} groupId={item.groupId} orphanId={item.id} onSaved={() => void reload()} />
-      <Button stretched variant="destructive" onClick={() => void remove(item.id)}>{confirm === item.id ? t.confirmDelete : t.deleteShared}</Button>
-    </div>)}
-  </section>;
+      <button type="button" className={`text-button text-button--danger${confirm === item.id ? ' is-confirm' : ''}`} onClick={() => void remove(item.id)}>{confirm === item.id ? t.confirmDelete : t.deleteShared}</button>
+    </article>)}
+  </div>;
 };

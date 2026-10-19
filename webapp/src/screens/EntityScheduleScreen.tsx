@@ -36,7 +36,7 @@ export const EntityScheduleScreen = ({ target, onBack }: { target: EntityTarget;
         <button type="button" className="icon-button" aria-label={t.previousWeek} onClick={() => shift(-1)}><ChevronLeft size={18} /></button>
         <span className="week-nav__range">
           {formatRange(fromDateKey(days[0]), fromDateKey(days[6]))}
-          {week.status === 'ready' && <span className="week-nav__parity">, {week.data.weekEven ? t.even : t.odd}</span>}
+          {week.status === 'ready' && typeof week.data.weekEven === 'boolean' && <span className="week-nav__parity">, {week.data.weekEven ? t.even : t.odd}</span>}
         </span>
         <button type="button" className="icon-button" aria-label={t.nextWeek} onClick={() => shift(1)}><ChevronRight size={18} /></button>
       </div>

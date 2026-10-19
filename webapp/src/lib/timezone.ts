@@ -1,4 +1,5 @@
 import type { Lesson } from '../data/schedule';
+import { groupTimeZone } from './universities';
 const KEY = 'norfly.timeZone';
 export const deviceTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Irkutsk';
 export const userTimeZone = () => { try { return localStorage.getItem(KEY) || deviceTimeZone(); } catch { return deviceTimeZone(); } };
@@ -22,6 +23,6 @@ export const localMoment = (key: string, time: string, timeZone = userTimeZone()
   throw new Error('nonexistent_local_time');
 };
 export const lessonMoment = (lesson: Lesson, end = false) => (end ? lesson.endsAt : lesson.startsAt)
-  || localMoment(lesson.date, end ? lesson.time.slice(6, 11) : lesson.time.slice(0, 5), lesson.timeZone || 'Asia/Irkutsk');
+  || localMoment(lesson.date, end ? lesson.time.slice(6, 11) : lesson.time.slice(0, 5), lesson.timeZone || groupTimeZone(lesson.groupId));
 export const lessonDate = (lesson: Lesson) => dateInZone(new Date(lessonMoment(lesson)));
 export const lessonTime = (lesson: Lesson) => `${clockInZone(new Date(lessonMoment(lesson)))}–${clockInZone(new Date(lessonMoment(lesson, true)))}`;

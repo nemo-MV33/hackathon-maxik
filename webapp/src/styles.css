@@ -197,22 +197,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  height: 36px;
-  padding: 0 10px 0 14px;
-  border: 1.5px solid var(--outline);
-  border-radius: 999px;
-  background: var(--surface);
-  cursor: pointer;
-}
-.chip:active { background: var(--surface-2); }
-.chip__title { flex-shrink: 0; font-size: 14px; font-weight: 800; white-space: nowrap; }
-.chip__sub { min-width: 0; font-size: 13px; font-weight: 600; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chip svg { flex-shrink: 0; color: var(--ink-3); }
 
 .segment, .lang-switch {
   display: inline-flex;
@@ -448,7 +432,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .choice__title { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
 .choice__title::first-letter { text-transform: uppercase; }
 .choice__hint { font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
-.choice__chevron { color: var(--ink-3); }
 .choice[aria-checked='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .choice[aria-checked='true'] .choice__title::after {
   content: attr(data-current);
@@ -504,9 +487,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .facts dd { font-size: 15.5px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
 
 .homework { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.section-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
 .section-title { font-size: 24px; font-weight: 800; letter-spacing: -0.03em; }
-.section-note { font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
 
 .hw-block { display: flex; flex-direction: column; gap: 6px; padding: 16px; border: 1.5px solid var(--outline); border-radius: 22px; background: var(--surface); }
 .hw-block__label { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
@@ -563,9 +544,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .display, .screen--onboarding .display { font-size: 48px; }
   .lead { font-size: 19px; }
   .hint { font-size: 16px; }
-  .chip { height: 46px; padding: 0 14px 0 18px; }
-  .chip__title { font-size: 17px; }
-  .chip__sub { font-size: 15px; }
   .segment button { padding: 9px 18px; font-size: 15px; }
   .lang-switch button { padding: 7px 14px; font-size: 13px; }
   .day-heading--h1 .day-heading__title { font-size: 56px; }
@@ -596,7 +574,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .facts dt { font-size: 13px; }
   .facts dd { font-size: 19px; }
   .section-title { font-size: 32px; }
-  .section-note, .editor__scope { font-size: 16px; }
+  .editor__scope { font-size: 16px; }
   .hw-block { padding: 22px 24px; border-radius: 28px; }
   .hw-block__label { font-size: 13px; }
   .hw-block__text { font-size: 19px; }
@@ -708,9 +686,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .settings-row__text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .settings-row__title { font-size: 16px; font-weight: 800; }
 .settings-row__hint { font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--ink-2); }
-@media (max-width: 400px) {
-  .topbar .chip__sub { display: none; }
-}
 
 .status-pill { flex-shrink: 0; padding: 4px 10px; border: 1.5px solid var(--line); border-radius: 999px; font-size: 12px; font-weight: 800; color: var(--ink-2); white-space: nowrap; }
 .status-pill.is-ok { border-color: var(--ink); background: var(--highlight); color: var(--on-highlight); }
@@ -937,7 +912,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .task:active { transform: scale(0.985); }
 .task--static { padding-right: 16px; cursor: default; }
 .task--static:active { transform: none; }
-.task--personal { background: color-mix(in srgb, var(--yellow) 10%, var(--surface)); }
 .task--announcement { background: color-mix(in srgb, var(--yellow) 22%, var(--surface)); }
 .task__top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .task__when, .task__time, .task__tag, .task__bell {
@@ -1005,8 +979,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   font-weight: 700;
   color-scheme: inherit;
 }
-.reminder { display: flex; flex-direction: column; gap: 8px; }
-.reminder__note { font-size: 13.5px; font-weight: 700; color: var(--ink-2); }
 
 .choice-list--compact { gap: 6px; }
 .choice--compact { padding: 11px 14px; border-radius: 16px; }
@@ -1016,7 +988,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .choice:disabled { opacity: 0.6; }
 
 .segment--wide { display: grid; grid-template-columns: 1fr 1fr; width: 100%; box-sizing: border-box; }
-.segment--small button { padding: 5px 10px; font-size: 12.5px; }
 .segment button[aria-checked='true'] { background: var(--ink); color: var(--on-ink); }
 
 .sheet .field-label { margin-top: 6px; }
@@ -1241,186 +1212,398 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   cursor: pointer;
 }
 
-/* Поля переноса используют ту же сетку и цвета, что редактор ДЗ. */
-.editor input[type="date"], .editor input[type="time"], .editor select {
-  box-sizing: border-box;
+/* Формы, ДЗ и вложения.
+   Все вторичные поверхности одинаковые: кремовая карточка, обводка 1.5px, радиус 18–22px.
+   Цвет остаётся за карточками пар и акцентами: жёлтый — «сейчас и выбрано», красный — ошибка и срок. */
+
+.screen > *, .sheet > * { min-width: 0; }
+.field-label { display: grid; gap: 8px; }
+.field-label :is(input, select, textarea) { font-family: var(--sans); font-size: 16px; font-weight: 600; text-transform: none; letter-spacing: normal; }
+.field-label .field { margin: 0; width: 100%; min-width: 0; box-sizing: border-box; }
+.field-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 10px; }
+.form-group { display: grid; gap: 14px; }
+
+.select-field__box select { font-weight: 700; }
+.field-label .select-field__box select { min-height: 48px; font-size: 16px; font-weight: 700; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.badge--danger { background: var(--danger); color: #fff; }
+
+.callout--warn { border-color: var(--ink); color: var(--ink); }
+.note-line { font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--ink-2); }
+
+/* Поле даты и времени: подпись на языке приложения, нативный выбор поверх. */
+.date-field { display: grid; min-width: 0; gap: 8px; width: 100%; }
+.date-field__label { font-family: var(--mono); font-size: 12px; letter-spacing: 0.05em; color: var(--ink-2); text-transform: uppercase; }
+.date-field__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   min-width: 0;
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1.5px solid var(--outline);
+  border-radius: 16px;
+  background: var(--surface);
+  font: 700 16px/1.4 var(--sans);
+}
+.date-field__control > span { overflow-wrap: anywhere; }
+.date-field__control > svg { flex-shrink: 0; color: var(--ink-2); }
+.date-field__control input { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; max-width: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; font-size: 16px; }
+.date-field__control:focus-within { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+
+/* Редактор текста: поле, счётчик и скрепка в одной карточке. */
+.editor { display: grid; gap: 14px; }
+.editor__scope { font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
+.editor__body {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1.5px solid var(--outline);
+  border-radius: 20px;
+  background: var(--surface);
+}
+.editor__body:focus-within { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.editor__body textarea { min-height: 96px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-size: 16px; line-height: 1.5; }
+.editor__body [class*='Textarea_mode'] { padding: 0; border: 0; background: transparent; box-shadow: none; }
+.editor__body .editor__counter { margin-top: -4px; }
+.sheet .editor__body textarea { min-height: 90px; }
+
+/* Вложения */
+.attachment-editor { display: grid; gap: 10px; }
+.attach-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 14px 0 10px;
+  border: 1.5px solid var(--outline);
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.attach-button input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.attach-button:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
+.attach-button:active { transform: scale(0.97); }
+
+.homework-attachments { display: grid; gap: 8px; }
+.photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.photo { width: 88px; height: 88px; padding: 0; border: 1.5px solid var(--outline); border-radius: 14px; overflow: hidden; background: var(--surface-2); cursor: zoom-in; }
+.photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+.files { display: grid; gap: 6px; }
+.file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 8px 8px 8px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--ink);
+  text-decoration: none;
+}
+.file--link { padding-right: 12px; }
+.file--link[aria-disabled='true'] { opacity: 0.6; }
+.file__icon { flex-shrink: 0; color: var(--ink-2); }
+.file__thumb { flex-shrink: 0; width: 32px; height: 32px; border-radius: 8px; object-fit: cover; }
+.file__text { display: grid; flex: 1; min-width: 0; gap: 1px; }
+.file__name { overflow: hidden; font-size: 14px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.file__size { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
+.file__error { font-size: 12.5px; font-weight: 700; color: var(--danger); }
+.file__progress { width: 100%; height: 4px; accent-color: var(--ink); }
+.file__action { display: grid; place-items: center; flex-shrink: 0; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--ink-2); cursor: pointer; }
+.file__action:active { background: var(--press); }
+
+.gallery {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   max-width: 100%;
-  display: block;
+  max-height: 100%;
+  margin: 0;
+  padding: max(12px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
+  border: 0;
+  background: #0f0e0d;
+  color: #fff;
+}
+.gallery[open] { display: flex; flex-direction: column; gap: 12px; }
+.gallery::backdrop { background: #0f0e0d; }
+.gallery > img { flex: 1; width: 100%; min-height: 0; object-fit: contain; }
+.gallery__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.gallery__count { font-family: var(--mono); font-size: 13px; opacity: 0.8; }
+.gallery__button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 1.5px solid rgba(255, 255, 255, 0.3); border-radius: 50%; background: none; color: #fff; cursor: pointer; }
+
+/* Карточка ДЗ на экране пары */
+.screen--lesson { gap: 14px; }
+.lesson-head__when { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 15px; font-weight: 700; }
+.lesson-head__when small { flex-basis: 100%; font-size: 12.5px; font-weight: 600; opacity: 0.7; }
+.screen--lesson .lesson-head { gap: 8px; padding: 16px 18px 18px; box-shadow: var(--hard-shadow); }
+.screen--lesson .lesson-head .display { font-size: clamp(22px, 6.4vw, 28px); line-height: 1.15; letter-spacing: -0.03em; }
+.facts dd small { display: block; margin-top: 2px; font-size: 13px; color: var(--ink-2); }
+.screen--lesson .facts > div { grid-template-columns: 64px minmax(0, 1fr); padding: 11px 0; }
+.screen--lesson .facts dd { font-size: 15px; }
+.screen--lesson .absence-actions { margin: 0; }
+.screen--lesson .notes .note-status { padding: 10px 0; font-size: 14px; }
+.screen--lesson .notes .note-status + .note-status { border-top: 1px solid var(--line); }
+
+.homework { margin-top: 6px; gap: 10px; }
+.hw-block { gap: 10px; padding: 16px; }
+.hw-block__label { color: var(--ink-3); }
+.hw-block--personal { background: color-mix(in srgb, var(--yellow) 10%, var(--surface)); }
+.hw-block--personal .hw-block__label { color: var(--ink-2); }
+.hw-block__meta { font-size: 12.5px; color: var(--ink-3); }
+
+.hw-meta { display: grid; gap: 6px; }
+.hw-meta li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 13.5px; font-weight: 600; line-height: 1.4; color: var(--ink-2); }
+.hw-meta svg { flex-shrink: 0; color: var(--ink-3); }
+.hw-meta .text-button { min-height: 0; padding: 0; font-size: 13.5px; }
+
+.completion { margin: 2px -2px 0; }
+.completion__button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   min-height: 44px;
-  margin: 8px 0 16px;
-  padding: 10px;
-  color: inherit;
+  padding: 6px 2px;
+  border: 0;
   background: transparent;
-  border: 1px solid currentColor;
-  border-radius: 12px;
-  font: inherit;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
 }
-
-.attachment-editor, .homework-attachments { margin-block: 12px; }
-.attach-label { position: relative; cursor: pointer; display: inline-flex; min-height: 44px; align-items: center; }
-.attach-label input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
-.attach-label:focus-within { outline: 2px solid currentColor; outline-offset: 3px; }
-.attachment-photos { display: flex; flex-wrap: wrap; gap: 8px; }
-.attachment-photos button { padding: 0; border: 0; border-radius: 8px; overflow: hidden; background: transparent; }
-.attachment-photos img, .attachment-thumb { width: 96px; height: 96px; object-fit: cover; display: block; }
-.attachment-files { padding: 0; list-style: none; }
-.attachment-files li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-block: 6px; overflow-wrap: anywhere; }
-.attachment-files li > span { flex: 1; min-width: 100px; }
-.attachment-files button, .attachment-files a, .attachment-gallery button { min-height: 44px; padding: 8px 12px; color: inherit; }
-.attachment-gallery { box-sizing: border-box; position: fixed; inset: 0; width: 100%; height: 100%; max-width: 100%; max-height: 100%; margin: 0; border: 0; background: #111; color: #fff; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
-.attachment-gallery[open] { display: flex; flex-direction: column; gap: 12px; }
-.attachment-gallery > img { width: 100%; flex: 1; min-height: 0; object-fit: contain; }
-.attachment-gallery nav { display: flex; justify-content: space-between; align-items: center; }
-.attachment-gallery::backdrop { background: #111; }
-
-.hw-details { color: var(--text-secondary); font-size: 14px; overflow-wrap: anywhere; }
-.hw-details p { margin: 8px 0; }
-.hw-details-editor { display: grid; gap: 12px; margin-block: 16px; }
-.hw-details-editor .field-label { display: grid; gap: 8px; }
-.hw-details-editor .field { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; }
-.hw-history { margin-block: 4px; overflow-wrap: anywhere; }
-.hw-history summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; text-decoration: underline; }
-.hw-history ol { padding-left: 20px; }
-.hw-history li { padding-block: 8px; border-bottom: 1px solid var(--line); }
-
-
-/* Единые поля и спокойная иерархия карточки: сначала ДЗ, затем детали пары. */
-.screen > *, .sheet > *, .field-label, .editor, .hw-block, .task-card { min-width: 0; }
-.field-label { display: grid; gap: 8px; }
-.field-label input, .field-label select { width: 100%; min-width: 0; box-sizing: border-box; }
-.field-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 12px; }
-.move-editor { padding: 16px; border: 1.5px solid var(--outline); border-radius: 20px; background: var(--surface); gap: 12px; }
-.move-editor input.field, .move-editor select.field { margin: 0; background: var(--bg); border-color: var(--outline); }
-.lesson-move__actions { display: grid; gap: 12px; margin-top: 12px; }
-.lesson-move__cancel { justify-self: center; color: var(--danger); min-height: 44px; }
-.lesson-info { padding: 16px; border: 1.5px solid var(--outline); border-radius: 22px; background: var(--surface); }
-.lesson-info > summary, .reminder-options > summary, .hw-details-editor > summary { cursor: pointer; font-size: 15px; font-weight: 800; padding: 8px 0; }
-.lesson-info .facts { border: 0; padding: 0; }
-.lesson-info > :not(summary) { margin-top: 12px; }
-.screen--lesson .lesson-head { box-shadow: none; padding: 18px; gap: 10px; }
-.screen--lesson .lesson-head .display { font-size: clamp(24px, 7vw, 30px); line-height: 1.18; }
-.screen--lesson .section-note { display: none; }
-.hw-block--shared { background: color-mix(in srgb, var(--k-practice) 24%, var(--surface)); }
-.hw-block--shared .hw-block__label { color: var(--success-text); }
-.hw-block--personal .hw-block__label { color: var(--ink-2); }
-.hw-details { font-size: 13px; line-height: 1.5; color: var(--ink-2); }
-.hw-details .callout { display: inline-block; background: color-mix(in srgb, var(--danger) 10%, var(--surface)); color: var(--danger); border: 0; border-radius: 8px; padding: 4px 8px; margin: 0; font-weight: 700; }
-.hw-details-editor { margin: 0; border-top: 1px solid var(--line); padding-top: 4px; }
-.hw-details-editor__fields { display: grid; gap: 14px; padding-block: 10px; }
-.task-card { border: 1.5px solid var(--outline); border-radius: 20px; background: var(--surface); overflow: hidden; }
-.task-card .task { border: 0; border-radius: 0; background: transparent; }
-.task-card > .hw-details, .task-card > .homework-attachments { margin: 0 16px 12px; }
-.task-card .completion { border-top: 1px solid var(--line); padding: 4px 12px; }
-.completion__button { display: flex; align-items: center; gap: 10px; min-height: 44px; width: 100%; background: transparent; border: 0; padding: 6px 0; font-weight: 750; text-align: left; cursor: pointer; }
-.completion__check { display: grid; place-items: center; width: 22px; height: 22px; border: 1.5px solid var(--outline); border-radius: 7px; flex-shrink: 0; }
+.completion__check, .task-check {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--outline);
+  border-radius: 50%;
+  background: var(--surface);
+  color: transparent;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
 .completion__button[aria-pressed='true'] { color: var(--success-text); }
-.completion__button[aria-pressed='true'] .completion__check { background: var(--green); border-color: var(--success-text); color: white; }
-.task-card.is-complete .task__title { text-decoration: line-through; color: var(--ink-2); }
-.task-card.is-complete { background: color-mix(in srgb, var(--k-practice) 14%, var(--surface)); }
-.headman-sections { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
-.headman-sections button { min-width: 0; padding: 10px 4px; font-size: 12px; white-space: normal; min-height: 44px; }
-.subgroup-options { display: flex; flex-wrap: wrap; gap: 10px; }
-.subgroup-option { border: 1.5px solid var(--outline); border-radius: 999px; padding: 11px 16px; min-height: 44px; background: var(--surface); cursor: pointer; }
+.completion__button[aria-pressed='true'] .completion__check,
+.task-check[aria-pressed='true'] { border-color: var(--green); background: var(--green); color: #fff; }
+
+.history { border-top: 1px solid var(--line); padding-top: 4px; }
+.history > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-2);
+  list-style: none;
+  cursor: pointer;
+}
+.history > summary::-webkit-details-marker { display: none; }
+.history__count { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+.history__list { display: grid; gap: 0; padding: 0; list-style: none; }
+.history__item { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid var(--line); font-size: 13.5px; font-weight: 600; line-height: 1.45; color: var(--ink-2); overflow-wrap: anywhere; }
+.history__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 12.5px; color: var(--ink-3); }
+.history__diff { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; }
+.history__diff dt { font-family: var(--mono); font-size: 11px; text-transform: uppercase; color: var(--ink-3); padding-top: 2px; }
+.history__removed { text-decoration: line-through; }
+.history .text-button { justify-self: start; min-height: 32px; padding: 2px 0; font-size: 13.5px; }
+
+.homework-edit-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.homework-edit-actions > button { min-width: 0; min-height: 48px; height: auto; }
+.homework-edit-actions [class*='Button__content'] { font-size: 15px; line-height: 1.25; white-space: normal; }
+.homework-edit-actions [class*='Button_variant_secondary'] { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--outline); }
+
+.quiet-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 18px; }
+.quiet-actions .text-button { font-size: 13.5px; }
+.text-button--muted { color: var(--ink-2); }
+.text-button:disabled { opacity: 0.5; }
+
+/* Перенос и отмена пары — отдельный блок старосты внизу экрана. */
+.lesson-admin { display: grid; gap: 10px; margin-top: 6px; padding-top: 14px; border-top: 1.5px dashed var(--line); }
+.pill-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; }
+.pill-button--danger { color: var(--danger); }
+.move-editor { display: grid; gap: 14px; padding: 16px; border: 1.5px solid var(--outline); border-radius: 20px; background: var(--surface); }
+.move-editor__title { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
+.move-editor > .hint { margin: -8px 0 0; font-size: 13.5px; }
+.move-editor .date-field__control { background: var(--bg); }
+.move-editor .callout { padding: 10px 12px; }
+
+/* Напоминание: строка с текущим значением, варианты раскрываются списком. */
+.reminder { display: grid; border: 1.5px solid var(--outline); border-radius: 20px; background: var(--surface); overflow: hidden; }
+.reminder__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 58px;
+  padding: 10px 14px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.reminder__row:disabled { opacity: 0.6; cursor: default; }
+.reminder__icon { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 11px; background: var(--surface-2); }
+.reminder__text { display: grid; flex: 1; min-width: 0; gap: 1px; }
+.reminder__title { font-size: 12px; font-weight: 700; color: var(--ink-3); }
+.reminder__value { overflow: hidden; font-size: 15.5px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.reminder__value.is-set { color: var(--ink); }
+.reminder__value::first-letter { text-transform: uppercase; }
+.reminder__chevron { flex-shrink: 0; color: var(--ink-3); transition: transform 0.2s; }
+.reminder.is-open .reminder__chevron { transform: rotate(180deg); }
+.reminder__options { display: grid; padding: 0 14px 4px; border-top: 1px solid var(--line); }
+.reminder__custom { padding: 4px 14px 14px; }
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.option + .option { border-top: 1px solid var(--line); }
+.option:disabled { opacity: 0.45; cursor: default; }
+.option__label { flex: 1; min-width: 0; }
+.option__detail { flex-shrink: 0; font-family: var(--mono); font-size: 12px; color: var(--ink-3); }
+.option__detail::first-letter { text-transform: uppercase; }
+.option__check { flex-shrink: 0; color: var(--ink); opacity: 0; }
+.option[aria-checked='true'] .option__check { opacity: 1; }
+.option[aria-checked='true'] .option__label { font-weight: 800; }
+
+/* Список задач: чекбокс слева, карточка ведёт на экран ДЗ. */
+.task-card { position: relative; display: flex; align-items: stretch; border: 1.5px solid var(--outline); border-radius: 20px; background: var(--surface); }
+.task-card .task { flex: 1; min-width: 0; border: 0; border-radius: inherit; background: transparent; }
+.task-card.has-check .task { padding-left: 52px; }
+.task-card .task-check { position: absolute; top: 14px; left: 14px; z-index: 1; padding: 0; cursor: pointer; }
+.task-card--personal { background: color-mix(in srgb, var(--yellow) 10%, var(--surface)); }
+.task-card.is-complete .task__title { color: var(--ink-2); text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.task-card.is-complete .task__text, .task-card.is-complete .task__meta { opacity: 0.6; }
+.task__when.is-late { background: var(--danger); color: #fff; }
+.task__meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 2px; font-size: 12.5px; font-weight: 700; color: var(--ink-3); }
+.task__meta > span { display: inline-flex; align-items: center; gap: 5px; }
+.task__tag svg, .task__bell svg { flex-shrink: 0; }
+
+/* Создание ДЗ в планере */
+.homework-compose { display: grid; min-width: 0; gap: 16px; }
+.compose-lessons { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.compose-lessons legend { margin-bottom: 8px; padding: 0; }
+.compose-scope { display: grid; gap: 8px; }
+.homework-compose .choice[aria-checked='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+
+.planner-day { display: grid; gap: 10px; min-height: 180px; touch-action: pan-y pinch-zoom; }
+.planner-calendar { min-width: 0; }
+.planner-calendar .date-field__label { display: none; }
+.planner-calendar .date-field__control { min-height: 44px; padding: 4px 8px; border: 0; background: transparent; font-size: 14px; font-weight: 800; }
+.planner-calendar .date-field__control:focus-within { box-shadow: none; }
+.planner-calendar .date-field__control > svg { width: 16px; height: 16px; }
+
+/* Староста: разделы, профиль группы, подгруппы */
+.headman-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
+.headman-sections button { min-width: 0; min-height: 40px; padding: 8px 6px; font-size: 13.5px; white-space: normal; }
+.subgroup-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.subgroup-option { min-height: 44px; padding: 10px 16px; border: 1.5px solid var(--outline); border-radius: 999px; background: var(--surface); color: var(--ink); cursor: pointer; }
 .subgroup-option .choice__title { font-size: 15px; }
-.subgroup-option[aria-checked='true'] { background: var(--yellow); color: #141414; }
-.timezone-select { width: 100%; padding: 12px; background: var(--surface); border: 1.5px solid var(--outline); border-radius: 14px; font: inherit; color: var(--ink); min-height: 44px; }
-:root[data-theme='dark'] .card--skeleton { color: var(--ink); background: var(--surface); }
-@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
-
-.homework-management { border-top: 1px solid var(--line); padding-top: 6px; }
-.homework-management > summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-size: 14px; font-weight: 700; color: var(--ink-2); }
-.hw-block > .completion { border-bottom: 1px solid var(--line); padding-bottom: 4px; }
-:root[data-theme='dark'] .hw-block--shared { background: color-mix(in srgb, var(--k-practice) 12%, var(--surface)); }
-
+.subgroup-option[aria-checked='true'] { border-color: var(--ink); background: var(--ink); color: var(--on-ink); }
+.subgroup-option[aria-checked='true'] .choice__title::after { display: none; }
 .timezone-choice { justify-content: space-between; }
-.timezone-choice[aria-checked='true'] { background: var(--highlight); color: var(--on-highlight); box-shadow: none; }
+.timezone-choice[aria-checked='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+
 .sheet__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sheet__header .sheet__title { min-width: 0; }
 .sheet__header .icon-button { flex-shrink: 0; }
 
-.field-label :is(input, select, textarea) { font-family: var(--sans); font-size: 16px; font-weight: 600; text-transform: none; letter-spacing: normal; }
-.field-pair input[type='time'] { padding-inline: 8px; }
+:root[data-theme='dark'] .card--skeleton { color: var(--ink); background: var(--surface); }
 
-.field-label .field { margin: 0; }
-
-.lesson-info .move-editor, .hw-block .move-editor { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; padding: 16px 0 0; }
-.move-editor .callout { border: 0; border-radius: 12px; padding: 12px; background: color-mix(in srgb, var(--yellow) 16%, var(--surface)); }
-
-.reminder__note { display: flex; align-items: center; gap: 6px; }
-.reminder__note svg { flex-shrink: 0; }
+/* Нижняя панель на узких экранах переходит на короткие подписи. */
 .tabbar__label { font-size: 12px; }
 .tabbar__compact { display: none; }
 @media (max-width: 360px) { .tabbar__full { display: none; } .tabbar__compact { display: inline; } }
 
-/* Зона нажатия остаётся удобной на телефоне, включая кнопки закрытия и недели. */
+/* Зона нажатия не меньше 44px, включая кнопки закрытия и переключения недели. */
 .icon-button, .icon-button--lg, .avatar-button { width: 44px; height: 44px; min-width: 44px; }
-.back-link, .text-button, .lesson-info > summary, .reminder-options > summary, .hw-details-editor > summary { min-height: 44px; }
+.back-link, .text-button { min-height: 44px; }
 
-/* Формы на телефоне: одна поверхность, нативный календарь без ширины содержимого iOS. */
+/* Телефон: без горизонтальной прокрутки, шторка не сдвигает страницу. */
 html, body, #root { max-width: 100%; overflow-x: clip; }
 body.has-sheet { position: fixed; left: 0; right: 0; width: 100%; }
 .sheet-backdrop { overflow: hidden; overscroll-behavior: contain; }
 .sheet { max-width: min(560px, 100vw); overflow-x: hidden; overscroll-behavior: contain; touch-action: pan-y pinch-zoom; }
-.sheet :is(fieldset, textarea, input, select), .composer :is(textarea, input) { box-sizing: border-box; min-width: 0; max-width: 100%; }
-.date-field { display: grid; min-width: 0; gap: 8px; width: 100%; }
-.date-field__label { font-family: var(--mono); font-size: 12px; color: var(--ink-2); text-transform: uppercase; }
-.date-field__control { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 0; min-height: 48px; border: 1.5px solid var(--outline); border-radius: 14px; padding: 10px 12px; box-sizing: border-box; background: var(--surface); font: 600 15px/1.4 var(--sans); }
-.date-field__control > span { overflow-wrap: anywhere; }
-.date-field__control > svg { flex-shrink: 0; color: var(--ink-2); }
-.date-field__control input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; min-width: 0; max-width: 100%; margin: 0; padding: 0; cursor: pointer; font-size: 16px; }
-.date-field__control:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
-.homework-compose { display: grid; min-width: 0; gap: 18px; }
-.compose-lessons { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
-.compose-lessons legend { margin-bottom: 10px; }
-.compose-scope { display: grid; gap: 8px; }
-.homework-compose .choice[aria-checked='true'] { box-shadow: none; border-width: 1.5px; background: color-mix(in srgb, var(--yellow) 40%, var(--surface)); }
-.task-editor, .screen--lesson .editor:not(.move-editor) { display: grid; gap: 10px; padding: 14px; border: 1.5px solid var(--outline); border-radius: 18px; background: color-mix(in srgb, var(--k-practice) 18%, var(--surface)); }
-.task-editor textarea, .screen--lesson .editor:not(.move-editor) textarea { background: transparent; border: 0; box-shadow: none; padding: 4px 0; min-height: 90px; }
-.attachment-editor .attach-label { display: inline-grid; place-items: center; position: relative; width: 44px; height: 44px; min-height: 44px; border: 1.5px solid var(--outline); border-radius: 12px; background: var(--yellow); color: #141414; padding: 0; cursor: pointer; box-shadow: none; }
-.attachment-editor .attach-label input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; display: block; cursor: pointer; }
-.attachment-editor .attach-label:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
-.attachment-files:empty, .attachment-photos:empty { display: none; }
-.hw-details-editor { padding: 12px 14px; margin: 0; border: 1.5px solid var(--outline); border-radius: 18px; background: color-mix(in srgb, var(--yellow) 12%, var(--surface)); }
-.hw-details-editor > summary, .lesson-info > summary, .reminder-options > summary { min-height: 24px; padding: 0; font-size: 15px; line-height: 24px; }
-.hw-details-editor__fields { padding-bottom: 0; }
-.reminder-options { padding: 14px; border: 1.5px solid var(--outline); border-radius: 18px; background: color-mix(in srgb, var(--k-lecture) 12%, var(--surface)); }
-.reminder-options[open] > .reminder { margin-top: 12px; }
-.reminder-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.reminder-presets .chip-option { white-space: normal; font: 700 13px/1.35 var(--sans); padding: 10px; min-height: 44px; border: 1.5px solid var(--outline); border-radius: 12px; text-align: center; }
-.reminder-presets .chip-option[aria-checked='true'] { background: var(--yellow); color: #141414; box-shadow: none; }
-.reminder { display: grid; min-width: 0; gap: 12px; }
-.reminder__note { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
-.composer--announcement { padding: 16px; gap: 16px; background: color-mix(in srgb, var(--k-lecture) 22%, var(--surface)); }
-.composer--announcement textarea { background: transparent; border: 0; box-shadow: none; padding: 0; min-height: 110px; }
-.composer--announcement .announcement-text { padding: 0; margin: 0; }
-.headman-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.screen--lesson .lesson-head { padding: 14px 16px; gap: 6px; }
-.screen--lesson .lesson-head .display { font-size: 22px; line-height: 1.25; letter-spacing: -0.025em; }
-.lesson-info { padding: 14px; border-radius: 18px; background: color-mix(in srgb, var(--k-lab) 12%, var(--surface)); }
-.lesson-info .facts { padding: 0; margin: 0; }
-.lesson-info .facts > div { padding: 8px 0; grid-template-columns: 64px minmax(0, 1fr); gap: 10px; }
-.lesson-info .facts dt { font-size: 11px; }
-.lesson-info .facts dd { font-size: 15px; line-height: 1.35; }
-.homework-edit-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.homework-edit-actions > button { min-width: 0; min-height: 46px; height: auto; padding: 10px 8px; font-size: 14px; line-height: 1.25; }
-.lesson-move__actions { gap: 8px; }
-.lesson-move__actions > button:first-child { background: var(--yellow); color: #141414; box-shadow: none; }
-.move-editor { display: grid; gap: 14px; }
-.move-editor .field-pair { gap: 12px; }
-.move-editor > .hint { margin: 0; }
-.planner-day { display: grid; gap: 12px; min-height: 180px; touch-action: pan-y pinch-zoom; }
-.schedule-status, .schedule-maintenance { padding: 14px; border: 1.5px solid var(--outline); border-radius: 18px; background: var(--surface); }
-.schedule-maintenance > summary { min-height: 24px; cursor: pointer; }
-.composer--announcement [class*='Textarea_mode'], .task-editor [class*='Textarea_mode'], .screen--lesson .editor:not(.move-editor) [class*='Textarea_mode'] { background: transparent; border: 0; box-shadow: none; padding: 0; }
-.lesson-info .facts { background: transparent; border-radius: 0; }
-.lesson-info .move-editor { display: grid; gap: 14px; padding: 14px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
-.move-editor button:not(:disabled):not([class*='ghost']):not([class*='destructive']):first-of-type { background: var(--yellow); color: #141414; }
-.planner-calendar { min-width: 0; }
-.planner-calendar .date-field__label { display: none; }
-.planner-calendar .date-field__control { border: 0; background: transparent; padding: 4px; min-height: 44px; font-size: 14px; }
-.planner-calendar .date-field__control > svg { width: 16px; height: 16px; }
-.homework-edit-actions [class*='Button__content'] { font-size: 14px; line-height: 1.3; white-space: normal; overflow: visible; text-overflow: clip; }
-.reminder-presets .chip-option:last-child:nth-child(odd) { grid-column: 1 / -1; }
-.homework-edit-actions > button:only-child { grid-column: 1 / -1; }
+.sheet :is(fieldset, textarea, input, select) { box-sizing: border-box; min-width: 0; max-width: 100%; }
+
+@media (min-width: 768px) {
+  .lesson-head__when { font-size: 18px; }
+  .screen--lesson .lesson-head .display { font-size: 36px; }
+  .hw-meta li, .history__item { font-size: 15px; }
+  .reminder__value { font-size: 17px; }
+  .option { font-size: 16px; }
+}
+
+/* Кнопки MAX UI в начертании приложения: плотный шрифт, у основной — фирменная жёсткая тень. */
+[class*='Button__content'] { font-weight: 800; letter-spacing: -0.01em; }
+[class*='Button_size_large'] [class*='Button__content'] { font-size: 16px; }
+[class*='Button_variant_primary'] { box-shadow: var(--hard-shadow); transition: transform 0.1s, box-shadow 0.1s; }
+[class*='Button_variant_primary']:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--outline); }
+[class*='Button_variant_primary']:disabled { box-shadow: none; }
+:root[data-theme='dark'] [class*='Button_variant_primary'] { box-shadow: 3px 3px 0 #000; }
+
+/* Пустые состояния компактнее заголовков разделов. */
+.status--empty { gap: 4px; padding: 16px 18px; border-radius: 20px; }
+.status--empty .status__title { font-size: 17px; letter-spacing: -0.01em; }
+.status--empty .status__text { max-width: none; font-size: 13.5px; }
+.planner-day { align-content: start; }
+.screen--planner .block-title { font-size: 20px; letter-spacing: -0.02em; }
+
+/* Раскрывающийся блок: заголовок со стрелкой вместо системного треугольника. */
+.disclosure { border: 1.5px solid var(--outline); border-radius: 20px; background: var(--surface); }
+.disclosure > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 52px; padding: 0 16px; font-size: 16px; font-weight: 800; list-style: none; cursor: pointer; }
+.disclosure > summary::-webkit-details-marker { display: none; }
+.disclosure > summary svg { flex-shrink: 0; color: var(--ink-3); transition: transform 0.2s; }
+.disclosure[open] > summary svg { transform: rotate(180deg); }
+.disclosure > :not(summary) { padding: 0 16px 16px; }
+.orphans { display: grid; gap: 10px; }
+.orphans .hw-block { background: var(--bg); }
+.orphans .text-button { justify-self: start; }
+
+.freshness { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.freshness__dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+.freshness.is-stale .freshness__dot { background: var(--orange); }
+.choice__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }

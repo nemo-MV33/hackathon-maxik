@@ -1,3 +1,4 @@
+import { GROUP_ID, scopedGroupId } from './universities';
 // Старые ссылки с ДЗ остаются читаемыми после переноса хранения на сервер.
 export type SharedHomework = {
   groupId: string | number;
@@ -22,9 +23,9 @@ export const decodeHomework = async (payload: string): Promise<SharedHomework | 
     let bytes = fromBase64Url(match[2]);
     if (match[1] === 'z') bytes = await pipe(bytes, new DecompressionStream('deflate-raw'));
     const [groupId, date, lessonNumber, subgroup, text] = JSON.parse(new TextDecoder().decode(bytes));
-    if (!/^(?:(?:irnitu|bgu)~)?[1-9]\d*$/.test(String(groupId)) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isInteger(lessonNumber)) return null;
+    if (!new RegExp(`^${GROUP_ID}$`).test(String(groupId)) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isInteger(lessonNumber)) return null;
     if (typeof text !== 'string' || !text.trim()) return null;
-    return { groupId: String(groupId).includes('~') ? groupId : `irnitu~${groupId}`, date, lessonNumber, subgroup: subgroup === 1 || subgroup === 2 ? subgroup : null, text: text.slice(0, 1000) };
+    return { groupId: scopedGroupId(groupId), date, lessonNumber, subgroup: subgroup === 1 || subgroup === 2 ? subgroup : null, text: text.slice(0, 1000) };
   } catch {
     return null;
   }

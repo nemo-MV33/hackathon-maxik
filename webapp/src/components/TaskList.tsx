@@ -1,12 +1,10 @@
 import { HomeworkCompletion } from './HomeworkCompletion';
-import { HomeworkDetails } from './HomeworkDetails';
-import { AttachmentList } from './HomeworkAttachments';
 import type { Lesson } from '../data/schedule';
 import type { HomeworkItem } from '../data/homework';
 import type { Announcement } from '../lib/api';
 import { formatMoment, formatShortDay } from '../lib/date';
 import { useI18n } from '../lib/i18n';
-import { BellIcon, ChevronRight, MegaphoneIcon } from './Icon';
+import { BellIcon, ChevronRight, MegaphoneIcon, PaperclipIcon } from './Icon';
 
 export type Task =
   | { kind: 'homework'; key: string; date: string; time: string; item: HomeworkItem; lesson?: Lesson }
@@ -24,6 +22,7 @@ type Props = {
 };
 
 // Задачи — ДЗ к ближайшим парам и объявления старосты, от ближайшего к дальнему.
+// Карточка короткая: срок в чипе, вложения счётчиком; подробности — на экране ДЗ.
 export const TaskList = ({ tasks, todayKey, onOpenHomework, onOpenAnnouncement, showDate = true }: Props) => {
   const { t } = useI18n();
   const when = (date: string) => {
@@ -34,32 +33,49 @@ export const TaskList = ({ tasks, todayKey, onOpenHomework, onOpenAnnouncement, 
   };
   return (
     <ul className="tasks">
-      {tasks.map((task) => (
-        <li key={task.key}>
-          {task.kind === 'homework' ? (
-            <article className={`task-card${task.item.completed ? ' is-complete' : ''}`}><button type="button" className={`task${task.item.source === 'personal' ? ' task--personal' : ''}`} onClick={() => onOpenHomework(task)}>
+      {tasks.map((task) => {
+        if (task.kind === 'announcement') {
+          return (
+            <li key={task.key}>
+              <button type="button" className="task task--announcement" onClick={() => onOpenAnnouncement?.(task.item)}>
+                <span className="task__top">
+                  {showDate && <span className="task__when">{when(task.date)}</span>}
+                  <span className="task__tag task__tag--accent"><MegaphoneIcon size={14} />{t.announcementTag}</span>
+                  {task.item.myRemindAt && <span className="task__bell"><BellIcon size={13} />{formatMoment(task.item.myRemindAt)}</span>}
+                </span>
+                <span className="task__text">{task.item.text}</span>
+                <ChevronRight size={18} className="task__chevron" />
+              </button>
+            </li>
+          );
+        }
+        const { item } = task;
+        const files = item.attachments?.length ?? 0;
+        const overdue = !item.completed && item.dueAt && Date.parse(item.dueAt) < Date.now();
+        const classes = ['task-card', item.completed && 'is-complete', item.source === 'personal' && 'task-card--personal', item.completionRevision && 'has-check'];
+        return (
+          <li key={task.key} className={classes.filter(Boolean).join(' ')}>
+            <HomeworkCompletion item={item} compact />
+            <button type="button" className="task" onClick={() => onOpenHomework(task)}>
               <span className="task__top">
                 {showDate && <span className={`task__when${dayDiff(task.date, todayKey) <= 1 ? ' is-soon' : ''}`}>{when(task.date)}</span>}
                 <span className="task__time">{task.time}</span>
-                <span className="task__tag">{task.item.source === 'personal' ? t.homeworkMine : t.homeworkShort}</span>
-                {task.item.remindAt && <span className="task__bell" aria-label={t.reminder}><BellIcon size={14} /></span>}
+                {overdue && <span className="task__when is-late">{t.overdue}</span>}
+                <span className="task__tag">{item.source === 'personal' ? t.homeworkMine : t.homeworkShort}</span>
               </span>
-              <span className="task__title">{task.item.subject}</span>
-              <span className="task__text">{task.item.text}</span>
+              <span className="task__title">{item.subject}</span>
+              {item.text && <span className="task__text">{item.text}</span>}
+              {(files > 0 || item.remindAt) && (
+                <span className="task__meta">
+                  {files > 0 && <span><PaperclipIcon size={14} />{t.filesCount(files)}</span>}
+                  {item.remindAt && <span><BellIcon size={14} />{formatMoment(item.remindAt)}</span>}
+                </span>
+              )}
               <ChevronRight size={18} className="task__chevron" />
-            </button><HomeworkDetails deadline={task.item.deadline} submission={task.item.submission} dueAt={task.item.dueAt} completed={task.item.completed} /><AttachmentList files={task.item.attachments} /><HomeworkCompletion item={task.item} /></article>
-          ) : (
-            <button type="button" className="task task--announcement" onClick={() => onOpenAnnouncement?.(task.item)}>
-              <span className="task__top">
-                {showDate && <span className="task__when">{when(task.date)}</span>}
-                <span className="task__tag task__tag--accent"><MegaphoneIcon size={13} /> {t.announcementTag}</span>
-                {task.item.myRemindAt && <span className="task__bell"><BellIcon size={14} /> {formatMoment(task.item.myRemindAt)}</span>}
-              </span>
-              <span className="task__text task__text--full">{task.item.text}</span>
             </button>
-          )}
-        </li>
-      ))}
+          </li>
+        );
+      })}
     </ul>
   );
 };

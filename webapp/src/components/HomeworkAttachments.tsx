@@ -1,11 +1,16 @@
-import { PaperclipIcon } from './Icon';
+import { CloseIcon, DownloadIcon, FileIcon, PaperclipIcon, ChevronLeft, ChevronRight } from './Icon';
 import { useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../lib/api';
 import { webApp, openExternal } from '../bridge/max';
-import { useI18n } from '../lib/i18n';
+import { t, useI18n } from '../lib/i18n';
 
 export type HomeworkAttachment = { id: string; name: string; size: number; mime: string };
-export const fileSize = (size: number) => size < 1024 * 1024 ? `${(size / 1024).toFixed(1)} KB` : `${(size / 1024 / 1024).toFixed(1)} MB`;
+// Размер по-русски или по-английски: «39,6 КБ», «1.2 MB».
+export const fileSize = (size: number) => {
+  const { locale, units } = t();
+  const [value, unit] = size < 1024 * 1024 ? [size / 1024, units.kb] : [size / 1024 / 1024, units.mb];
+  return `${value.toLocaleString(locale, { maximumFractionDigits: 1 })} ${unit}`;
+};
 
 const previewImage = (file: HomeworkAttachment) => ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/bmp'].includes(file.mime);
 
@@ -74,29 +79,41 @@ export const AttachmentEditor = ({ files, scope, onChange, onBusy }: {
     } catch (error) { if (mounted.current) setDrafts((items) => items.map((value) => value.key === draft.key ? { ...value, error: (error as Error).message } : value)); }
   };
   const pendingIds = new Set(drafts.map((draft) => draft.item?.id));
+  const remove = (id: string) => onChange(files.filter((item) => item.id !== id));
+  const saved = files.filter((file) => !pendingIds.has(file.id));
   return <div className="attachment-editor">
-    <label className="attach-label" title={t.attachFiles}><PaperclipIcon size={22} /><input aria-label={t.attachFiles} type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.zip,.7z,.rar,.gz,.tar,audio/*,video/*" onChange={(event) => {
+    {(saved.length > 0 || drafts.length > 0) && <ul className="files">
+      {saved.map((file) => <li key={file.id} className="file">
+        <FileIcon size={18} className="file__icon" />
+        <span className="file__text"><span className="file__name">{file.name}</span><span className="file__size">{fileSize(file.size)}</span></span>
+        <button type="button" className="file__action" aria-label={`${t.removeAttachment}: ${file.name}`} onClick={() => remove(file.id)}><CloseIcon size={16} /></button>
+      </li>)}
+      {drafts.map((draft) => <li key={draft.key} className="file">
+        {draft.preview ? <img className="file__thumb" src={draft.preview} alt="" /> : <FileIcon size={18} className="file__icon" />}
+        <span className="file__text">
+          <span className="file__name">{draft.item?.name ?? draft.file.name}</span>
+          {draft.error ? <span className="file__error" role="alert">{draft.error}</span>
+            : draft.item ? <span className="file__size">{fileSize(draft.item.size)}</span>
+              : <progress className="file__progress" aria-label={t.uploadingFile} value={draft.progress} max={100} />}
+        </span>
+        {draft.error && <button type="button" className="text-button" onClick={() => void start(draft)}>{t.retryAttachment}</button>}
+        {(draft.item || draft.error) && <button type="button" className="file__action" aria-label={t.removeAttachment} onClick={() => {
+          setDrafts((items) => items.filter((item) => item.key !== draft.key));
+          if (draft.item) { remove(draft.item.id); void apiRequest(`/api/attachments/${draft.item.id}`, { method: 'DELETE' }).catch(() => {}); }
+        }}><CloseIcon size={16} /></button>}
+      </li>)}
+    </ul>}
+    <label className="attach-button"><PaperclipIcon size={18} />{t.attachFiles}<input aria-label={t.attachFiles} type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.rtf,.zip,.7z,.rar,.gz,.tar,audio/*,video/*" onChange={(event) => {
       const selected = Array.from(event.target.files ?? []).map((file): Draft => {
         const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
         if (preview) urls.current.push(preview);
         return { key: crypto.randomUUID(), file, preview, progress: 0 };
       });
       setDrafts((items) => [...items, ...selected]);
-      // Sequential uploads keep memory and network usage bounded on phones.
+      // Файлы грузятся по одному: на телефоне так меньше памяти и трафика одновременно.
       void (async () => { for (const draft of selected) await start(draft); })();
       event.target.value = '';
     }} /></label>
-    <AttachmentList files={files.filter((file) => previewImage(file) && !pendingIds.has(file.id))} />
-    <ul className="attachment-files">
-      {files.filter((file) => !pendingIds.has(file.id)).map((file) => <li key={file.id}><span>{file.name} · {fileSize(file.size)}</span><button type="button" onClick={() => onChange(files.filter((item) => item.id !== file.id))}>{t.removeAttachment}</button></li>)}
-      {drafts.map((draft) => <li key={draft.key}>
-        {draft.preview && <img className="attachment-thumb" src={draft.preview} alt={draft.file.name} />}
-        <span>{draft.item?.name ?? draft.file.name}{draft.item && ` · ${fileSize(draft.item.size)}`}</span>
-        {!draft.item && !draft.error && <progress aria-label={t.uploadingFile} value={draft.progress} max={100} />}
-        {draft.error && <><span role="alert">{draft.error}</span><button type="button" onClick={() => void start(draft)}>{t.retryAttachment}</button></>}
-        {(draft.item || draft.error) && <button type="button" onClick={() => { setDrafts((items) => items.filter((item) => item.key !== draft.key)); if (draft.item) { onChange(files.filter((item) => item.id !== draft.item!.id)); void apiRequest(`/api/attachments/${draft.item.id}`, { method: 'DELETE' }).catch(() => {}); } }}>{t.removeAttachment}</button>}
-      </li>)}
-    </ul>
   </div>;
 };
 
@@ -123,29 +140,40 @@ export const AttachmentList = ({ files = [] }: { files?: HomeworkAttachment[] })
   const photos = files.filter(previewImage);
   const move = (offset: number) => setSelected((current) => current === null ? null : (current + offset + photos.length) % photos.length);
   if (!files.length) return null;
+  const download = (event: React.MouseEvent<HTMLAnchorElement>, file: HomeworkAttachment) => {
+    const url = links[file.id];
+    if (!url) { event.preventDefault(); return; }
+    const app = webApp();
+    if (app?.initData && app.downloadFile) {
+      event.preventDefault();
+      try { void Promise.resolve(app.downloadFile(url, file.name)).catch((error: unknown) => setError(error instanceof Error ? error.message : t.failed)); }
+      catch (error) { setError(error instanceof Error ? error.message : t.failed); }
+    }
+    else if (openExternal(url)) event.preventDefault();
+  };
+  const documents = files.filter((file) => !previewImage(file));
   return <div className="homework-attachments">
-    {error && <p role="alert">{error} <button type="button" onClick={() => setRevision((value) => value + 1)}>{t.retryAttachment}</button></p>}
-    <div className="attachment-photos">{photos.map((file, index) => <button type="button" key={file.id} disabled={!links[file.id]} onClick={() => setSelected(index)} aria-label={`${t.openAttachment}: ${file.name}`}>
-      <img loading="lazy" src={links[file.id]} alt={file.name} width={96} height={96} />
-    </button>)}</div>
-    <ul className="attachment-files">{files.filter((file) => !previewImage(file)).map((file) => <li key={file.id}>
-      <span>{file.name} · {fileSize(file.size)}</span>
-      <a href={links[file.id]} download={file.name} aria-disabled={!links[file.id]} onClick={(event) => {
-        const url = links[file.id];
-        if (!url) { event.preventDefault(); return; }
-        const app = webApp();
-        if (app?.initData && app.downloadFile) {
-          event.preventDefault();
-          try { void Promise.resolve(app.downloadFile(url, file.name)).catch((error: unknown) => setError(error instanceof Error ? error.message : t.failed)); }
-          catch (error) { setError(error instanceof Error ? error.message : t.failed); }
-        }
-        else if (openExternal(url)) event.preventDefault();
-      }}>{t.openAttachment}</a>
-    </li>)}</ul>
-    {selected !== null && photos[selected] && <dialog ref={dialog} className="attachment-gallery" onClose={() => setSelected(null)} onKeyDown={(event) => { if (event.key === 'ArrowLeft') move(-1); if (event.key === 'ArrowRight') move(1); }} aria-label={t.photoGallery}>
-      <button type="button" onClick={() => dialog.current?.close()}>{t.closeAttachment}</button>
+    {error && <p className="callout callout--error" role="alert">{error} <button type="button" className="text-button" onClick={() => setRevision((value) => value + 1)}>{t.retryAttachment}</button></p>}
+    {photos.length > 0 && <div className="photos">{photos.map((file, index) => <button type="button" className="photo" key={file.id} disabled={!links[file.id]} onClick={() => setSelected(index)} aria-label={`${t.openAttachment}: ${file.name}`}>
+      {links[file.id] && <img loading="lazy" src={links[file.id]} alt={file.name} width={88} height={88} />}
+    </button>)}</div>}
+    {documents.length > 0 && <ul className="files">{documents.map((file) => <li key={file.id}>
+      <a className="file file--link" href={links[file.id]} download={file.name} aria-disabled={!links[file.id]} onClick={(event) => download(event, file)}>
+        <FileIcon size={18} className="file__icon" />
+        <span className="file__text"><span className="file__name">{file.name}</span><span className="file__size">{fileSize(file.size)}</span></span>
+        <DownloadIcon size={18} className="file__icon" />
+      </a>
+    </li>)}</ul>}
+    {selected !== null && photos[selected] && <dialog ref={dialog} className="gallery" onClose={() => setSelected(null)} onKeyDown={(event) => { if (event.key === 'ArrowLeft') move(-1); if (event.key === 'ArrowRight') move(1); }} aria-label={t.photoGallery}>
+      <div className="gallery__bar">
+        <span className="gallery__count">{selected + 1} / {photos.length}</span>
+        <button type="button" className="gallery__button" aria-label={t.closeAttachment} onClick={() => dialog.current?.close()}><CloseIcon size={20} /></button>
+      </div>
       <img src={links[photos[selected].id]} alt={photos[selected].name} onTouchStart={(event) => { touchStart.current = event.changedTouches[0].clientX; }} onTouchEnd={(event) => { const delta = event.changedTouches[0].clientX - touchStart.current; if (Math.abs(delta) > 40) move(delta < 0 ? 1 : -1); }} />
-      <nav><button type="button" onClick={() => move(-1)}>{t.previousPhoto}</button><span>{selected + 1} / {photos.length}</span><button type="button" onClick={() => move(1)}>{t.nextPhoto}</button></nav>
+      {photos.length > 1 && <nav className="gallery__bar">
+        <button type="button" className="gallery__button" aria-label={t.previousPhoto} onClick={() => move(-1)}><ChevronLeft size={22} /></button>
+        <button type="button" className="gallery__button" aria-label={t.nextPhoto} onClick={() => move(1)}><ChevronRight size={22} /></button>
+      </nav>}
     </dialog>}
   </div>;
 };

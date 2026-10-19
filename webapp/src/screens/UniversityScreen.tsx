@@ -10,7 +10,8 @@ import { useI18n } from '../lib/i18n';
 import { useProfile } from '../lib/profile';
 import { haptic } from '../bridge/max';
 import { BackHeader } from '../components/BackHeader';
-import { ChevronRight } from '../components/Icon';
+import { ChevronDown, ChevronRight } from '../components/Icon';
+import { universityName, universityOf } from '../lib/universities';
 
 // Университет: здесь меняют группу и подгруппу.
 export const UniversityScreen = ({ profile, onBack, onChangeGroup }: { profile: LocalProfile; onBack: () => void; onChangeGroup: () => void }) => {
@@ -31,7 +32,7 @@ export const UniversityScreen = ({ profile, onBack, onChangeGroup }: { profile: 
         <button type="button" onClick={onChangeGroup} className="settings-row">
           <span className="settings-row__text">
             <span className="settings-row__hint">{t.fieldUniversity}</span>
-            <span className="settings-row__title">{String(profile.group.id).startsWith('bgu~') ? 'БГУ / Baikal State University' : t.universityName}</span>
+            <span className="settings-row__title">{universityName(universityOf(profile.group.id))}</span>
           </span><ChevronRight size={18} />
         </button>
         <div className="settings-row settings-row--static">
@@ -61,8 +62,11 @@ export const UniversityScreen = ({ profile, onBack, onChangeGroup }: { profile: 
         ))}
       </div>
       <p className="hint">{t.groupChangeWarning}</p>
-      <section className="schedule-status"><h2 className="section-title">{t.scheduleStatus}</h2>{schedule.status === 'ready' && <ScheduleFreshness at={schedule.data.updatedAt} stale={schedule.data.stale} />}</section>
-      {(me?.role === 'headman' || me?.role === 'editor') && <details className="schedule-maintenance"><summary>{t.orphanedList}</summary><OrphanedHomework /></details>}
+      {schedule.status === 'ready' && <ScheduleFreshness at={schedule.data.updatedAt} stale={schedule.data.stale} />}
+      {(me?.role === 'headman' || me?.role === 'editor') && <details className="disclosure">
+        <summary><span>{t.orphanedList}</span><ChevronDown size={18} /></summary>
+        <OrphanedHomework />
+      </details>}
 
     </div>
   );

@@ -3,6 +3,7 @@ import { addDays, fromDateKey, toDateKey } from '../lib/date';
 import { lessonDate, userTimeZone } from '../lib/timezone';
 import { apiRequest } from '../lib/api';
 import { t } from '../lib/i18n';
+import { groupTimeZone, scopedGroupId, universityOf } from '../lib/universities';
 
 const DATA_URL = `${import.meta.env.BASE_URL}data/`;
 
@@ -25,13 +26,15 @@ export type Lesson = {
   subgroup: number | null;
   teachers: string[];
   auditories: string[];
+  // Корпус или адрес, если источник отдаёт его отдельно от аудитории.
+  building?: string;
   comment?: string;
   link?: string;
   transferred?: boolean;
   groups?: string[];
 };
 
-export type WeekSchedule = { stale?: boolean; updatedAt?: string | null; weekStart: string; weekEven: boolean; lessons: Lesson[] };
+export type WeekSchedule = { stale?: boolean; updatedAt?: string | null; weekStart: string; weekEven: boolean | null; lessons: Lesson[] };
 
 export type Meta = { updatedAt: string; weeks: string[]; groups: number; failed: number };
 
@@ -58,9 +61,33 @@ const load = <T>(path: string): Promise<T> => {
 };
 
 export const loadMeta = () => load<Meta>('meta.json');
-export const loadGroups = async (universityId = 'irnitu'): Promise<Group[]> => {
-  try { return (await apiRequest<{ items: Group[] }>(`/api/groups?universityId=${universityId}&limit=5000`)).items; }
-  catch { return (await load<Group[]>('groups.json')).map((group) => ({ ...group, id: /^\d+$/.test(String(group.id)) ? `irnitu~${group.id}` : group.id })).filter((group) => (group.universityId ?? 'irnitu') === universityId); }
+// Статическая выгрузка — запасной путь, если API недоступен.
+const staticGroups = async (universityId: string) => (await load<Group[]>('groups.json'))
+  .map((group) => ({ ...group, id: scopedGroupId(group.id) }))
+  .filter((group) => (group.universityId ?? 'irnitu') === universityId);
+
+const compact = (value: string) => value.toLowerCase().replace(/ё/g, 'е').replace(/[\s.\-–—/_]+/g, '');
+
+// У крупных вузов тысячи групп, поэтому поиск идёт на сервере, а в телефон приходят 30 совпадений.
+export const searchGroups = async (universityId: string, query: string): Promise<Group[]> => {
+  try {
+    const params = new URLSearchParams({ universityId, q: query, limit: '30' });
+    return (await apiRequest<{ items: Group[] }>(`/api/groups?${params}`)).items;
+  } catch {
+    const needle = compact(query);
+    return (await staticGroups(universityId)).filter((group) => compact(group.title).includes(needle)).slice(0, 30);
+  }
+};
+
+export type CatalogItem = { id: string; title: string; hint?: string; course?: number | null; kind: 'node' | 'group'; institute?: string; universityId?: string };
+// Каталог вуза: '' — направления, дальше путь через «/». Ответы кэшируются на сервере на неделю.
+export const loadCatalog = (universityId: string, path: string) =>
+  apiRequest<{ items: CatalogItem[] }>(`/api/catalog?${new URLSearchParams({ universityId, path })}`).then((data) => data.items);
+
+export const findGroup = async (groupId: string | number): Promise<Group | undefined> => {
+  const id = scopedGroupId(groupId);
+  try { return (await apiRequest<{ items: Group[] }>(`/api/groups?id=${encodeURIComponent(id)}`)).items[0]; }
+  catch { return (await staticGroups(universityOf(id).id)).find((group) => group.id === id); }
 };
 const sourceCache = new ResourceCache();
 window.addEventListener('focus', () => sourceCache.clear());
@@ -89,7 +116,7 @@ const loadSourceWeek = (groupId: string | number, weekStart: string, kind: 'grou
 // Границы пользовательской недели могут пересекать соседнюю неделю вуза.
 export const loadWeek = async (groupId: string | number, weekStart: string, kind: 'group' | 'teacher' | 'auditory' = 'group'): Promise<WeekSchedule> => {
   const primary = await loadSourceWeek(groupId, weekStart, kind);
-  if (userTimeZone() === 'Asia/Irkutsk') return primary;
+  if (userTimeZone() === groupTimeZone(groupId)) return primary;
   const adjacent = await Promise.all([-7, 7].map((offset) => loadSourceWeek(groupId, toDateKey(addDays(fromDateKey(weekStart), offset)), kind).catch(() => null)));
   const unique = new Map([primary, ...adjacent].flatMap((week) => week?.lessons ?? []).map((lesson) => [
     JSON.stringify([lesson.date, lesson.lessonNumber, lesson.subgroup, lesson.subject, lesson.lessonType, lesson.teachers, lesson.auditories]), lesson,

@@ -36,9 +36,8 @@ export const AnnouncementSheet = ({ item, now, onClose, onSaved }: Props) => {
     <Sheet title={t.announcementTitle} labelId="announcement-title" onClose={onClose} busy={saving}
       hint={[item.authorName, formatMoment(item.createdAt)].filter(Boolean).join(', ')}>
       <p className="announcement-text">{item.text}</p>
-      <p className="field-label">{t.myReminder}</p>
-      {item.remindAt && <p className="sheet__hint">{t.headmanReminder(formatMoment(item.remindAt))}</p>}
-      <ReminderPicker value={value} onChange={setValue} now={now} />
+      <ReminderPicker title={t.myReminder} value={value} onChange={setValue} now={now} />
+      {item.remindAt && <p className="note-line">{t.headmanReminder(formatMoment(item.remindAt))}</p>}
       {error && <p className="toast toast--error" role="alert">{error}</p>}
       <div className="actions">
         <Button stretched size="large" disabled={!changed} loading={saving} onClick={() => save({ remindAt: value })}>{t.save}</Button>

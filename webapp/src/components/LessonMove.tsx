@@ -6,6 +6,9 @@ import { apiRequest } from '../lib/api';
 import { fromDateKey, startOfWeek, toDateKey } from '../lib/date';
 import { lessonDate, lessonTime } from '../lib/timezone';
 import { useI18n } from '../lib/i18n';
+import { universityClock } from '../lib/universities';
+import { MoveIcon } from './Icon';
+import { Select } from './HomeworkDetails';
 
 export type Move = { id: string; from: Lesson; to: Lesson | null; status: string; authorName: string; at: string };
 export const scheduleChanged = () => {
@@ -55,23 +58,23 @@ export const LessonMove = ({ lesson, groupId, orphanId, onSaved }: {
     finally { setBusy(false); }
   };
   return <div className="lesson-move">
-    {!mode && <div className="lesson-move__actions">
-      <Button stretched variant="secondary" onClick={() => setMode('move')}>{existing ? t.moveManage : orphanId ? t.moveRebind : t.moveAction}</Button>
-      {!existing && !orphanId && <button type="button" className="text-button lesson-move__cancel" onClick={() => setMode('cancel')}>{t.cancelLessonAction}</button>}
+    {!mode && <div className="absence-actions">
+      <button type="button" className="pill-button" onClick={() => setMode('move')}><MoveIcon size={17} />{existing ? t.moveManage : orphanId ? t.moveRebind : t.moveAction}</button>
+      {!existing && !orphanId && <button type="button" className="pill-button pill-button--danger" onClick={() => setMode('cancel')}>{t.cancelLessonAction}</button>}
     </div>}
-    {mode && <div className="editor move-editor">
+    {mode && <div className="move-editor">
       {mode === 'cancel' ? <>
-        <p className="lead">{t.cancelLessonQuestion}</p><p className="hint">{t.cancelLessonHint}</p>
+        <p className="move-editor__title">{t.cancelLessonQuestion}</p><p className="hint">{t.cancelLessonHint}</p>
         <Button stretched variant="destructive" disabled={busy} onClick={() => void submit()}>{t.cancelLessonConfirm}</Button>
       </> : <>
-        {existing && <p className="hint">{t.moveAlreadyMarked}</p>}
-        <p className="hint">{t.moveUniversityTime}</p>
+        <p className="move-editor__title">{existing ? t.moveManage : orphanId ? t.moveRebind : t.moveAction}</p>
+        <p className="hint">{existing ? `${t.moveAlreadyMarked} ` : ''}{t.moveUniversityTime(universityClock(groupId))}</p>
         <DateField label={t.moveDate} value={date} onChange={setDate} />
-        {orphanId ? <label className="field-label">{t.moveChoose}<select className="field" value={target} onChange={(event) => setTarget(event.target.value)}><option value="">{t.moveChoose}</option>{lessons.map((item) => <option key={key(item)} value={key(item)}>{lessonTime(item)} · {item.subject}</option>)}</select></label> : <div className="field-pair">
+        {orphanId ? <Select label={t.moveChoose} value={target} onChange={setTarget}><option value="">{t.moveChoose}</option>{lessons.map((item) => <option key={key(item)} value={key(item)}>{lessonTime(item)} · {item.subject}</option>)}</Select> : <div className="field-pair">
           <DateField type="time" label={t.classStarts} value={begin} onChange={setBegin} />
           <DateField type="time" label={t.classEnds} value={end} onChange={setEnd} />
         </div>}
-        {overlaps && <p className="callout" role="status">{t.moveOverlap}</p>}
+        {overlaps && <p className="callout callout--warn" role="status">{t.moveOverlap}</p>}
         <Button stretched loading={busy} disabled={busy || !date || (orphanId ? !target : !begin || end <= begin || (date === lesson.date && `${begin}–${end}` === lesson.time))} onClick={() => void submit()}>{orphanId ? t.save : t.moveSave}</Button>
         {existing && <Button stretched variant="secondary" disabled={busy} onClick={() => void submit(true)}>{t.moveUndo}</Button>}
       </>}

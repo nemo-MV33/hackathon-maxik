@@ -1,10 +1,11 @@
 import { useProfile } from '../lib/profile';
 import { useEffect, useRef, useState } from 'react';
-import { loadGroups } from '../data/schedule';
+import { searchGroups } from '../data/schedule';
 import { apiRequest } from '../lib/api';
 import { useI18n } from '../lib/i18n';
 import { CloseIcon, SearchIcon } from './Icon';
 import type { EntityTarget } from '../screens/EntityScheduleScreen';
+import { universityOf } from '../lib/universities';
 
 type Filter = 'all' | 'teacher' | 'auditory' | 'group';
 const FILTERS: Filter[] = ['all', 'teacher', 'auditory', 'group'];
@@ -13,14 +14,14 @@ const LIMIT = 12;
 
 type Result = EntityTarget & { hint?: string };
 
-const normalize = (value: string) => value.toLowerCase().replace(/ё/g, 'е').replace(/[\s.\-–—]+/g, '');
-
-// Поиск по расписанию ИРНИТУ: преподаватели и аудитории — через API, группы — из выгруженного списка.
+// Поиск по расписанию вуза своей группы: преподаватели, аудитории и другие группы.
+// Аудитории скрыты у вузов, где источник их не отдаёт.
 export const ScheduleSearch = ({ onOpen, onClose }: { onOpen: (target: EntityTarget) => void; onClose: () => void }) => {
   const { t } = useI18n();
   const [profile] = useProfile();
-  const universityId = String(profile?.group.id).startsWith('bgu~') ? 'bgu' : 'irnitu';
-  const supported = (kind: Filter) => !(universityId === 'bgu' && kind === 'auditory');
+  const university = universityOf(profile?.group.id);
+  const universityId = university.id;
+  const supported = (kind: Filter) => kind !== 'auditory' || university.auditories;
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [results, setResults] = useState<Result[] | null>(null);
@@ -46,14 +47,13 @@ export const ScheduleSearch = ({ onOpen, onClose }: { onOpen: (target: EntityTar
         const [teachers, auditories, groups] = await Promise.all([
           wants('teacher') ? apiRequest<{ items: { id: number; name: string; fullName?: string }[] }>(`/api/teachers?q=${q}&universityId=${universityId}&limit=${LIMIT}`) : { items: [] },
           wants('auditory') ? apiRequest<{ items: { id: number; title: string }[] }>(`/api/auditories?q=${q}&universityId=${universityId}&limit=${LIMIT}`) : { items: [] },
-          wants('group') ? loadGroups(universityId) : [],
+          wants('group') ? searchGroups(universityId, text) : [],
         ]);
         if (!active) return;
-        const needle = normalize(text);
         setResults([
           ...teachers.items.map((item): Result => ({ kind: 'teacher', id: item.id, title: item.fullName || item.name })),
           ...auditories.items.map((item): Result => ({ kind: 'auditory', id: item.id, title: item.title })),
-          ...groups.filter((group) => normalize(group.title).includes(needle)).slice(0, LIMIT)
+          ...groups.slice(0, LIMIT)
             .map((group): Result => ({ kind: 'group', id: group.id, title: group.title, hint: group.institute })),
         ]);
         setError(null);

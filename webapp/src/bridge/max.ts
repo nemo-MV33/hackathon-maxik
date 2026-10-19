@@ -1,3 +1,4 @@
+import { decodeStartParam } from '../lib/universities';
 export type MaxUser = {
   id: number;
   first_name?: string;
@@ -42,7 +43,7 @@ export const currentUser = (): MaxUser | undefined => window.WebApp?.initDataUns
 export const startParam = (): string | undefined => {
   const fromMax = window.WebApp?.initDataUnsafe?.start_param;
   const value = fromMax || new URLSearchParams(window.location.search).get('startapp');
-  return value?.replace(/(irnitu|bgu)-(?=\d)/g, '$1~') ?? undefined;
+  return value ? decodeStartParam(value) : undefined;
 };
 
 export const miniAppLink = (payload: string) => `https://max.ru/${BOT_NAME}?startapp=${payload.replace(/~/g, '-')}`;

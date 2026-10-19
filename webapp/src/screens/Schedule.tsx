@@ -201,7 +201,7 @@ export const Schedule = ({
         </button>
         <span className="week-nav__range">
           {formatRange(fromDateKey(days[0]), fromDateKey(days[6]))}
-          {week.status === 'ready' && <span className="week-nav__parity">, {week.data.weekEven ? t.even : t.odd}</span>}
+          {week.status === 'ready' && typeof week.data.weekEven === 'boolean' && <span className="week-nav__parity">, {week.data.weekEven ? t.even : t.odd}</span>}
         </span>
         <button type="button" className="icon-button" aria-label={t.nextWeek} disabled={!canShift(1)} onClick={() => shiftWeek(1)}>
           <ChevronRight size={18} />

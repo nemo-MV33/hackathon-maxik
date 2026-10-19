@@ -5,7 +5,7 @@ import type { Deadline, Submission } from '../data/homework';
 import { AttachmentEditor, AttachmentList, type HomeworkAttachment } from '../components/HomeworkAttachments';
 import { userTimeZone, dateInZone, lessonDate, lessonTime, lessonMoment } from '../lib/timezone';
 import { LessonMove } from '../components/LessonMove';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
 import { homeworkKey, saveHomework, useRemoteHomework, type HomeworkData } from '../data/homework';
@@ -21,6 +21,7 @@ import { AbsenceSheet } from '../components/AbsenceSheet';
 import { loadAbsences, type AbsenceKind, type AbsenceNote } from '../lib/api';
 import { useNow } from '../lib/useNow';
 import { ReminderPicker } from '../components/ReminderPicker';
+import { groupTimeZone, universityClock } from '../lib/universities';
 
 type Props = {
   lesson: Lesson;
@@ -36,36 +37,36 @@ const MAX_LENGTH = 2_000;
 
 const safeLink = (link?: string) => (link && /^https?:\/\//i.test(link) ? link : undefined);
 
+// Где, кто и для кого. Время и дата — в шапке, здесь их не повторяем.
 const LessonFacts = ({ lesson }: { lesson: Lesson }) => {
   const { t } = useI18n();
-  return (
-  <dl className="facts">
-    <div><dt>{t.when}</dt><dd className="first-letter">{formatDay(fromDateKey(lessonDate(lesson)))}<br /><span className="mono">{lessonTime(lesson)}</span>{userTimeZone() !== (lesson.timeZone || 'Asia/Irkutsk') && <small><br />{lesson.time.slice(0, 5)} {t.irkutskTime}</small>}</dd></div>
-    {lesson.auditories.length > 0 && <div><dt>{t.where}</dt><dd>{lesson.auditories.join(', ')}</dd></div>}
-    {lesson.teachers.length > 0 && <div><dt>{t.who}</dt><dd>{lesson.teachers.join(', ')}</dd></div>}
-    {lesson.subgroup && <div><dt>{t.forWhom}</dt><dd>{t.forSubgroup(lesson.subgroup)}</dd></div>}
-    {lesson.comment && <div><dt>{t.note}</dt><dd>{lesson.comment}</dd></div>}
-    {safeLink(lesson.link) && (
-      <div><dt>{t.link}</dt><dd><a
-        href={safeLink(lesson.link)}
-        target="_blank"
-        rel="noreferrer"
-        onClick={(event) => { if (openExternal(lesson.link!)) event.preventDefault(); }}
-      >{lesson.link!.replace(/^https?:\/\//i, '')}</a></dd></div>
-    )}
-  </dl>
-  );
+  const link = safeLink(lesson.link);
+  const rows = [
+    lesson.auditories.length > 0 && [t.where, <>{lesson.auditories.join(', ')}{lesson.building && <small>{lesson.building}</small>}</>],
+    lesson.teachers.length > 0 && [t.who, lesson.teachers.join(', ')],
+    lesson.subgroup && [t.forWhom, t.forSubgroup(lesson.subgroup)],
+    lesson.comment && [t.note, lesson.comment],
+    link && [t.link, <a href={link} target="_blank" rel="noreferrer" onClick={(event) => { if (openExternal(link)) event.preventDefault(); }}>{link.replace(/^https?:\/\//i, '')}</a>],
+  ].filter(Boolean) as [string, ReactNode][];
+  if (!rows.length) return null;
+  return <dl className="facts">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
 };
 
 const LessonHeading = ({ lesson }: { lesson: Lesson }) => {
   const { t } = useI18n();
+  const otherZone = userTimeZone() !== (lesson.timeZone || groupTimeZone(lesson.groupId));
   return (
-  <header className={`lesson-head ${lessonKindClass(lesson.lessonType)}${isControlLesson(lesson.lessonType) ? ' is-control' : ''}`}>
+  <header className={`lesson-head ${lesson.standalone ? 'kind-other' : lessonKindClass(lesson.lessonType)}${isControlLesson(lesson.lessonType) ? ' is-control' : ''}`}>
     <p className="eyebrow">
       <span className="kind-code">{lesson.standalone ? t.homeworkShort : lessonKindName(lesson.lessonType)}</span>
       {lesson.transferred && <span className="flag">{t.transferred}</span>}
     </p>
     <h1 className="display">{lesson.subject}</h1>
+    {!lesson.standalone && <p className="lesson-head__when">
+      <span className="first-letter">{formatDay(fromDateKey(lessonDate(lesson)))}</span>
+      <span className="mono">{lessonTime(lesson)}</span>
+      {otherZone && <small>{lesson.time.slice(0, 5)} {universityClock(lesson.groupId)}</small>}
+    </p>}
   </header>
   );
 };
@@ -160,26 +161,31 @@ export const LessonScreen = ({ lesson, homeworkFirst = false, profile, profileRe
     );
   };
 
-  const information = !lesson.standalone && <details className="lesson-info" open><summary>{t.lessonInformation}</summary><LessonFacts lesson={lesson} />
-      {lesson.markedBy && lesson.markedAt && <p className="footnote">{t.moveMarked(lesson.markedBy, formatStamp(lesson.markedAt))}</p>}
-      {item?.status === 'orphaned' && <p role="status">{t.orphaned}</p>}
-      {canEditShared && <LessonMove lesson={lesson} groupId={profile.group.id} onSaved={onBack} />}
-      {!lessonOver && <div className="absence-actions absence-actions--wide">
-        <button type="button" className="pill-button" onClick={() => setAbsence('late')}>{t.late}</button>
-        <button type="button" className="pill-button" onClick={() => setAbsence('absent')}>{t.absent}</button>
-      </div>}
-      {myNotes.length > 0 && (
-        <div className="hw-block">
-          <p className="hw-block__label">{t.yourNotes}</p>
-          {myNotes.map((note) => (
-            <p key={note.id} className="note-status">
-              <span>{t.lateKind(note.kind)}, {note.reason ? t.absenceReasons[note.reason] : note.text}</span>
-              <span className={`status-pill${note.acceptedAt ? ' is-ok' : ''}`}>{note.acceptedAt ? t.accepted : t.waiting}</span>
-            </p>
-          ))}
-        </div>
-      )}
-    </details>;
+  const hasShared = Boolean(item?.sharedText || item?.sharedAttachments?.length);
+  const hasPersonal = Boolean(item?.personalText || item?.personalAttachments?.length);
+  const canManage = hasPersonal || (canEditShared && hasShared);
+
+  // Сведения о паре: факты, отметка переноса и «опоздаю / не приду».
+  const information = !lesson.standalone && <>
+    <LessonFacts lesson={lesson} />
+    {lesson.markedBy && lesson.markedAt && <p className="note-line">{t.moveMarked(lesson.markedBy, formatStamp(lesson.markedAt))}</p>}
+    {item?.status === 'orphaned' && <p className="note-line" role="status">{t.orphaned}</p>}
+    {!lessonOver && <div className="absence-actions">
+      <button type="button" className="pill-button" onClick={() => setAbsence('late')}>{t.late}</button>
+      <button type="button" className="pill-button" onClick={() => setAbsence('absent')}>{t.absent}</button>
+    </div>}
+    {myNotes.length > 0 && (
+      <div className="notes">
+        {myNotes.map((note) => (
+          <p key={note.id} className="note-status">
+            <span>{t.lateKind(note.kind)}, {note.reason ? t.absenceReasons[note.reason] : note.text}</span>
+            <span className={`status-pill status-pill--small${note.acceptedAt ? ' is-ok' : ''}`}>{note.acceptedAt ? t.accepted : t.waiting}</span>
+          </p>
+        ))}
+      </div>
+    )}
+  </>;
+
   return (
     <div className={homeworkFirst ? 'screen screen--lesson screen--homework' : 'screen screen--lesson'}>
       {!hasNativeBackButton() && (
@@ -189,91 +195,86 @@ export const LessonScreen = ({ lesson, homeworkFirst = false, profile, profileRe
       {!homeworkFirst && information}
 
       <section className="homework" aria-labelledby="homework-title">
-        <div className="section-head">
-          <h2 id="homework-title" className="section-title">{t.homeworkTitle}</h2>
-          {homework.status === 'ready' && <p className="section-note">{t.roles[homework.data.role]}</p>}
-        </div>
+        <h2 id="homework-title" className="section-title">{t.homeworkTitle}</h2>
 
         {homework.status === 'loading' && <Loading />}
         {homework.status === 'error' && <ErrorState message={homework.message} onRetry={() => refresh()} />}
 
         {homework.status === 'ready' && !editing && (
           <>
-            {(item?.sharedText || !!item?.sharedAttachments?.length || (!item?.personalText && !item?.personalAttachments?.length)) && <div className="hw-block hw-block--shared">
+            {(hasShared || !hasPersonal) && <article className="hw-block">
               <p className="hw-block__label">{t.forGroup}</p>
               {item?.sharedText
                 ? <p className="hw-block__text">{item.sharedText}</p>
                 : !item?.sharedAttachments?.length && <p className="hw-block__empty">{t.nobodyWrote}</p>}
-              {item?.source === 'shared' && <HomeworkCompletion item={item} onSaved={() => refresh(true)} />}
               <AttachmentList files={item?.sharedAttachments} />
-              {(item?.sharedText || !!item?.sharedAttachments?.length) && <HomeworkDetails deadline={item.sharedDeadline} submission={item.sharedSubmission} completed={item.completed} dueAt={item.sharedDueAt ?? (item.source === 'shared' ? item.dueAt : null)} />}
-              {(item?.sharedText || !!item?.sharedAttachments?.length || !!item?.sharedHistory?.length) && <HomeworkHistory history={item?.sharedHistory ?? []} lesson={lesson} canRestore={homework.data.role === 'headman' || homework.data.role === 'editor'} currentVersion={item?.sharedVersion} onSaved={() => refresh(true)} />}
-              {(item?.sharedText || !!item?.sharedAttachments?.length) && (
-                <p className="hw-block__meta">
-                  {[item.sharedAuthorName ?? item.authorName, formatStamp(item.sharedUpdatedAt ?? item.updatedAt), (item.sharedVersion ?? item.version) > 1 && t.edit(item.sharedVersion ?? item.version)].filter(Boolean).join(', ')}
-                </p>
-              )}
-            </div>}
-            {(item?.personalText || !!item?.personalAttachments?.length) && <div className={`hw-block${(item?.personalText || !!item?.personalAttachments?.length) ? ' hw-block--personal' : ''}`}>
+              {hasShared && item && <HomeworkDetails deadline={item.sharedDeadline} submission={item.sharedSubmission} completed={item.completed} dueAt={item.sharedDueAt ?? (item.source === 'shared' ? item.dueAt : null)} />}
+              {hasShared && item && <p className="hw-block__meta">
+                {[item.sharedAuthorName ?? item.authorName, formatStamp(item.sharedUpdatedAt ?? item.updatedAt), (item.sharedVersion ?? item.version) > 1 && t.edit(item.sharedVersion ?? item.version)].filter(Boolean).join(' · ')}
+              </p>}
+              {item?.source === 'shared' && <HomeworkCompletion item={item} onSaved={() => refresh(true)} />}
+              {(hasShared || !!item?.sharedHistory?.length) && <HomeworkHistory history={item?.sharedHistory ?? []} lesson={lesson} canRestore={homework.data.role === 'headman' || homework.data.role === 'editor'} currentVersion={item?.sharedVersion} onSaved={() => refresh(true)} />}
+            </article>}
+            {hasPersonal && item && <article className="hw-block hw-block--personal">
               <p className="hw-block__label">{t.forMe}</p>
-              {item?.personalText
-                ? <p className="hw-block__text">{item.personalText}</p>
-                : !item?.personalAttachments?.length && <p className="hw-block__empty">{item?.sharedText ? t.noOwnVersion : t.noOwnYet}</p>}
-              {item?.source === 'personal' && <HomeworkCompletion item={item} onSaved={() => refresh(true)} />}
-              <AttachmentList files={item?.personalAttachments} />
-              {(item?.personalText || !!item?.personalAttachments?.length) && <>
-                <HomeworkDetails deadline={item.personalDeadline} submission={item.personalSubmission} completed={item.completed} dueAt={item.personalDueAt ?? (item.source === 'personal' ? item.dueAt : null)} />
-                <HomeworkHistory history={item.personalHistory ?? []} lesson={lesson} onSaved={() => refresh(true)} />
-              </>}
-            </div>}
+              {item.personalText && <p className="hw-block__text">{item.personalText}</p>}
+              <AttachmentList files={item.personalAttachments} />
+              <HomeworkDetails deadline={item.personalDeadline} submission={item.personalSubmission} completed={item.completed} dueAt={item.personalDueAt ?? (item.source === 'personal' ? item.dueAt : null)} />
+              {item.source === 'personal' && <HomeworkCompletion item={item} onSaved={() => refresh(true)} />}
+              <HomeworkHistory history={item.personalHistory ?? []} lesson={lesson} onSaved={() => refresh(true)} />
+            </article>}
 
-            <div className="actions homework-edit-actions">
+            <div className="homework-edit-actions">
               {canEditShared && (
                 <Button stretched size="large" onClick={() => startEditing('shared')}>
-                  {item?.sharedText || !!item?.sharedAttachments?.length ? t.editGroupShort : t.writeGroupShort}
+                  {hasShared ? t.editGroupShort : t.writeGroupShort}
                 </Button>
               )}
               <Button stretched size="large" variant={canEditShared ? 'secondary' : 'primary'} onClick={() => startEditing('personal')}>
-                {item?.personalText || !!item?.personalAttachments?.length ? t.editOwnShort : t.writeOwnShort}
+                {hasPersonal ? t.editOwnShort : t.writeOwnShort}
               </Button>
             </div>
-            {(item?.personalText || !!item?.personalAttachments?.length || (canEditShared && (item?.sharedText || !!item?.sharedAttachments?.length))) && <details className="homework-management"><summary>{t.homeworkManage}</summary><div className="actions">
-              {(item?.personalText || !!item?.personalAttachments?.length) && (
-                <Button stretched variant="ghost" disabled={saving} onClick={() => remove('personal')}>
-                  {t.deleteOwn}
-                </Button>
-              )}
-              {canEditShared && (item?.sharedText || !!item?.sharedAttachments?.length) && (
-                <Button
-                  stretched
-                  variant={confirmDelete ? 'destructive' : 'ghost'}
-                  loading={saving && confirmDelete}
-                  onClick={() => remove('shared')}
-                >
-                  {confirmDelete ? t.confirmDelete : t.deleteShared}
-                </Button>
-              )}
-            </div></details>}
+
+            {(item?.text || !!item?.attachments?.length) && (
+              <ReminderPicker
+                disabled={saving}
+                options={[
+                  ...(!lesson.standalone ? [{ id: 'lesson', label: t.beforeLesson, selected: item.reminderMode === 'lesson', onSelect: () => void run(() => saveHomework(lesson, null, 'reminder', new Date(Date.parse(lessonMoment(lesson)) - 600_000).toISOString(), 'lesson', 10), t.beforeLesson) }] : []),
+                  ...(['due-day', 'due-morning'] as const).map((mode) => ({ id: mode, label: mode === 'due-day' ? t.dueDay : t.dueMorning, selected: item.reminderMode === mode, disabled: !item.dueAt, onSelect: () => void run(() => saveHomework(lesson, null, 'reminder', item.dueAt, mode), t.reminder) })),
+                ]}
+                value={item.remindAt}
+                dateKey={lesson.standalone && item.dueAt ? dateInZone(new Date(item.dueAt)) : lessonDate(lesson)}
+                now={now}
+                onChange={(value) => void run(() => saveHomework(lesson, null, 'reminder', value), value ? t.reminderSet(formatMoment(value)) : t.reminderOff)}
+              />
+            )}
+
+            {canManage && <div className="quiet-actions">
+              {hasPersonal && <button type="button" className="text-button text-button--muted" disabled={saving} onClick={() => remove('personal')}>{t.deleteOwn}</button>}
+              {canEditShared && hasShared && <button type="button" className={`text-button text-button--danger${confirmDelete ? ' is-confirm' : ''}`} disabled={saving} onClick={() => remove('shared')}>
+                {confirmDelete ? t.confirmDelete : t.deleteShared}
+              </button>}
+            </div>}
           </>
         )}
 
         {homework.status === 'ready' && editing && (
           <div className="editor">
-            <p className="editor__scope">
-              {scope === 'shared' ? t.sharedScope : t.ownScope}
-            </p>
-            <Textarea
-              autoFocus
-              aria-label={t.fieldTask}
-              maxLength={MAX_LENGTH}
-              rows={3}
-              placeholder={t.placeholder}
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-            />
-            <p className={`editor__counter${text.length > MAX_LENGTH * 0.9 ? ' is-near' : ''}`}>{text.length} / {MAX_LENGTH}</p>
-            <AttachmentEditor files={files} scope={scope} onChange={setFiles} onBusy={setUploading} />
-            <HomeworkDetailsEditor standalone={lesson.standalone} deadline={deadline} submission={submission} onDeadline={setDeadline} onSubmission={setSubmission} />
+            <p className="editor__scope">{scope === 'shared' ? t.sharedScope : t.ownScope}</p>
+            <div className="editor__body">
+              <Textarea
+                autoFocus
+                aria-label={t.fieldTask}
+                maxLength={MAX_LENGTH}
+                rows={4}
+                placeholder={t.placeholder}
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+              />
+              {text.length > MAX_LENGTH * 0.8 && <p className={`editor__counter${text.length > MAX_LENGTH * 0.9 ? ' is-near' : ''}`}>{text.length} / {MAX_LENGTH}</p>}
+              <AttachmentEditor files={files} scope={scope} onChange={setFiles} onBusy={setUploading} />
+            </div>
+            <HomeworkDetailsEditor groupId={profile.group.id} standalone={lesson.standalone} deadline={deadline} submission={submission} onDeadline={setDeadline} onSubmission={setSubmission} />
             <div className="actions">
               <Button stretched size="large" disabled={uploading || (!text.trim() && !files.length)} loading={saving} onClick={save}>{t.save}</Button>
               <Button stretched variant="ghost" disabled={saving} onClick={() => setEditing(false)}>{t.cancel}</Button>
@@ -281,27 +282,17 @@ export const LessonScreen = ({ lesson, homeworkFirst = false, profile, profileRe
           </div>
         )}
 
-        {homework.status === 'ready' && !editing && (item?.text || !!item?.attachments?.length) && (
-          <details className="hw-block reminder-options" open><summary>{t.reminder}</summary>
-            <ReminderPicker
-              disabled={saving}
-              options={[
-                ...(!lesson.standalone ? [{ id: 'lesson', label: t.beforeLesson, selected: item.reminderMode === 'lesson', onSelect: () => void run(() => saveHomework(lesson, null, 'reminder', new Date(Date.parse(lessonMoment(lesson)) - 600_000).toISOString(), 'lesson', 10), t.beforeLesson) }] : []),
-                ...(['due-day', 'due-morning'] as const).map((mode) => ({ id: mode, label: mode === 'due-day' ? t.dueDay : t.dueMorning, selected: item.reminderMode === mode, disabled: !item.dueAt, onSelect: () => void run(() => saveHomework(lesson, null, 'reminder', item.dueAt, mode), t.reminder) })),
-              ]}
-              value={item.remindAt}
-              dateKey={lesson.standalone && item.dueAt ? dateInZone(new Date(item.dueAt)) : lessonDate(lesson)}
-              now={now}
-              onChange={(value) => void run(() => saveHomework(lesson, null, 'reminder', value), value ? t.reminderSet(formatMoment(value)) : t.reminderOff)}
-            />
-          </details>
-        )}
-
         {notice && (
           <p className={`toast toast--${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'}>{notice.text}</p>
         )}
       </section>
       {homeworkFirst && information}
+      {canEditShared && !lesson.standalone && !editing && (
+        <section className="lesson-admin" aria-label={t.headmanTools}>
+          <p className="field-label">{t.headmanTools}</p>
+          <LessonMove lesson={lesson} groupId={profile.group.id} onSaved={onBack} />
+        </section>
+      )}
       {absence && <AbsenceSheet kind={absence} lesson={lesson} onClose={() => setAbsence(null)} />}
     </div>
   );
