@@ -7,10 +7,13 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
+// Ключ ДЗ для просмотров: дата:номер пары:подгруппа (0 — вся группа).
+export const homeworkViewKey = (item) => `${item.lessonDate}:${item.lessonNumber}:${item.subgroup ?? 0}`;
+
 const visibleGroup = (id) => !demoContext.getStore() || !isDemo(id) || demoAllowed();
 
 export class CommunityStore {
-  #data = { chats: {}, homework: [], personalHomework: [], notices: [], announcements: [], lessonChanges: [], scheduleOperations: [] };
+  #data = { chats: {}, homework: [], personalHomework: [], notices: [], announcements: [], lessonChanges: [], scheduleOperations: [], homeworkViews: [] };
   #loadPromise;
   #writeQueue = Promise.resolve();
 
@@ -25,7 +28,7 @@ export class CommunityStore {
 
   async resetGroup(groupId) {
     await this.#load();
-    for (const name of ['homework', 'personalHomework', 'notices', 'announcements', 'lessonChanges']) {
+    for (const name of ['homework', 'personalHomework', 'notices', 'announcements', 'lessonChanges', 'homeworkViews']) {
       this.#data[name] = this.#data[name].filter((item) => !sameGroup(item.groupId, groupId));
     }
     this.#data.scheduleOperations = this.#data.scheduleOperations.filter((id) => !id.startsWith(`${groupKey(groupId)}:`));
@@ -117,7 +120,10 @@ export class CommunityStore {
         if ((item.history ?? []).some((event) => event.id === id)) continue;
         item.history = [...(item.history ?? []), { id, type: to ? 'moved' : 'orphaned', from, to, at, by, authorId, authorName, version: (item.version ?? 1) + 1, before: versionSnapshot(item) }];
         item.status = to ? 'active' : 'orphaned';
+        const viewKey = homeworkViewKey(item);
         if (to) Object.assign(item, { lessonDate: to.date, lessonNumber: to.lessonNumber, lessonTime: to.time, subgroup: to.subgroup ?? null });
+        // Просмотры общего ДЗ переезжают вместе с ним.
+        if (to && collection === 'homework') this.#moveViews(item.groupId, viewKey, homeworkViewKey(item));
         item.updatedAt = at;
         item.version = (item.version ?? 1) + 1;
         item.history.at(-1).after = versionSnapshot(item);
@@ -201,6 +207,10 @@ export class CommunityStore {
     await this.#load();
     const before = this.#data.homework.length;
     this.#data.homework = this.#data.homework.filter((item) => !this.#sameLesson(item, value));
+    // Новое ДЗ в том же слоте считается заново.
+    if (value.lessonNumber != null) {
+      this.#data.homeworkViews = this.#data.homeworkViews.filter((view) => !(sameGroup(view.groupId, value.groupId) && view.key === homeworkViewKey(value)));
+    }
     if (this.#data.homework.length !== before) await this.#queueSave();
     return this.#data.homework.length !== before;
   }
@@ -217,6 +227,43 @@ export class CommunityStore {
     for (const item of matching) latest.set(this.#lessonKey(item), item);
     return [...latest.values()].sort((left, right) =>
       `${left.lessonDate} ${left.lessonTime}`.localeCompare(`${right.lessonDate} ${right.lessonTime}`));
+  }
+
+  // Первый просмотр общего ДЗ студентом. Повторные открытия время не сдвигают.
+  async recordHomeworkView({ userId, groupId, key, at = new Date().toISOString() }) {
+    await this.#load();
+    if (this.#data.homeworkViews.some((view) => String(view.userId) === String(userId) && sameGroup(view.groupId, groupId) && view.key === key)) return false;
+    this.#data.homeworkViews.push(migrateGroupReferences({ userId: Number(userId), groupId, key, viewedAt: at }));
+    await this.#queueSave();
+    return true;
+  }
+
+  async homeworkViewers(groupId, key) {
+    await this.#load();
+    return new Set(this.#data.homeworkViews
+      .filter((view) => sameGroup(view.groupId, groupId) && view.key === key)
+      .map((view) => String(view.userId)));
+  }
+
+  // Медиана от публикации ДЗ до первого просмотра каждым студентом. Автор ДЗ не учитывается.
+  async homeworkViewStats(groupId, { now = new Date(), days = 14 } = {}) {
+    await this.#load();
+    const since = now.getTime() - days * 86_400_000;
+    const published = this.#data.homework.filter((item) => sameGroup(item.groupId, groupId) && item.lessonNumber != null
+      && Date.parse(item.createdAt ?? item.updatedAt) >= since && Date.parse(item.createdAt ?? item.updatedAt) <= now.getTime());
+    const delays = [];
+    for (const item of published) {
+      const start = Date.parse(item.createdAt ?? item.updatedAt);
+      for (const view of this.#data.homeworkViews) {
+        if (!sameGroup(view.groupId, groupId) || view.key !== homeworkViewKey(item) || String(view.userId) === String(item.authorId)) continue;
+        const delay = Date.parse(view.viewedAt) - start;
+        if (delay >= 0) delays.push(delay);
+      }
+    }
+    delays.sort((left, right) => left - right);
+    const middle = Math.floor(delays.length / 2);
+    const median = delays.length ? (delays.length % 2 ? delays[middle] : (delays[middle - 1] + delays[middle]) / 2) : null;
+    return { days, homework: published.length, views: delays.length, medianMinutes: median === null ? null : Math.round(median / 60_000) };
   }
 
   async setPersonalHomework(userId, value) {
@@ -412,6 +459,7 @@ export class CommunityStore {
     await this.#load();
     const id = String(userId);
     this.#data.personalHomework = this.#data.personalHomework.filter((item) => String(item.userId) !== id);
+    this.#data.homeworkViews = this.#data.homeworkViews.filter((view) => String(view.userId) !== id);
     for (const chat of Object.values(this.#data.chats)) {
       if (String(chat.headman?.userId) === id) chat.headman = null;
       if (String(chat.deputy?.userId) === id) chat.deputy = null;
@@ -453,6 +501,8 @@ export class CommunityStore {
         announcements: parsed.announcements ?? [],
         lessonChanges: parsed.lessonChanges ?? [],
         scheduleOperations: parsed.scheduleOperations ?? [],
+        // Поле появилось без смены схемы: в старых файлах его просто нет.
+        homeworkViews: parsed.homeworkViews ?? [],
       };
       if (JSON.parse(contents).schemaVersion !== 4) await this.#save();
     } catch (error) {
@@ -481,6 +531,20 @@ export class CommunityStore {
     const removed = before.filter((file) => !after.some((next) => next.id === file.id));
     if (!added.length && !removed.length) return current?.history;
     return [...(current?.history ?? []), ...(added.length || removed.length ? [{ type: 'attachments', at, by: value.authorId ?? value.userId, authorName: value.authorName ?? null, added, removed }] : [])];
+  }
+
+  // При слиянии слотов у студента остаётся самый ранний просмотр.
+  #moveViews(groupId, from, to) {
+    if (from === to) return;
+    const earliest = new Map();
+    for (const view of this.#data.homeworkViews) {
+      if (sameGroup(view.groupId, groupId) && view.key === from) view.key = to;
+      if (!sameGroup(view.groupId, groupId) || view.key !== to) continue;
+      const previous = earliest.get(String(view.userId));
+      if (!previous || view.viewedAt < previous.viewedAt) earliest.set(String(view.userId), view);
+    }
+    this.#data.homeworkViews = this.#data.homeworkViews.filter((view) =>
+      !sameGroup(view.groupId, groupId) || view.key !== to || earliest.get(String(view.userId)) === view);
   }
 
   #dateKey(value) {

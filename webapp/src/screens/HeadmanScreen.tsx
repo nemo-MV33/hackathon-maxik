@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import {
-  loadAbsenceHistory, loadAbsences, loadAnnouncements, publishAnnouncement, removeAnnouncement,
-  type AbsenceNote, type Announcement, type StudentSummary,
+  loadAbsenceHistory, loadAbsences, loadAnnouncements, loadHomeworkViewSummary, publishAnnouncement, removeAnnouncement,
+  type AbsenceNote, type Announcement, type HomeworkViewSummary, type StudentSummary,
 } from '../lib/api';
 import { addDays, formatMoment, toDateKey } from '../lib/date';
 import { useI18n } from '../lib/i18n';
@@ -28,7 +28,26 @@ export const HeadmanScreen = ({ onOpenProfile, onOpenStudent }: { onOpenProfile:
         <button type="button" role="tab" aria-selected={section === 'late'} onClick={() => setSection('late')}>{t.lateSection}</button>
         <button type="button" role="tab" aria-selected={section === 'news'} onClick={() => setSection('news')}>{t.newsSection}</button>
       </div>
+      <ViewMedian />
       {section === 'late' ? <Lateness onOpenStudent={onOpenStudent} /> : <News />}
+    </div>
+  );
+};
+
+// Как быстро группа находит ДЗ: медиана от публикации до первого просмотра за 14 дней.
+const ViewMedian = () => {
+  const { t } = useI18n();
+  const [summary, setSummary] = useState<HomeworkViewSummary | null>(null);
+  useEffect(() => {
+    let active = true;
+    loadHomeworkViewSummary().then((data) => active && setSummary(data)).catch(() => {});
+    return () => { active = false; };
+  }, []);
+  if (!summary || summary.medianMinutes === null) return null;
+  return (
+    <div className="stat stat--caps">
+      <span className="stat__value">{t.viewMedianValue(summary.medianMinutes)}</span>
+      <span className="stat__label">{t.viewMedian}</span>
     </div>
   );
 };

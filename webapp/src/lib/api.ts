@@ -151,3 +151,12 @@ export const publishAnnouncement = (input: { text: string; remindAt: string | nu
 export const removeAnnouncement = (id: string) => apiRequest(`/api/announcements/${id}`, { method: 'DELETE' });
 export const saveAnnouncementReminder = (id: string, body: { remindAt: string | null } | { reset: true }) =>
   apiRequest<{ item: Announcement }>(`/api/announcements/${id}/reminder`, { method: 'PUT', body: JSON.stringify(body) });
+
+// Просмотры общего ДЗ: студент отмечает первый просмотр, староста и редакторы получают охват.
+export type HomeworkReach = { seen: number; total: number };
+export const recordHomeworkView = (lesson: { date: string; lessonNumber: number; subgroup?: number | null }) =>
+  apiRequest<{ recorded: boolean; reach: HomeworkReach | null }>('/api/homework/views', {
+    method: 'POST', body: JSON.stringify({ date: lesson.date, lessonNumber: lesson.lessonNumber, subgroup: lesson.subgroup ?? null }),
+  });
+export type HomeworkViewSummary = { days: number; homework: number; views: number; medianMinutes: number | null };
+export const loadHomeworkViewSummary = () => apiRequest<HomeworkViewSummary>('/api/homework/views/summary');

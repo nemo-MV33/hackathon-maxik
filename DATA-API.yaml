@@ -334,6 +334,25 @@ checks:
       statusCodes: [401]
       contentType: application/json
       requiredFields: [error]
+  - name: homework-view-requires-max
+    role: anonymous
+    request:
+      method: POST
+      path: /api/homework/views
+      body: { date: '2026-10-19', lessonNumber: 1, subgroup: null }
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
+  - name: homework-view-summary-requires-max
+    role: anonymous
+    request:
+      method: GET
+      path: /api/homework/views/summary
+    expected:
+      statusCodes: [401]
+      contentType: application/json
+      requiredFields: [error]
   - name: service-cannot-read-demo-schedule
     role: service
     request:
@@ -359,3 +378,8 @@ checks:
 # completionRevision/completed являются личными и в статические JSON не входят.
 # ДЗ без пары (standalone true) хранится только в защищённом API ДЗ.
 # Номера от 1000000 являются ключами заданий, не занятиями и не экспортируются в schedule.
+# Просмотры общего ДЗ: POST /api/homework/views {date, lessonNumber, subgroup} фиксирует первый
+# просмотр (userId, groupId, ключ date:lessonNumber:subgroup, viewedAt) и отдаёт старосте/редактору
+# reach {seen, total}, где total — участники группы в боте. GET /api/homework/views/summary —
+# только старосте: медиана минут от публикации ДЗ до первого просмотра за 14 дней, автор не учитывается.
+# Просмотры не экспортируются и стираются вместе с аккаунтом.

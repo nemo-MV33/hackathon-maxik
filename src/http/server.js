@@ -8,6 +8,7 @@ import { InitDataError, validateInitData } from './auth.js';
 import { HttpError, deleteMe, getMe, updateMe } from './routes/me.js';
 import { lessonChangesRoute, orphanedRoute } from './routes/lesson-changes.js';
 import { getHomework, putHomework } from './routes/homework.js';
+import { getHomeworkViewSummary, postHomeworkView } from './routes/homework-views.js';
 import { getAbsenceHistory, getAbsences, getGroupMembers, postAbsence, putDeputy } from './routes/absence.js';
 import {
   deleteAnnouncement, getAnnouncements, postAnnouncement, putAnnouncementReminder,
@@ -171,6 +172,18 @@ const route = async (request, response, options) => {
     const handler = parts[1] === 'lesson-changes' ? lessonChangesRoute : orphanedRoute;
     return sendJson(response, 200, await handler({ user, preferences, community, lessonChanges: options.lessonChanges,
       method: request.method, id: parts[2], body: ['POST', 'PUT', 'DELETE'].includes(request.method) && (parts[1] === 'homework' || !parts[2]) ? await readJson(request) : undefined }));
+  }
+
+  if (url.pathname === '/api/homework/views' || url.pathname === '/api/homework/views/summary') {
+    const user = authenticate(request, options);
+    if (!user) return sendJson(response, 401, { error: 'unauthorized' });
+    if (url.pathname === '/api/homework/views' && request.method === 'POST') {
+      return sendJson(response, 200, await postHomeworkView({ user, preferences, community, body: await readJson(request) }));
+    }
+    if (url.pathname === '/api/homework/views/summary' && request.method === 'GET') {
+      return sendJson(response, 200, await getHomeworkViewSummary({ user, community }));
+    }
+    return sendJson(response, 405, { error: 'method_not_allowed' });
   }
 
   if (url.pathname === '/api/homework') {

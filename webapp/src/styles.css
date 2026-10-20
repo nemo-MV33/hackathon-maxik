@@ -494,6 +494,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .hw-block__text { font-size: 16px; font-weight: 600; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .hw-block__empty { font-size: 15px; font-weight: 600; color: var(--ink-3); }
 .hw-block__meta { font-size: 12.5px; font-weight: 600; color: var(--ink-3); }
+.hw-block__reach { font-size: 11.5px; text-transform: uppercase; color: var(--ink-2); }
 .hw-block--personal { background: color-mix(in srgb, var(--yellow) 12%, var(--surface)); }
 .hw-block--personal .hw-block__label { color: var(--ink); }
 .hw-block--quote { background: var(--k-lecture); }
@@ -523,7 +524,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* Мелкие подписи набраны моноширинным шрифтом капсом. */
 .card__kind, .day-heading__eyebrow, .lesson-head .eyebrow, .field-label, .facts dt, .hw-block__label,
-.card__hw-label, .day__weekday, .now-marker__time, .result__course, .flag, .kind-code, .lang-switch button {
+.card__hw-label, .day__weekday, .now-marker__time, .result__course, .flag, .kind-code, .lang-switch button,
+.hw-block__reach, .stat--caps .stat__label {
   font-family: var(--mono);
   font-weight: 500;
   letter-spacing: 0.05em;
@@ -1034,6 +1036,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .stat--wide .stat__label { color: var(--on-highlight); opacity: 0.7; }
 .stat__value { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; white-space: nowrap; }
 .stat__label { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.stat--caps .stat__label { font-size: 11px; text-transform: uppercase; }
 
 .notes { display: flex; flex-direction: column; padding: 2px 14px; border: 1.5px solid var(--outline); border-radius: 22px; background: var(--surface); }
 .note-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 10px; padding: 12px 0; }

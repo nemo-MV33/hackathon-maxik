@@ -18,7 +18,7 @@ import { ChevronLeft } from '../components/Icon';
 import { isControlLesson, lessonKindClass, lessonKindName } from '../lib/lessonKind';
 import { useI18n } from '../lib/i18n';
 import { AbsenceSheet } from '../components/AbsenceSheet';
-import { loadAbsences, type AbsenceKind, type AbsenceNote } from '../lib/api';
+import { loadAbsences, recordHomeworkView, type AbsenceKind, type AbsenceNote, type HomeworkReach } from '../lib/api';
 import { useNow } from '../lib/useNow';
 import { ReminderPicker } from '../components/ReminderPicker';
 import { groupTimeZone, universityClock } from '../lib/universities';
@@ -164,6 +164,15 @@ export const LessonScreen = ({ lesson, homeworkFirst = false, profile, profileRe
   const hasShared = Boolean(item?.sharedText || item?.sharedAttachments?.length);
   const hasPersonal = Boolean(item?.personalText || item?.personalAttachments?.length);
   const canManage = hasPersonal || (canEditShared && hasShared);
+  const [reach, setReach] = useState<HomeworkReach | null>(null);
+
+  // Фиксируем просмотр общего ДЗ; старосте и редакторам сервер заодно отдаёт охват.
+  useEffect(() => {
+    if (!hasShared) return undefined;
+    let active = true;
+    recordHomeworkView(lesson).then((data) => active && setReach(data.reach)).catch(() => {});
+    return () => { active = false; };
+  }, [hasShared, lesson.date, lesson.lessonNumber, lesson.subgroup]);
 
   // Сведения о паре: факты, отметка переноса и «опоздаю / не приду».
   const information = !lesson.standalone && <>
@@ -212,6 +221,7 @@ export const LessonScreen = ({ lesson, homeworkFirst = false, profile, profileRe
               {hasShared && item && <p className="hw-block__meta">
                 {[item.sharedAuthorName ?? item.authorName, formatStamp(item.sharedUpdatedAt ?? item.updatedAt), (item.sharedVersion ?? item.version) > 1 && t.edit(item.sharedVersion ?? item.version)].filter(Boolean).join(' · ')}
               </p>}
+              {hasShared && reach && reach.total > 0 && <p className="hw-block__reach">{t.seenBy(reach.seen, reach.total)}</p>}
               {item?.source === 'shared' && <HomeworkCompletion item={item} onSaved={() => refresh(true)} />}
               {(hasShared || !!item?.sharedHistory?.length) && <HomeworkHistory history={item?.sharedHistory ?? []} lesson={lesson} canRestore={homework.data.role === 'headman' || homework.data.role === 'editor'} currentVersion={item?.sharedVersion} onSaved={() => refresh(true)} />}
             </article>}

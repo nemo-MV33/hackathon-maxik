@@ -489,6 +489,56 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { description: Пара не найдена в расписании ИРНИТУ }
         '409': { description: Группа не выбрана или у группы нет старосты в боте }
+  /api/homework/views:
+    post:
+      operationId: recordHomeworkView
+      summary: Первый просмотр общего ДЗ
+      description: Фиксирует первый просмотр общего ДЗ текущим пользователем; повторные открытия время не меняют. Пустой слот не записывается. Старосте и редакторам возвращает охват, total — участники группы в боте (для ДЗ подгруппы — её участники и те, кто подгруппу не выбрал).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [date, lessonNumber]
+              properties:
+                date: { type: string, format: date }
+                lessonNumber: { type: integer, minimum: 1 }
+                subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
+      responses:
+        '200':
+          description: Просмотр учтён или уже был
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [recorded, reach]
+                properties:
+                  recorded: { type: boolean }
+                  reach: { oneOf: [{ $ref: '#/components/schemas/HomeworkReach' }, { type: 'null' }] }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: Группа не выбрана }
+  /api/homework/views/summary:
+    get:
+      operationId: getHomeworkViewSummary
+      summary: Медиана времени до первого просмотра ДЗ (только старосте)
+      description: Окно — ДЗ, опубликованные за последние 14 дней. Считается каждая пара «студент — ДЗ»; просмотры автора ДЗ не учитываются.
+      responses:
+        '200':
+          description: Сводка
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [days, homework, views, medianMinutes]
+                properties:
+                  days: { type: integer, const: 14 }
+                  homework: { type: integer }
+                  views: { type: integer }
+                  medianMinutes: { type: [integer, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Доступно только старосте }
   /api/homework:
     get:
       operationId: listHomework
@@ -775,6 +825,12 @@ components:
     BadRequest:
       description: Некорректные параметры запроса
   schemas:
+    HomeworkReach:
+      type: object
+      required: [seen, total]
+      properties:
+        seen: { type: integer, minimum: 0 }
+        total: { type: integer, minimum: 0 }
     GroupKey:
       type: string
       pattern: '^(irnitu|bgu|spbpu|spbu)~[1-9][0-9]*$'
