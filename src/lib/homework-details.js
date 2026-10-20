@@ -67,11 +67,18 @@ export const dueReminderAt = (dueAt, mode, profile) => {
   return null;
 };
 
+// «22 октября, 19:00» вместо «22 окт., 19:00»: месяц словом, без сокращений.
+const dueWhen = (at, en, zone) => {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat(en ? 'en-GB' : 'ru-RU', { timeZone: zone, day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    .formatToParts(new Date(at)).map((part) => [part.type, part.value]));
+  return `${parts.day} ${parts.month}, ${parts.hour}:${parts.minute}`;
+};
+
 export const detailsText = (item, lang = 'ru', zone = universityTimeZone(item.groupId)) => {
   const en = lang === 'en';
   const kind = item.deadline?.kind ?? 'lesson';
   const at = item.dueAt ?? item.deadline?.at ?? (kind === 'lesson' && item.status !== 'orphaned' && item.lessonTime ? zonedMoment(item.lessonDate, item.lessonTime.slice(0, 5), universityTimeZone(item.groupId)).toISOString() : null);
-  const when = at ? new Intl.DateTimeFormat(en ? 'en-GB' : 'ru-RU', { timeZone: zone, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(at)) + ` (${zone})` : (kind === 'next' ? (en ? 'next lesson date pending' : 'дата следующей пары уточняется') : (en ? 'this lesson' : 'к этой паре'));
+  const when = at ? `${dueWhen(at, en, zone)} (${zone})` : (kind === 'next' ? (en ? 'next lesson date pending' : 'дата следующей пары уточняется') : (en ? 'this lesson' : 'к этой паре'));
   const methods = en ? { class: 'in class', moodle: 'Moodle', system: 'another system', email: 'email', other: 'other' } : { class: 'на паре', moodle: 'Moodle', system: 'другая система', email: 'почта', other: 'другое' };
   return `${en ? 'Due' : 'Срок'}: ${when}${item.submission ? `\n${en ? 'Submit' : 'Сдача'}: ${methods[item.submission.kind]}${item.submission.label ? ` · ${item.submission.label}` : ''}${item.submission.url ? `\n${item.submission.url}` : ''}` : ''}`;
 };

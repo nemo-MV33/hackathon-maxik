@@ -7,6 +7,8 @@ import { lessonTypeLabel, texts } from './i18n.js';
 const capitalize = (value) => value.charAt(0).toUpperCase() + value.slice(1);
 // В русском месяц и день недели внутри фразы пишутся со строчной, в английском — нет.
 const inline = (language, value) => (language === 'ru' ? value.toLowerCase() : value);
+// Текст ДЗ курсивом построчно: разметка MAX не переносит курсив через перевод строки.
+const italic = (text) => String(text ?? '').split('\n').map((line) => (line.trim() ? `_${line.trim()}_` : line)).join('\n');
 const shortName = (name) => {
   const parts = name.trim().split(/\s+/);
   if (parts.length < 3) return name;
@@ -113,8 +115,8 @@ export const formatHomework = (language, items, timeZone = 'Asia/Irkutsk') => {
   const t = texts(language);
   if (!items.length) return `${t.homeworkTitle}\n\n${t.homeworkEmpty}`;
   return [t.homeworkTitle, ...items.map((item) => [
-    `**${item.subject}**, ${formatDate(language, item.lessonDate, { weekday: 'short', day: 'numeric', month: 'short' })}, ${item.lessonTime.slice(0, 5)}`,
-    item.text,
+    `**${item.subject}**. ${formatDate(language, item.lessonDate).replace(', ', ' ')}, ${item.lessonTime.slice(0, 5)}`,
+    italic(item.text),
     item.details,
     item.dueAt && Date.parse(item.dueAt) < Date.now() ? (language === 'en' ? 'Overdue' : 'Просрочено') : '',
     attachmentSummary(item.attachments),

@@ -237,3 +237,14 @@ test('standalone shared versions can be restored; deleting the shared task prese
   const own = await community.homeworkForUser(group.id, 2, { from: body.date, to: body.date });
   assert.equal(own[0].text, 'Личный план'); assert.equal(own[0].sharedText, null);
 });
+
+test('ДЗ в боте: день и срок словами, текст задания курсивом', async () => {
+  const { formatHomework } = await import('../src/bot/format.js');
+  const text = formatHomework('ru', [{
+    subject: 'Высшая математика', lessonDate: '2026-10-22', lessonTime: '14:00–15:30', groupId: 'irnitu~1',
+    text: 'Страница 45', deadline: { kind: 'date', at: '2026-10-22T11:00:00.000Z' },
+  }], 'Asia/Irkutsk');
+  assert.match(text, /\*\*Высшая математика\*\*\. Четверг 22 октября, 14:00/);
+  assert.match(text, /\n_Страница 45_\n/);
+  assert.match(text, /Срок: 22 октября, 19:00 \(Asia\/Irkutsk\)/);
+});
