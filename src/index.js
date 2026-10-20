@@ -21,6 +21,14 @@ if (!config.botToken) {
   throw new Error('BOT_TOKEN is not configured');
 }
 
+// Библиотека MAX вызывает fetch без таймаута: зависшее соединение навсегда останавливает long polling.
+const nativeFetch = globalThis.fetch;
+globalThis.fetch = (input, init = {}) => {
+  const url = typeof input === 'string' ? input : input?.url ?? String(input);
+  if (init.signal || !/^https:\/\/platform-api\d*\.max\.ru\//.test(url)) return nativeFetch(input, init);
+  return nativeFetch(input, { ...init, signal: AbortSignal.timeout(90_000) });
+};
+
 const client = new IrnituClient(config.irnitu);
 const service = installDemo(new UniversityService({
   irnitu: new ScheduleService(client),
@@ -112,12 +120,18 @@ process.once('SIGTERM', () => stop('SIGTERM'));
 
 let retryDelay = 2_000;
 while (!stopping) {
+  const startedAt = Date.now();
   try {
     await bot.start();
-    break;
+    if (stopping) break;
+    console.error('MAX long polling stopped unexpectedly, restarting');
   } catch (error) {
+    if (stopping) break;
     console.error(`MAX connection failed, retrying in ${retryDelay / 1_000}s:`, error.message);
-    await new Promise((resolve) => setTimeout(resolve, retryDelay));
-    retryDelay = Math.min(retryDelay * 2, 30_000);
   }
+  // Bot.start оставляет флаг pollingIsStarted после ошибки, без stop повторный start сразу выходит.
+  bot.stop();
+  if (Date.now() - startedAt > 120_000) retryDelay = 2_000;
+  await new Promise((resolve) => setTimeout(resolve, retryDelay));
+  retryDelay = Math.min(retryDelay * 2, 30_000);
 }

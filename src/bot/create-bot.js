@@ -84,10 +84,16 @@ export const ABSENCE_REASONS = {
 };
 const lessonKey = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 
+export const maxApiUrl = process.env.MAX_API_URL?.trim() || 'https://platform-api2.max.ru';
+
 export const createBot = ({
   token, service, miniAppUrl, miniAppButton = 'app', preferences, community, onHomeworkSaved, getLessonChanges, onAnnouncement, homeworkAttachmentWindowMs = 10_000, downloadAttachment = downloadMaxAttachment,
 }) => {
-  const bot = new Bot(token);
+  const bot = new Bot(token, { clientOptions: { baseUrl: maxApiUrl } });
+  // Ошибка в одном обработчике не должна останавливать long polling всего бота.
+  bot.catch((error, ctx) => {
+    console.error(`Update ${ctx.update?.update_type ?? 'unknown'} failed:`, error.message);
+  });
   let nextApiAt = 0;
   const pace = async () => {
     const delay = Math.max(0, nextApiAt - Date.now());
