@@ -29,6 +29,12 @@
   --on-ink: var(--bg);
   --tick-selected: var(--yellow);
 
+  /* Выбранный вариант: жёлтая подложка, чёрная обводка и жёсткая тень, как у основной кнопки. */
+  --selected-bg: color-mix(in srgb, var(--yellow) 30%, var(--surface));
+  --selected-pill: var(--yellow);
+  --selected-edge: var(--edge);
+  --selected-shadow: var(--hard-shadow);
+
   --live-bg: var(--green);
   --live-ink: #fff8ec;
   --live-accent: var(--yellow);
@@ -218,7 +224,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   transition: background 0.15s, color 0.15s;
 }
 .segment button[aria-selected='true'],
-.lang-switch button[aria-checked='true'] { background: var(--ink); color: var(--on-ink); }
+.lang-switch button[aria-checked='true'] { background: var(--selected-pill); color: #141414; box-shadow: inset 0 0 0 1.5px var(--edge); }
 .lang-switch { margin-left: auto; }
 .lang-switch button { padding: 5px 10px; font-size: 12px; letter-spacing: 0.04em; }
 
@@ -386,8 +392,39 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 
 /* Выбор группы */
 
-.wordmark { display: inline-flex; align-items: center; gap: 6px; font-size: 20px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
-.wordmark i { width: 10px; height: 10px; border-radius: 3px; background: var(--orange); }
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 11px 7px;
+  border: 1.5px solid var(--edge);
+  border-radius: 12px;
+  background: var(--orange);
+  color: #fff8ec;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  box-shadow: var(--hard-shadow);
+  transform: rotate(-2deg);
+}
+.step-pill {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px 9px;
+  border: 1.5px solid var(--edge);
+  border-radius: 999px;
+  background: var(--yellow);
+  color: #141414;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+.choice.university-choice { grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; }
+.university-choice__number { align-self: start; justify-self: start; margin-top: 1px; padding: 3px 8px; border: 1.5px solid var(--edge); border-radius: 999px; background: var(--yellow); color: #141414; font-size: 12px; font-weight: 800; }
+.university-choice__chevron { color: var(--ink-3); }
+.badge.city-badge { color: #141414; }
+.badge.city-badge--irkutsk { background: var(--k-practice); }
+.badge.city-badge--spb { background: #cfdcf3; }
 
 .onboarding-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 34px; }
 .onboarding-top .back-link { margin: 0 0 0 -6px; }
@@ -432,7 +469,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .choice__title { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
 .choice__title::first-letter { text-transform: uppercase; }
 .choice__hint { font-size: 13.5px; font-weight: 600; color: var(--ink-2); }
-.choice[aria-checked='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.choice[aria-checked='true'] { border-color: var(--selected-edge); background: var(--selected-bg); box-shadow: var(--selected-shadow); }
 .choice[aria-checked='true'] .choice__title::after {
   content: attr(data-current);
   margin-left: 8px;
@@ -583,8 +620,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   .hw-block__empty { font-size: 17px; }
   .hw-block__meta { font-size: 14px; }
   .editor textarea { font-size: 19px; min-height: 200px; }
-  .wordmark { font-size: 26px; }
-  .wordmark i { width: 13px; height: 13px; }
+  .wordmark { font-size: 24px; }
   .field-label { font-size: 13px; }
   .result__title { font-size: 20px; }
   .preview { width: 86%; margin: 24px auto 0; gap: 12px; }
@@ -740,6 +776,8 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   --danger: #ff6b4f;
   --on-highlight: #141414;
   --tick-selected: var(--yellow);
+  --selected-bg: color-mix(in srgb, var(--yellow) 16%, var(--surface));
+  --selected-edge: var(--yellow);
 
   --live-ink: #fff8ec;
   --card-hw: rgba(0, 0, 0, 0.22);
@@ -962,7 +1000,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.chip-option[aria-checked='true'] { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.chip-option[aria-checked='true'] { background: var(--selected-pill); border-color: var(--selected-edge); color: #141414; box-shadow: 2px 2px 0 var(--edge); }
 .chip-option:active { transform: scale(0.97); }
 
 .field {
@@ -990,7 +1028,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .choice:disabled { opacity: 0.6; }
 
 .segment--wide { display: grid; grid-template-columns: 1fr 1fr; width: 100%; box-sizing: border-box; }
-.segment button[aria-checked='true'] { background: var(--ink); color: var(--on-ink); }
+.segment button[aria-checked='true'] { background: var(--selected-pill); color: #141414; box-shadow: inset 0 0 0 1.5px var(--edge); }
 
 .sheet .field-label { margin-top: 6px; }
 .sheet .editor textarea { min-height: 90px; }
@@ -1455,6 +1493,16 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .lesson-admin { display: grid; gap: 10px; margin-top: 6px; padding-top: 14px; border-top: 1.5px dashed var(--line); }
 .pill-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; }
 .pill-button--danger { color: var(--danger); }
+/* «Опоздаю» и «Не приду» различаются цветом ещё до чтения подписи. */
+.pill-button.pill-button--late,
+.pill-button.pill-button--absent { border-color: var(--edge); box-shadow: 2px 2px 0 var(--edge); }
+.pill-button.pill-button--late { background: var(--yellow); color: #141414; }
+.pill-button.pill-button--absent { background: var(--danger); color: #fff; }
+.pill-button.pill-button--late:active,
+.pill-button.pill-button--absent:active { transform: translate(2px, 2px); box-shadow: none; }
+:root[data-theme='dark'] .pill-button.pill-button--late,
+:root[data-theme='dark'] .pill-button.pill-button--absent { border-color: #000; box-shadow: 2px 2px 0 #000; }
+:root[data-theme='dark'] .pill-button.pill-button--absent { background: #e2492c; }
 .move-editor { display: grid; gap: 14px; padding: 16px; border: 1.5px solid var(--outline); border-radius: 20px; background: var(--surface); }
 .move-editor__title { font-size: 17px; font-weight: 800; letter-spacing: -0.01em; }
 .move-editor > .hint { margin: -8px 0 0; font-size: 13.5px; }
@@ -1530,7 +1578,6 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .compose-lessons { min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 .compose-lessons legend { margin-bottom: 8px; padding: 0; }
 .compose-scope { display: grid; gap: 8px; }
-.homework-compose .choice[aria-checked='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 
 .planner-day { display: grid; gap: 10px; min-height: 180px; touch-action: pan-y pinch-zoom; }
 .planner-calendar { min-width: 0; }
@@ -1540,15 +1587,15 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .planner-calendar .date-field__control > svg { width: 16px; height: 16px; }
 
 /* Староста: разделы, профиль группы, подгруппы */
-.headman-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
+.headman-sections { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; box-sizing: border-box; }
 .headman-sections button { min-width: 0; min-height: 40px; padding: 8px 6px; font-size: 13.5px; white-space: normal; }
 .subgroup-options { display: flex; flex-wrap: wrap; gap: 8px; }
 .subgroup-option { min-height: 44px; padding: 10px 16px; border: 1.5px solid var(--outline); border-radius: 999px; background: var(--surface); color: var(--ink); cursor: pointer; }
 .subgroup-option .choice__title { font-size: 15px; }
-.subgroup-option[aria-checked='true'] { border-color: var(--ink); background: var(--ink); color: var(--on-ink); }
+.subgroup-option[aria-checked='true'] { border-color: var(--selected-edge); background: var(--selected-pill); color: #141414; box-shadow: 2px 2px 0 var(--edge); }
 .subgroup-option[aria-checked='true'] .choice__title::after { display: none; }
 .timezone-choice { justify-content: space-between; }
-.timezone-choice[aria-checked='true'] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.timezone-choice[aria-checked='true'] { border-color: var(--selected-edge); background: var(--selected-bg); box-shadow: var(--selected-shadow); }
 
 .sheet__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sheet__header .sheet__title { min-width: 0; }
@@ -1587,6 +1634,10 @@ body.has-sheet { position: fixed; left: 0; right: 0; width: 100%; }
 [class*='Button_variant_primary']:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--outline); }
 [class*='Button_variant_primary']:disabled { box-shadow: none; }
 :root[data-theme='dark'] [class*='Button_variant_primary'] { box-shadow: 3px 3px 0 #000; }
+/* Второстепенные кнопки тоже в рамке: без неё «Закрыть» и «Отмена» читаются как обычный текст. */
+[class*='Button_variant_secondary'], [class*='Button_variant_ghost'] { box-shadow: inset 0 0 0 1.5px var(--outline); }
+[class*='Button_variant_ghost'] { background: var(--surface); }
+[class*='Button_variant_secondary']:disabled, [class*='Button_variant_ghost']:disabled { box-shadow: inset 0 0 0 1.5px var(--line); }
 
 /* Пустые состояния компактнее заголовков разделов. */
 .status--empty { gap: 4px; padding: 16px 18px; border-radius: 20px; }
@@ -1610,3 +1661,77 @@ body.has-sheet { position: fixed; left: 0; right: 0; width: 100%; }
 .freshness__dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
 .freshness.is-stale .freshness__dot { background: var(--orange); }
 .choice__head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+
+/* Староста: опоздания. Жёлтый — опаздывает, красный — не придёт; цвет виден до чтения текста. */
+.view-median { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 12px 16px; border: 1.5px solid var(--edge); border-radius: 18px; background: var(--k-practice); color: #141414; }
+.view-median__value { font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
+.view-median__label { font-size: 11px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; opacity: 0.72; }
+
+.all-here { display: flex; align-items: center; gap: 14px; padding: 16px; border: 1.5px solid var(--edge); border-radius: 22px; background: var(--k-practice); color: #141414; box-shadow: var(--hard-shadow); }
+.all-here__mark { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; border: 1.5px solid #141414; border-radius: 50%; background: var(--green); color: #fff; }
+.all-here__text { display: flex; flex-direction: column; gap: 2px; }
+.all-here__title { font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
+.all-here__hint { font-size: 13.5px; font-weight: 600; opacity: 0.75; }
+
+.late-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.late-tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 14px 16px 16px; border: 1.5px solid var(--edge); border-radius: 22px; box-shadow: var(--hard-shadow); }
+.late-tile--late { background: var(--yellow); color: #141414; transform: rotate(-1deg); }
+.late-tile--absent { background: var(--danger); color: #fff; transform: rotate(1deg); }
+.late-tile__value { font-size: 44px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; }
+.late-tile__label { font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+.late-tile__extra { margin-top: 6px; font-size: 12.5px; font-weight: 700; opacity: 0.8; }
+
+.late-board { display: flex; flex-direction: column; gap: 10px; }
+.late-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 14px 14px 14px 18px;
+  overflow: hidden;
+  border: 1.5px solid var(--outline);
+  border-radius: 20px;
+  background: var(--surface);
+}
+.late-card::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 6px; background: var(--late-accent); }
+.late-card--late { --late-accent: var(--yellow); --late-ink: #141414; }
+.late-card--absent { --late-accent: var(--danger); --late-ink: #fff; }
+.late-card__avatar { display: grid; place-items: center; width: 40px; height: 40px; border: 1.5px solid var(--edge); border-radius: 50%; background: var(--late-accent); color: var(--late-ink); font-size: 14px; font-weight: 800; }
+.late-card__body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.late-card__name { font-size: 16px; font-weight: 800; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.late-card__lesson { font-size: 13px; font-weight: 700; color: var(--ink-2); overflow-wrap: anywhere; }
+.late-card__reason { font-size: 13.5px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.late-card__side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.late-card__badge { padding: 4px 9px; border: 1.5px solid var(--edge); border-radius: 999px; background: var(--late-accent); color: var(--late-ink); font-family: var(--mono); font-size: 12px; font-weight: 700; white-space: nowrap; }
+
+/* Досье: полоса показывает, у кого больше пропущенного времени. */
+.dossier-row__text { flex: 1; }
+.dossier-bar { display: block; height: 6px; margin-top: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.dossier-bar > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--yellow), var(--orange)); }
+
+/* Староста: состав группы по подгруппам. */
+.roster-head { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1.5px solid var(--edge); border-radius: 22px; background: var(--yellow); color: #141414; box-shadow: var(--hard-shadow); }
+.roster-head__count { font-size: 40px; font-weight: 800; line-height: 1; letter-spacing: -0.04em; }
+.roster-head__text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.roster-head__title { font-size: 16px; font-weight: 800; }
+.roster-head__hint { font-size: 12.5px; font-weight: 600; opacity: 0.75; }
+
+.roster-group { --roster-bg: var(--k-other); display: flex; flex-direction: column; overflow: hidden; border: 1.5px solid var(--outline); border-radius: 22px; background: var(--surface); }
+.roster-group--1 { --roster-bg: var(--k-lecture); }
+.roster-group--2 { --roster-bg: var(--k-practice); }
+.roster-group__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 16px; border-bottom: 1.5px solid var(--outline); background: var(--roster-bg); color: #141414; }
+.roster-group__title { font-size: 15px; font-weight: 800; }
+.roster-group__count { min-width: 28px; padding: 2px 8px; border: 1.5px solid #141414; border-radius: 999px; background: #fff8ec; font-size: 13px; font-weight: 800; text-align: center; box-sizing: border-box; }
+.roster-group__hint { padding: 10px 16px 0; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.roster-list { display: flex; flex-direction: column; padding: 2px 16px; }
+.roster-row { display: flex; align-items: center; gap: 12px; min-height: 52px; }
+.roster-row + .roster-row { border-top: 1px solid var(--line); }
+.roster-row__avatar { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border: 1.5px solid var(--edge); border-radius: 50%; background: var(--roster-bg); color: #141414; font-size: 12.5px; font-weight: 800; }
+.roster-row__name { flex: 1; min-width: 0; font-size: 15.5px; font-weight: 700; overflow-wrap: anywhere; }
+.roster-row__name.is-hidden { color: var(--ink-3); font-style: italic; }
+.roster-row__role { flex-shrink: 0; padding: 3px 8px; border: 1.5px solid var(--outline); border-radius: 999px; font-size: 11.5px; font-weight: 800; }
+.roster-row__role--headman { border-color: var(--edge); background: var(--yellow); color: #141414; }
+
+:root[data-theme='dark'] :is(.view-median, .all-here, .late-tile, .roster-head, .late-card__avatar, .late-card__badge, .roster-row__avatar) { border-color: #000; }
+:root[data-theme='dark'] .late-tile--absent { background: #e2492c; }

@@ -138,8 +138,8 @@ export const DayTimeline = ({ lessons, dateKey, todayKey, now, homework, onOpen,
             />
             {lesson === absenceTarget && (
               <div className="absence-actions">
-                <button type="button" className="pill-button" onClick={() => onAbsence!('late', lesson)}>{t.late}</button>
-                <button type="button" className="pill-button" onClick={() => onAbsence!('absent', lesson)}>{t.absent}</button>
+                <button type="button" className="pill-button pill-button--late" onClick={() => onAbsence!('late', lesson)}>{t.late}</button>
+                <button type="button" className="pill-button pill-button--absent" onClick={() => onAbsence!('absent', lesson)}>{t.absent}</button>
               </div>
             )}
           </Fragment>

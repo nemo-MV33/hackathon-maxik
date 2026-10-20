@@ -1,6 +1,4 @@
+// Знак norfly: название в оранжевой плашке с жёсткой тенью, как у остальных акцентов приложения.
 export const Wordmark = () => (
-  <span className="wordmark" aria-label="norfly">
-    <span aria-hidden="true">norfly</span>
-    <i aria-hidden="true" />
-  </span>
+  <span className="wordmark">norfly</span>
 );

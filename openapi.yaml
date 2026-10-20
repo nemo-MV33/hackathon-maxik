@@ -332,7 +332,7 @@ paths:
       summary: Одногруппники, которые пользуются ботом (только старосте)
       responses:
         '200':
-          description: Список для выбора доверенного лица
+          description: members — для выбора доверенного лица, roster — весь состав группы с подгруппой и ролью
           content:
             application/json:
               schema:
@@ -340,6 +340,15 @@ paths:
                 properties:
                   deputy: { type: [object, 'null'] }
                   members: { type: array, items: { type: object, properties: { userId: { type: integer }, name: { type: string } } } }
+                  roster:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        userId: { type: integer }
+                        name: { type: [string, 'null'] }
+                        subgroup: { type: [integer, 'null'], enum: [1, 2, null] }
+                        role: { type: string, enum: [headman, editor, student] }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { description: Доступно только старосте }
   /api/deputy:

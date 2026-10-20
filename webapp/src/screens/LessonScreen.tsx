@@ -9,7 +9,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import type { Lesson } from '../data/schedule';
 import { homeworkKey, saveHomework, useRemoteHomework, type HomeworkData } from '../data/homework';
-import { hasNativeBackButton, haptic, openExternal } from '../bridge/max';
+import { hasNativeBackButton, haptic } from '../bridge/max';
 import { formatDay, formatMoment, formatStamp, fromDateKey } from '../lib/date';
 import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
@@ -35,18 +35,14 @@ type Scope = 'shared' | 'personal';
 
 const MAX_LENGTH = 2_000;
 
-const safeLink = (link?: string) => (link && /^https?:\/\//i.test(link) ? link : undefined);
-
 // Где, кто и для кого. Время и дата — в шапке, здесь их не повторяем.
 const LessonFacts = ({ lesson }: { lesson: Lesson }) => {
   const { t } = useI18n();
-  const link = safeLink(lesson.link);
   const rows = [
     lesson.auditories.length > 0 && [t.where, <>{lesson.auditories.join(', ')}{lesson.building && <small>{lesson.building}</small>}</>],
     lesson.teachers.length > 0 && [t.who, lesson.teachers.join(', ')],
     lesson.subgroup && [t.forWhom, t.forSubgroup(lesson.subgroup)],
     lesson.comment && [t.note, lesson.comment],
-    link && [t.link, <a href={link} target="_blank" rel="noreferrer" onClick={(event) => { if (openExternal(link)) event.preventDefault(); }}>{link.replace(/^https?:\/\//i, '')}</a>],
   ].filter(Boolean) as [string, ReactNode][];
   if (!rows.length) return null;
   return <dl className="facts">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
@@ -180,8 +176,8 @@ export const LessonScreen = ({ lesson, homeworkFirst = false, profile, profileRe
     {lesson.markedBy && lesson.markedAt && <p className="note-line">{t.moveMarked(lesson.markedBy, formatStamp(lesson.markedAt))}</p>}
     {item?.status === 'orphaned' && <p className="note-line" role="status">{t.orphaned}</p>}
     {!lessonOver && <div className="absence-actions">
-      <button type="button" className="pill-button" onClick={() => setAbsence('late')}>{t.late}</button>
-      <button type="button" className="pill-button" onClick={() => setAbsence('absent')}>{t.absent}</button>
+      <button type="button" className="pill-button pill-button--late" onClick={() => setAbsence('late')}>{t.late}</button>
+      <button type="button" className="pill-button pill-button--absent" onClick={() => setAbsence('absent')}>{t.absent}</button>
     </div>}
     {myNotes.length > 0 && (
       <div className="notes">

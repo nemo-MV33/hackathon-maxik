@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Button, Textarea } from '@maxhub/max-ui';
 import {
-  loadAbsenceHistory, loadAbsences, loadAnnouncements, loadHomeworkViewSummary, publishAnnouncement, removeAnnouncement,
-  type AbsenceNote, type Announcement, type HomeworkViewSummary, type StudentSummary,
+  loadAbsenceHistory, loadAbsences, loadAnnouncements, loadGroupMembers, loadHomeworkViewSummary, publishAnnouncement, removeAnnouncement,
+  type AbsenceNote, type Announcement, type HomeworkViewSummary, type RosterMember, type StudentSummary,
 } from '../lib/api';
 import { addDays, formatMoment, toDateKey } from '../lib/date';
 import { useI18n } from '../lib/i18n';
@@ -10,14 +10,14 @@ import { useNow } from '../lib/useNow';
 import { haptic } from '../bridge/max';
 import { TopBar } from '../components/TopBar';
 import { ReminderPicker } from '../components/ReminderPicker';
-import { NoteRow, StudentList } from '../components/Dossier';
+import { StudentList, useReasonLabel } from '../components/Dossier';
 import { Empty, ErrorState, Loading } from '../components/Status';
-import { BellIcon, TrashIcon } from '../components/Icon';
+import { BellIcon, CheckIcon, TrashIcon } from '../components/Icon';
 
-type Section = 'late' | 'news';
+type Section = 'late' | 'group' | 'news';
 const MAX_TEXT = 1_500;
 
-// Инструменты старосты: кто опаздывает, досье группы и объявления с напоминанием.
+// Инструменты старосты: кто опаздывает, состав группы по подгруппам и объявления с напоминанием.
 export const HeadmanScreen = ({ onOpenProfile, onOpenStudent }: { onOpenProfile: () => void; onOpenStudent: (id: number) => void }) => {
   const { t } = useI18n();
   const [section, setSection] = useState<Section>('late');
@@ -25,11 +25,15 @@ export const HeadmanScreen = ({ onOpenProfile, onOpenStudent }: { onOpenProfile:
     <div className="screen screen--tabbed screen--headman">
       <TopBar onOpenProfile={onOpenProfile} left={<h1 className="topbar__title">{t.tabHeadman}</h1>} />
       <div className="segment headman-sections" role="tablist" aria-label={t.tabHeadman}>
-        <button type="button" role="tab" aria-selected={section === 'late'} onClick={() => setSection('late')}>{t.lateSection}</button>
-        <button type="button" role="tab" aria-selected={section === 'news'} onClick={() => setSection('news')}>{t.newsSection}</button>
+        {(['late', 'group', 'news'] as const).map((item) => (
+          <button key={item} type="button" role="tab" aria-selected={section === item} onClick={() => setSection(item)}>
+            {item === 'late' ? t.lateSection : item === 'group' ? t.groupSection : t.newsSection}
+          </button>
+        ))}
       </div>
-      <ViewMedian />
-      {section === 'late' ? <Lateness onOpenStudent={onOpenStudent} /> : <News />}
+      {section === 'late' && <><ViewMedian /><Lateness onOpenStudent={onOpenStudent} /></>}
+      {section === 'group' && <Roster />}
+      {section === 'news' && <News />}
     </div>
   );
 };
@@ -45,9 +49,9 @@ const ViewMedian = () => {
   }, []);
   if (!summary || summary.medianMinutes === null) return null;
   return (
-    <div className="stat stat--caps">
-      <span className="stat__value">{t.viewMedianValue(summary.medianMinutes)}</span>
-      <span className="stat__label">{t.viewMedian}</span>
+    <div className="view-median">
+      <span className="view-median__value">{t.viewMedianValue(summary.medianMinutes)}</span>
+      <span className="view-median__label">{t.viewMedian}</span>
     </div>
   );
 };
@@ -77,24 +81,37 @@ const Lateness = ({ onOpenStudent }: { onOpenStudent: (id: number) => void }) =>
 
   const late = notes?.filter((note) => note.kind === 'late') ?? [];
   const absent = notes?.filter((note) => note.kind === 'absent') ?? [];
+  const lateMinutes = late.reduce((sum, note) => sum + (note.minutes ?? 0), 0);
 
   return (
     <>
-      <div className="chips" role="radiogroup" aria-label={t.lateSection}>
-        <button type="button" role="radio" className="chip-option" aria-checked={offset === 0} onClick={() => setOffset(0)}>{t.today}</button>
-        <button type="button" role="radio" className="chip-option" aria-checked={offset === -1} onClick={() => setOffset(-1)}>{t.yesterday}</button>
+      <div className="segment segment--wide" role="radiogroup" aria-label={t.lateSection}>
+        <button type="button" role="radio" aria-checked={offset === 0} onClick={() => setOffset(0)}>{t.today}</button>
+        <button type="button" role="radio" aria-checked={offset === -1} onClick={() => setOffset(-1)}>{t.yesterday}</button>
       </div>
       {!notes && !error && <Loading />}
       {error && <ErrorState message={error} onRetry={() => setAttempt((value) => value + 1)} />}
-      {notes && notes.length === 0 && <Empty title={t.allHere}>{t.allHereText}</Empty>}
-      {notes && notes.length > 0 && (
-        <div className="stat-row">
-          <div className="stat"><span className="stat__value">{late.length}</span><span className="stat__label">{t.statLate}</span></div>
-          <div className="stat"><span className="stat__value">{absent.length}</span><span className="stat__label">{t.statAbsent}</span></div>
+      {notes && notes.length === 0 && (
+        <div className="all-here">
+          <span className="all-here__mark" aria-hidden="true"><CheckIcon size={22} /></span>
+          <span className="all-here__text"><span className="all-here__title">{t.allHere}</span><span className="all-here__hint">{t.allHereText}</span></span>
         </div>
       )}
       {notes && notes.length > 0 && (
-        <div className="notes">{notes.map((note) => <NoteRow key={note.id} note={note} withName />)}</div>
+        <div className="late-summary">
+          <div className="late-tile late-tile--late">
+            <span className="late-tile__value">{late.length}</span>
+            <span className="late-tile__label">{t.statLate}</span>
+            {lateMinutes > 0 && <span className="late-tile__extra">{t.lateMinutesTotal(lateMinutes)}</span>}
+          </div>
+          <div className="late-tile late-tile--absent">
+            <span className="late-tile__value">{absent.length}</span>
+            <span className="late-tile__label">{t.statAbsent}</span>
+          </div>
+        </div>
+      )}
+      {notes && notes.length > 0 && (
+        <ul className="late-board" aria-label={t.lateBoardTitle(notes.length)}>{notes.map((note) => <LateCard key={note.id} note={note} />)}</ul>
       )}
 
       <div className="block-head">
@@ -104,6 +121,79 @@ const Lateness = ({ onOpenStudent }: { onOpenStudent: (id: number) => void }) =>
       {!students && <Loading />}
       {students && students.length === 0 && <Empty title={t.dossierEmpty}>{t.dossierEmptyText}</Empty>}
       {students && students.length > 0 && <StudentList students={students} onOpen={onOpenStudent} />}
+    </>
+  );
+};
+
+const initials = (name: string | null) => (name ?? '?').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+
+// Карточка сообщения: цвет полосы и кружка — вид отметки, справа — минуты и ответ старосты.
+const LateCard = ({ note }: { note: AbsenceNote }) => {
+  const { t } = useI18n();
+  const reason = useReasonLabel();
+  return (
+    <li className={`late-card late-card--${note.kind}`}>
+      <span className="late-card__avatar" aria-hidden="true">{initials(note.senderName ?? null)}</span>
+      <span className="late-card__body">
+        <span className="late-card__name">{note.senderName}</span>
+        {note.lesson && <span className="late-card__lesson"><span className="mono">{note.lesson.time.slice(0, 5)}</span> {note.lesson.subject}</span>}
+        <span className="late-card__reason">{reason(note)}</span>
+      </span>
+      <span className="late-card__side">
+        <span className="late-card__badge">{note.kind === 'late' ? `+${note.minutes ?? '?'} ${t.minutes}` : t.missed}</span>
+        <span className={`status-pill status-pill--small${note.acceptedAt ? ' is-ok' : ''}`}>{note.acceptedAt ? t.accepted : t.waiting}</span>
+      </span>
+    </li>
+  );
+};
+
+// Состав группы: все, кто выбрал группу в norfly, разложены по подгруппам из личного расписания.
+const Roster = () => {
+  const { t } = useI18n();
+  const [roster, setRoster] = useState<RosterMember[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let active = true;
+    setError(null);
+    loadGroupMembers().then((data) => active && setRoster(data.roster ?? [])).catch((failure: Error) => active && setError(failure.message));
+    return () => { active = false; };
+  }, [attempt]);
+
+  if (error) return <ErrorState message={error} onRetry={() => setAttempt((value) => value + 1)} />;
+  if (!roster) return <Loading />;
+  if (roster.length <= 1) return <Empty title={t.rosterEmpty}>{t.rosterEmptyText}</Empty>;
+  const groups = ([1, 2, null] as const)
+    .map((subgroup) => ({ subgroup, people: roster.filter((member) => member.subgroup === subgroup) }))
+    .filter((group) => group.people.length > 0);
+  return (
+    <>
+      <div className="roster-head">
+        <span className="roster-head__count">{roster.length}</span>
+        <span className="roster-head__text">
+          <span className="roster-head__title">{t.rosterCount(roster.length)}</span>
+          <span className="roster-head__hint">{t.rosterHint}</span>
+        </span>
+      </div>
+      {groups.map(({ subgroup, people }) => (
+        <section key={subgroup ?? 'all'} className={`roster-group roster-group--${subgroup ?? 'all'}`}>
+          <header className="roster-group__head">
+            <span className="roster-group__title">{subgroup ? t.rosterSubgroup(subgroup) : t.rosterWhole}</span>
+            <span className="roster-group__count">{people.length}</span>
+          </header>
+          {!subgroup && <p className="roster-group__hint">{t.rosterWholeHint}</p>}
+          <ul className="roster-list">
+            {people.map((member) => (
+              <li key={member.userId} className="roster-row">
+                <span className="roster-row__avatar" aria-hidden="true">{initials(member.name)}</span>
+                <span className={`roster-row__name${member.name ? '' : ' is-hidden'}`}>{member.name ?? t.rosterNoName}</span>
+                {member.role === 'headman' && <span className="roster-row__role roster-row__role--headman">{t.roleHeadman} · {t.roleYou}</span>}
+                {member.role === 'editor' && <span className="roster-row__role">{t.roleEditor}</span>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
     </>
   );
 };

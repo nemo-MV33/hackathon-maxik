@@ -36,13 +36,15 @@ export const NoteRow = ({ note, withName = false }: { note: AbsenceNote; withNam
 
 export const StudentList = ({ students, onOpen }: { students: StudentSummary[]; onOpen: (id: number) => void }) => {
   const { t } = useI18n();
+  const most = Math.max(1, ...students.map((student) => student.totalMinutes));
   return (
     <div className="settings-list">
       {students.map((student) => (
         <button key={student.id} type="button" className="settings-row" onClick={() => onOpen(student.id)}>
-          <span className="settings-row__text">
+          <span className="settings-row__text dossier-row__text">
             <span className="settings-row__title">{student.name}</span>
             <span className="settings-row__hint">{t.dossierCounts(student.late, student.absent)}</span>
+            <span className="dossier-bar" aria-hidden="true"><i style={{ width: `${Math.max(4, Math.round((student.totalMinutes / most) * 100))}%` }} /></span>
           </span>
           <span className="dossier-total">{formatDuration(student.totalMinutes)}</span>
           <ChevronRight size={18} />

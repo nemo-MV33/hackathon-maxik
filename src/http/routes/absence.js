@@ -152,11 +152,21 @@ export const getAbsences = async ({ user, preferences, community, url }) => {
 export const getGroupMembers = async ({ user, preferences, community }) => {
   const chat = await headmanChatOf(community, user.id);
   if (!chat) throw new HttpError(403, 'headman_only', 'Доступно только старосте');
-  const members = (await preferences.entries())
-    .filter(([id, prefs]) => String(id) !== String(user.id) && String(prefs.selection?.id) === String(chat.group.id))
+  const group = (await preferences.entries())
+    .filter(([, prefs]) => prefs.selection?.kind === 'group' && String(prefs.selection?.id) === String(chat.group.id));
+  const members = group
+    .filter(([id]) => String(id) !== String(user.id))
     .map(([id, prefs]) => ({ userId: Number(id), name: prefs.name ?? null }))
     .filter((member) => member.name);
-  return { deputy: chat.deputy ?? null, members };
+  // Состав группы для вкладки «Группа»: все, кто выбрал эту группу, с подгруппой из личного расписания.
+  const editors = new Set((chat.editors ?? []).map((editor) => String(editor.userId)));
+  const roster = group
+    .map(([id, prefs]) => ({
+      userId: Number(id), name: prefs.name ?? null, subgroup: [1, 2].includes(prefs.subgroup) ? prefs.subgroup : null,
+      role: String(id) === String(user.id) ? 'headman' : editors.has(String(id)) ? 'editor' : 'student',
+    }))
+    .sort((left, right) => (left.name ?? '\uffff').localeCompare(right.name ?? '\uffff', 'ru'));
+  return { deputy: chat.deputy ?? null, members, roster };
 };
 
 export const putDeputy = async ({ user, preferences, community, body }) => {

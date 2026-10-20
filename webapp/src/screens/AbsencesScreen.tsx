@@ -85,8 +85,8 @@ export const AbsencesScreen = ({ profile, onBack, onOpenStudent }: Props) => {
               ))}
             </div>
             <div className="absence-actions absence-actions--wide">
-              <button type="button" className="pill-button" disabled={blocked} onClick={() => setAbsence('late')}>{t.late}</button>
-              <button type="button" className="pill-button" disabled={blocked} onClick={() => setAbsence('absent')}>{t.absent}</button>
+              <button type="button" className="pill-button pill-button--late" disabled={blocked} onClick={() => setAbsence('late')}>{t.late}</button>
+              <button type="button" className="pill-button pill-button--absent" disabled={blocked} onClick={() => setAbsence('absent')}>{t.absent}</button>
             </div>
             {blocked && <p className="hint">{t.chooseDeputyFirst}</p>}
           </>

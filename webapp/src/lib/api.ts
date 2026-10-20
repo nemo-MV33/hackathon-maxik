@@ -129,7 +129,8 @@ export const loadAbsenceHistory = () => apiRequest<AbsenceHistory>('/api/absence
 export const loadStudentDossier = (id: number) => apiRequest<StudentDossier>(`/api/absence/history?student=${id}`);
 
 export type Member = { userId: number; name: string };
-export const loadGroupMembers = () => apiRequest<{ deputy: Member | null; members: Member[] }>('/api/group/members');
+export type RosterMember = { userId: number; name: string | null; subgroup: 1 | 2 | null; role: 'headman' | 'editor' | 'student' };
+export const loadGroupMembers = () => apiRequest<{ deputy: Member | null; members: Member[]; roster?: RosterMember[] }>('/api/group/members');
 export const saveDeputy = (userId: number | null) =>
   apiRequest<{ deputy: Member | null }>('/api/deputy', { method: 'PUT', body: JSON.stringify({ userId }) });
 

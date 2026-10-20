@@ -5,7 +5,7 @@ import type { LocalProfile } from '../lib/profile';
 import { useBackButton } from '../lib/useBackButton';
 import { hasNativeBackButton } from '../bridge/max';
 import { ErrorState, Loading } from '../components/Status';
-import { ChevronLeft, SearchIcon } from '../components/Icon';
+import { ChevronLeft, ChevronRight, SearchIcon } from '../components/Icon';
 import { Wordmark } from '../components/Wordmark';
 import { LanguageSwitch } from '../components/LanguageSwitch';
 import { useI18n } from '../lib/i18n';
@@ -181,13 +181,15 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
         {onCancel ? <BackLink label={t.back} onClick={onCancel} /> : <Wordmark />}
         <LanguageSwitch />
       </div>
-      <div className="intro"><p className="eyebrow">1 / 3</p><h1 className="display">{t.fieldUniversity}</h1></div>
-      <div className="choice-list">
-        {UNIVERSITIES.map((item) => <button type="button" className="choice" key={item.id} onClick={() => setUniversityId(item.id)}>
+      <div className="intro"><p className="step-pill">1 / 3</p><h1 className="display">{t.fieldUniversity}</h1></div>
+      <div className="choice-list university-list">
+        {UNIVERSITIES.map((item, index) => <button type="button" className="choice university-choice" key={item.id} onClick={() => setUniversityId(item.id)}>
+          <span className="university-choice__number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
           <span className="choice__text">
-            <span className="choice__head"><span className="choice__title">{universityName(item)}</span><span className="badge">{universityCity(item)}</span></span>
+            <span className="choice__head"><span className="choice__title">{universityName(item)}</span><span className={`badge city-badge city-badge--${item.timeZone === 'Asia/Irkutsk' ? 'irkutsk' : 'spb'}`}>{universityCity(item)}</span></span>
             <span className="choice__hint">{universityFullName(item)}</span>
           </span>
+          <ChevronRight size={18} className="university-choice__chevron" />
         </button>)}
       </div>
     </div>
@@ -214,7 +216,7 @@ export const Onboarding = ({ current, onDone, onCancel }: Props) => {
         </div>
       )}
       <BackLink label={t.fieldUniversity} onClick={() => { setUniversityId(null); setQuery(''); }} />
-      <p className="eyebrow">2 / 3 · {universityName(university)}</p>
+      <p className="eyebrow"><span className="step-pill">2 / 3</span>{universityName(university)}</p>
       {university.catalog ? <CatalogStep universityId={university.id} onPick={setPicked} /> : <>
       <div className="search">
         <label className="field-label" htmlFor="group-search">{t.groupField}</label>

@@ -81,6 +81,19 @@ test('доверенный одногруппник старосты выбир�
   assert.equal((await call('/api/me', HEADMAN)).body.deputy.name, 'Аня');
 });
 
+test('вкладка «Группа»: староста видит всех по подгруппам из личного расписания', async (t) => {
+  const { call, preferences, community } = await setup(t);
+  await preferences.set(STUDENT.id, { selection: GROUP, subgroup: 2, name: 'Аня' });
+  await preferences.set(OTHER.id, { selection: GROUP, subgroup: 1, name: 'Иван' });
+  await preferences.set(777, { selection: { kind: 'group', id: 99, title: 'Другая' }, subgroup: 1, name: 'Чужой' });
+  await community.setChat(-500, { editors: [{ userId: OTHER.id, name: 'Иван' }] });
+  const { body } = await call('/api/group/members', HEADMAN);
+  assert.deepEqual(body.roster.map((item) => [item.name, item.subgroup, item.role]), [
+    ['Аня', 2, 'student'], ['Иван', 1, 'editor'], ['Маша', null, 'headman'],
+  ]);
+  assert.equal((await call('/api/group/members', STUDENT)).status, 403, 'состав группы видит только староста');
+});
+
 test('объявления: публикует староста, каждый меняет своё напоминание', async (t) => {
   const { call, published } = await setup(t);
   const remindAt = new Date(Date.now() + 3_600_000).toISOString();

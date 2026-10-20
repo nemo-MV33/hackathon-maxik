@@ -105,6 +105,20 @@ export const devData = (): Plugin => ({
     await community.setChat(-2, { group: bguGroup, headman: { userId: 4, name: 'Староста БГУ' }, lang: 'ru' });
     for (const id of [4, 5]) await preferences.set(id, { selection: bguGroup, subgroup: null, lang: 'ru', timeZone: 'Europe/Moscow', onboarded: true });
     for (const id of [1, 2, 3]) await preferences.set(id, { selection: group, subgroup: 1, lang: 'ru', onboarded: false });
+    for (const [id, name] of [[1, 'Дмитрий Иванов'], [2, 'Анна Петрова'], [3, 'Илья Смирнов']]) await preferences.set(id, { ...await preferences.get(id), name });
+    // Одногруппники для вкладки «Группа» и опозданий старосты.
+    const classmates: [number, string, 1 | 2 | null][] = [
+      [101, 'Мария Кузнецова', 1], [102, 'Артём Волков', 2], [103, 'София Морозова', 2], [104, 'Никита Лебедев', 1],
+      [105, 'Полина Соколова', null], [106, 'Егор Попов', 2], [107, 'Алиса Новикова', 1],
+    ];
+    for (const [id, name, subgroup] of classmates) await preferences.set(id, { selection: group, subgroup, name, lang: 'ru', onboarded: true });
+    const today = dateKey(new Date());
+    for (const [senderId, senderName, kind, minutes, text] of [
+      [101, 'Мария Кузнецова', 'late', 15, 'Пробка на мосту'], [102, 'Артём Волков', 'absent', null, 'Болею'], [104, 'Никита Лебедев', 'late', 5, 'Автобус'],
+    ] as [number, string, string, number | null, string][]) {
+      await community.addNotice({ groupId: group.id, chatId: -1, date: today, senderId, senderName, kind, reasonCode: null, text, minutes,
+        lesson: { date: today, lessonNumber: 1, subject: 'Математический анализ', time: '08:15–09:45' } });
+    }
     const weeks = [week(0), week(1)];
     const updatedAt = new Date().toISOString();
     const notifications: { chatId?: number; userId?: number; text: string }[] = [];
