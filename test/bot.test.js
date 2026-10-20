@@ -654,11 +654,11 @@ test('староста отмечает перенос кнопками груп
   const [picker] = await say(HEADMAN, targetDate, { chat: GROUP_CHAT });
   assert.ok(payloads(picker).includes(`mt:${targetDate}:1:0|irnitu~11`));
   const result = await press(HEADMAN, `mt:${targetDate}:1:0`, { chat: GROUP_CHAT });
-  assert.ok(result.some((item) => item.to === 'chat' && /перенесена с/.test(item.text)));
+  assert.ok(result.some((item) => item.to === 'chat' && /Перенос пары/.test(item.text)));
   const homework = await community.homeworkForUser(group.id, STUDENT.user_id, { from: targetDate, to: targetDate });
   assert.equal(homework[0].text, 'Задачи 1–5');
   assert.equal(homework[0].lessonDate, targetDate);
-  assert.equal(sent.filter((item) => item.to === 'chat' && /перенесена с/.test(item.text)).length, 1);
+  assert.equal(sent.filter((item) => item.to === 'chat' && /Перенос пары/.test(item.text)).length, 1);
 });
 
 

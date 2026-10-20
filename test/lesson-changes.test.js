@@ -106,9 +106,12 @@ test('ручная отметка видна группе с автором; п�
   await community.upsertHomework(oldHomework);
   const mark = await changes.manual({ groupId: 1, user: USER, from: FROM, to: TO });
   assert.equal(sent.length, 1);
-  assert.match(sent[0].text, /Пара Математика перенесена с/);
+  assert.match(sent[0].text, /Перенос пары\*\*\n\*\*Математика\*\*/);
+  assert.match(sent[0].text, /Было: _[А-Яа-яё]+, \d+ [а-яё]+, \d\d:\d\d_/);
+  assert.doesNotMatch(sent[0].text, /\d{4}-\d{2}-\d{2}/, 'даты словами, не числами');
   assert.match(sent[0].text, /Задачи 1–5/);
-  assert.match(sent[0].text, /Отмечено старостой, Аня/);
+  assert.match(sent[0].text, /_Отмечено старостой_$/);
+  assert.doesNotMatch(sent[0].text, /Аня/, 'имя старосты в чат не пишем');
   const overlay = await changes.overlay(1, [FROM, TO], range.from, range.to);
   assert.equal(overlay.length, 1);
   assert.equal(overlay[0].markedBy, 'Аня');

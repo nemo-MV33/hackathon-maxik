@@ -167,6 +167,7 @@ export const createBot = ({
   const selectedUniversity = async (ctx) => session(ctx).universityId
     ?? (isGroupChat(ctx) ? (await community.getChat(ctx.chatId))?.group?.universityId : ctx.prefs.universityId)
     ?? (ownGroup(ctx.prefs)?.id ? splitGroupKey(ownGroup(ctx.prefs).id).universityId : 'irnitu');
+  const groupExample = async (ctx) => university(await selectedUniversity(ctx)).example;
   const universityPrompt = (ctx, mode) => {
     setSession(ctx, { step: 'university', mode });
     // Только вузы с подключённым провайдером: конфиг может описывать источник раньше, чем он включён.
@@ -369,7 +370,7 @@ export const createBot = ({
       console.error('Search failed:', error.message);
       return show(ctx, t.scheduleUnavailable);
     }
-    if (!results.length) return show(ctx, t.searchEmpty(query), mode === 'own' ? [[button(t.chooseByInstitute, 'inst:0')]] : []);
+    if (!results.length) return show(ctx, t.searchEmpty(query, await groupExample(ctx)), mode === 'own' ? [[button(t.chooseByInstitute, 'inst:0')]] : []);
     // Единственное совпадение открываем сразу — без лишнего нажатия.
     if (results.length === 1) {
       const [item] = results;
@@ -1102,10 +1103,10 @@ export const createBot = ({
     week: scheduleCommand('w', 0),
     homework: showHomework,
     add: beginAdd,
-    find: (ctx, args) => {
+    find: async (ctx, args) => {
       if (args) return handleSearch(ctx, args, { mode: isGroupChat(ctx) || ownGroup(ctx.prefs) ? 'any' : 'own' });
       setSession(ctx, { step: ownGroup(ctx.prefs) ? 'search' : 'own-group' });
-      return show(ctx, ctx.t.searchPrompt, [[button(ctx.t.menu, 'menu')]]);
+      return show(ctx, ctx.t.searchPrompt(await groupExample(ctx)), [[button(ctx.t.menu, 'menu')]]);
     },
     settings: showSettings,
     language: async (ctx, args) => {
@@ -1192,13 +1193,13 @@ export const createBot = ({
     if (university(universityId).capabilities.catalog) {
       return show(ctx, ctx.t.catalogPrompt, [[appButton(ctx.t)].filter(Boolean), [button(ctx.t.cancel, 'cancel')]].filter((row) => row.length));
     }
-    return show(ctx, mode === 'link' ? ctx.t.setupSearchPrompt : ctx.t.searchPrompt,
+    return show(ctx, (mode === 'link' ? ctx.t.setupSearchPrompt : ctx.t.searchPrompt)(university(universityId).example),
       [...(university(universityId).capabilities.institutes && mode === 'own' ? [[button(ctx.t.chooseByInstitute, 'inst:0')]] : []), [button(ctx.t.cancel, 'cancel')]]);
   });
   bot.action('university', (ctx) => universityPrompt(ctx, 'own'));
-  bot.action('find', (ctx) => {
+  bot.action('find', async (ctx) => {
     setSession(ctx, { step: 'search' });
-    return show(ctx, ctx.t.searchPrompt, [[button(ctx.t.menu, 'menu')]]);
+    return show(ctx, ctx.t.searchPrompt(await groupExample(ctx)), [[button(ctx.t.menu, 'menu')]]);
   });
   bot.action(new RegExp(`^s:(group|teacher|auditory):(${GROUP_ID}):([dw])(-?\\d+)$`), (ctx) =>
     showSchedule(ctx, ctx.match[1], ctx.match[2], ctx.match[3], Number(ctx.match[4])));
@@ -1580,7 +1581,7 @@ ${historyText(item.history, ctx.lang, profileTimeZone(ctx.prefs))}`, [...version
     const config = await moveConfig(ctx);
     if (!config) return toast(ctx, ctx.t.homeworkForbidden);
     await getLessonChanges().undo(config.group.id, moveActor(ctx), ctx.match[1]);
-    return show(ctx, ctx.t.moveRevoked(''), [[button(ctx.t.menu, isGroupChat(ctx) ? 'help' : 'menu')]]);
+    return show(ctx, ctx.t.moveUndone, [[button(ctx.t.menu, isGroupChat(ctx) ? 'help' : 'menu')]]);
   });
   bot.action('cancel', (ctx) => {
     setSession(ctx, null);

@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { parseDateKey } from '../lib/date.js';
 import { HttpError } from '../http/routes/me.js';
 import { texts } from '../bot/i18n.js';
+import { formatDate } from '../bot/format.js';
 
 export const lessonSlot = (lesson) => `${lesson.date}:${lesson.lessonNumber}:${lesson.subgroup ?? 0}`;
 const sameSlot = (left, right) => left && right && lessonSlot(left) === lessonSlot(right);
@@ -25,9 +26,9 @@ export class LessonChangeService {
   }
 
   async authorize(groupId, userId) {
-    if (await this.community.homeworkRoleForGroup(groupId, userId) === 'student') {
-      throw new HttpError(403, 'homework_forbidden', 'Нет прав на изменение общего ДЗ');
-    }
+    const role = await this.community.homeworkRoleForGroup(groupId, userId);
+    if (role === 'student') throw new HttpError(403, 'homework_forbidden', 'Нет прав на изменение общего ДЗ');
+    return role;
   }
 
   async find(groupId, input) {
@@ -77,7 +78,7 @@ export class LessonChangeService {
 
   manual({ groupId, user, from, to }) {
     return this.#serial(async () => {
-      await this.authorize(groupId, user.id);
+      const authorRole = await this.authorize(groupId, user.id);
       const source = await this.find(groupId, from);
       const target = to === null ? null : await this.target(groupId, source, to);
       if (target && (sameSlot(source, target) || source.subgroup !== target.subgroup)) {
@@ -91,7 +92,7 @@ export class LessonChangeService {
         throw new HttpError(409, 'move_exists');
       }
       if (existing) {
-        const changed = { ...existing, to: target, at: this.now().toISOString(), authorId: user.id,
+        const changed = { ...existing, to: target, at: this.now().toISOString(), authorId: user.id, authorRole,
           authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || String(user.id) };
         const homework = await this.apply(groupId, existing.to ?? source, target, `${existing.id}:edit:${randomUUID()}`, 'headman', changed);
         await this.community.saveLessonChange(changed);
@@ -99,7 +100,7 @@ export class LessonChangeService {
         return changed;
       }
       const item = { id: randomUUID(), groupId, from: source, to: target, status: 'pending', at: this.now().toISOString(),
-        authorId: user.id, authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || String(user.id) };
+        authorId: user.id, authorRole, authorName: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || String(user.id) };
       const homework = await this.apply(groupId, source, target, item.id, 'headman', item);
       await this.community.saveLessonChange(item);
       await this.notifyChats(groupId, [{ type: target ? 'moved' : 'cancelled', previous: source, lesson: target ? { ...source, ...target, subject: source.subject } : source, homework }], item);
@@ -163,24 +164,36 @@ export class LessonChangeService {
     return result.sort((left, right) => `${left.date} ${left.time}`.localeCompare(`${right.date} ${right.time}`));
   }
 
+  // Сообщение в чат группы: дата словами, предмет и новое время выделены.
+  // Имя автора не пишем — достаточно роли, кто отметил перенос.
   async notifyChats(groupId, changes, manual) {
+    const year = Number(this.now().toISOString().slice(0, 4));
     for (const chat of await this.community.chatsForGroup(groupId)) {
       const t = texts(chat.lang);
-      const text = manual?.status === 'revoked' ? t.moveRevoked(manual.from.subject) : changes.map((change) => {
-        const source = change.previous ?? change.lesson;
-        const when = (lesson) => `${lesson.date}, ${lesson.time?.slice(0, 5)}`;
-        const lesson = change.lesson;
-        let line;
-        if (change.type === 'moved') line = t.changeMoved(source.subject, when(source), when(lesson));
-        else if (change.type === 'cancelled') line = t.changeCancelled(when(lesson), lesson.subject);
-        else if (change.type === 'added') line = t.changeAdded(when(lesson), lesson.subject);
-        else if (change.type === 'subject') line = t.changeSubject(when(lesson), source.subject, lesson.subject);
-        else if (change.type === 'room') line = t.changeRoom(when(lesson), lesson.subject, (source.auditories ?? []).join(', '), (lesson.auditories ?? []).join(', '));
-        else line = t.changeTeacher(when(lesson), lesson.subject, (lesson.teachers ?? []).join(', '));
-        return line + (change.homework ? `\n${t.homework}: ${change.homework}` : '');
-      }).join('\n');
-      const mark = manual && manual.status !== 'revoked' ? `\n${t.moveMarked(manual.authorName, new Intl.DateTimeFormat(t.locale, { dateStyle: 'short', timeStyle: 'short', timeZone: universityTimeZone(groupId) }).format(new Date(manual.at)))}` : '';
-      if (text) await this.bot?.api.sendMessageToChat(chat.chatId, `${text}${mark}`).catch(console.error);
+      const when = (lesson) => {
+        const options = { weekday: 'long', day: 'numeric', month: 'long', ...(Number(lesson.date.slice(0, 4)) !== year ? { year: 'numeric' } : {}) };
+        const date = formatDate(chat.lang, lesson.date, options).replace(/ г\.$/, '');
+        return `${chat.lang === 'en' ? date : date.toLowerCase()}, ${lesson.time?.slice(0, 5)}`;
+      };
+      let text;
+      if (manual?.status === 'revoked') text = t.moveRevoked(manual.from.subject);
+      else {
+        const lines = changes.map((change) => {
+          const source = change.previous ?? change.lesson;
+          const lesson = change.lesson;
+          let line;
+          if (change.type === 'moved') line = t.changeMoved(source.subject, when(source), when(lesson));
+          else if (change.type === 'cancelled') line = t.chatCancelled(lesson.subject, when(lesson));
+          else if (change.type === 'added') line = t.chatAdded(lesson.subject, when(lesson));
+          else if (change.type === 'subject') line = t.chatSubject(when(lesson), source.subject, lesson.subject);
+          else if (change.type === 'room') line = t.chatRoom(lesson.subject, when(lesson), (source.auditories ?? []).join(', '), (lesson.auditories ?? []).join(', '));
+          else line = t.chatTeacher(lesson.subject, when(lesson), (lesson.teachers ?? []).join(', '));
+          return line + (change.homework ? `\n${t.homework}: ${change.homework}` : '');
+        });
+        text = lines.length ? [manual ? null : t.chatChangesTitle, ...lines].filter(Boolean).join('\n\n') : '';
+      }
+      const mark = manual && manual.status !== 'revoked' ? `\n\n_${t.moveMarked(manual.authorRole)}_` : '';
+      if (text) await this.bot?.api.sendMessageToChat(chat.chatId, `${text}${mark}`, { format: 'markdown' }).catch(console.error);
     }
   }
 }
