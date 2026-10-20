@@ -54,7 +54,6 @@ const formatLesson = (language, lesson, scheduleKind, ordinal) => {
     `${kindIcon(lesson.lessonType)} **${lesson.subject}**`,
     details ? `_${capitalize(details)}_` : '',
     where,
-    lesson.link ? `🔗 ${lesson.link}` : '',
   ].filter(Boolean).join('\n');
 };
 

@@ -456,6 +456,9 @@ export class NotificationService {
           continue;
         }
         const range = { from: from > previous.from ? from : previous.from, to: to < previous.to ? to : previous.to };
+        // Вуз публикует расписание на ограниченный срок (ИРНИТУ — две недели).
+        // Пары после последнего известного дня только что открылись, это не замены.
+        const horizon = previous.lessons.reduce((last, lesson) => (lesson.date > last ? lesson.date : last), '');
         let changes = diffSchedules(previous.lessons, lessons, range);
         // Исчезновение сегодня может оказаться переносом на следующую неделю.
         // Дополнительные недели читаем только при таком изменении.
@@ -478,7 +481,7 @@ export class NotificationService {
         const recovered = diffSchedules(unresolved, changes.filter((change) => change.type === 'added').map((change) => change.lesson), range)
           .filter((change) => change.type === 'moved');
         const recoveredKeys = new Set(recovered.map((change) => lessonKey(change.lesson)));
-        changes = [...changes.filter((change) => change.type !== 'added' || !recoveredKeys.has(lessonKey(change.lesson))), ...recovered];
+        changes = [...changes.filter((change) => change.type !== 'added' || (!recoveredKeys.has(lessonKey(change.lesson)) && change.lesson.date <= horizon)), ...recovered];
         const visible = [];
         for (const change of changes) {
           const result = this.lessonChanges ? await this.lessonChanges.official(groupId, change, `${previous.takenAt}:${change.type}:${lessonKey(change.previous ?? change.lesson)}:${lessonKey(change.lesson)}`) : null;
@@ -509,7 +512,7 @@ export class NotificationService {
     const t = texts(lang);
     const lines = changes.slice(0, 12).map(({ type, lesson, previous, homework }) => {
       const when = t.changeWhen(shortDate(lang, lesson.date), String(lesson.time ?? '').slice(0, 5));
-      if (type === 'moved') return `— ${t.changeMoved(lesson.subject, `${shortDate(lang, previous.date)}, ${previous.time?.slice(0, 5)}`, when)}${homework ? `\n${t.homework}: ${homework}` : ''}`;
+      if (type === 'moved') return `— ${t.changeMovedLine(lesson.subject, `${shortDate(lang, previous.date)}, ${previous.time?.slice(0, 5)}`, when)}${homework ? `\n${t.homework}: ${homework}` : ''}`;
       if (type === 'cancelled') return `— ${t.changeCancelled(when, lesson.subject)}`;
       if (type === 'added') return `— ${t.changeAdded(when, lesson.subject)}`;
       if (type === 'subject') return `— ${t.changeSubject(when, previous.subject, lesson.subject)}`;

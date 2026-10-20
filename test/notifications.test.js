@@ -125,6 +125,21 @@ test('переносы и замены: первый снимок молча, д
   assert.equal(await notifications.checkChanges(), 0, 'без изменений тишина');
 });
 
+test('новый день в конце окна публикации вуза не считается заменами', async (t) => {
+  const { notifications, sent, user, state } = await setup(t, [lesson(TODAY, 1), lesson(TOMORROW, 2)]);
+  await user(1);
+  assert.equal(await notifications.checkChanges(), 0);
+
+  const opened = irkutskDateKey(NOW, 5);
+  state.lessons = [lesson(TODAY, 1), lesson(TOMORROW, 2), lesson(opened, 1), lesson(opened, 2), lesson(opened, 3)];
+  assert.equal(await notifications.checkChanges(), 0);
+  assert.equal(sent.length, 0);
+
+  state.lessons = [lesson(TODAY, 1), lesson(TOMORROW, 2), lesson(opened, 1), lesson(opened, 2), lesson(opened, 3), lesson(TOMORROW, 3)];
+  assert.equal(await notifications.checkChanges(), 1, 'новая пара внутри известных дней — изменение');
+  assert.match(sent[0].text, /Математический анализ/);
+});
+
 test('diffSchedules находит отмену, новую пару, аудиторию, преподавателя и замену предмета', () => {
   const before = [
     lesson('2026-10-02', 1), lesson('2026-10-02', 2), lesson('2026-10-02', 3), lesson('2026-10-03', 1),

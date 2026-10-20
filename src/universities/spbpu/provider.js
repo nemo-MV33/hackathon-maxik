@@ -27,7 +27,8 @@ export const normalizeSpbpuWeek = (payload, { week, groupId, teacherId, auditory
       if (!start || !end || !subject) continue;
       const subgroup = subgroupOf(item.additional_info);
       const lessonNumber = slotNumber(spbpuLessonTimes, start);
-      const info = String(item.additional_info ?? '').trim();
+      // Ссылки на СДО и вебинары в сведения о паре не выводим: MAX разворачивает их в большое превью.
+      const info = String(item.additional_info ?? '').replace(/https?:\/\/\S+/gi, '').replace(/\s+/g, ' ').trim();
       lessons.push({
         id: `${groupId ?? teacherId ?? auditoryId}:${day.date}:${lessonNumber}:${subgroup ?? 0}:${lessons.length}`,
         date: day.date, lessonNumber, time: `${start}–${end}`,
@@ -53,11 +54,12 @@ export const normalizeSpbpuWeek = (payload, { week, groupId, teacherId, auditory
 };
 
 // Расписание Политеха: открытый JSON API ruz.spbstu.ru без ключа.
+// Ответ недели идёт 2–3 с, а дисциплины читают весь семестр (около 22 недель), поэтому шесть запросов параллельно.
 export class SpbpuProvider {
   #rooms = new Map();
 
   constructor({ cacheDir = './data/spbpu-cache', ttlMs = 900_000, directoryTtlMs = 10_800_000, fetcher, now } = {}) {
-    this.source = new JsonSource({ id: 'spbpu', baseUrl: 'https://ruz.spbstu.ru/api/v1/ruz/', cacheDir, concurrency: 3, fetcher, now });
+    this.source = new JsonSource({ id: 'spbpu', baseUrl: 'https://ruz.spbstu.ru/api/v1/ruz/', cacheDir, concurrency: 6, fetcher, now });
     Object.assign(this, { ttlMs, directoryTtlMs });
   }
 

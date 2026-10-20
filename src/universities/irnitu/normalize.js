@@ -53,7 +53,7 @@ const lessonFromRegular = (item, dictionaries) => ({
   auditoryIds: ids(item.auditories_ids),
   groups: resolveNames(item.groups, dictionaries.groups),
   groupIds: ids(item.groups),
-  comment: clean(item.comment),
+  comment: clean(String(item.comment ?? '').replace(/https?:\/\/\S+/gi, '')),
   link: clean(item.link),
   sourceType: item.type,
   transferred: false,
