@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { startParam, webApp } from './bridge/max';
-import type { Lesson } from './data/schedule';
+import { findGroup, type Lesson } from './data/schedule';
 import { decodeHomework, type SharedHomework } from './lib/homework';
 import { useProfile } from './lib/profile';
 import { Onboarding } from './screens/Onboarding';
@@ -187,6 +187,10 @@ export const App = () => {
         profile={profile}
         profileRevision={profileRevision}
         onChangeGroup={() => setRoute({ name: 'onboarding' })}
+        onSwitchGroup={async (groupId) => {
+          const group = await findGroup(groupId);
+          if (group) saveProfile({ group, subgroup: null });
+        }}
         onAccountDeleted={() => {
           saveProfile(null);
           setOnboarded(false);
@@ -201,10 +205,11 @@ type MainProps = {
   profile: NonNullable<ReturnType<typeof useProfile>[0]>;
   profileRevision: number;
   onChangeGroup: () => void;
+  onSwitchGroup: (groupId: string) => Promise<void>;
   onAccountDeleted: () => void;
 };
 
-const Main = ({ profile, profileRevision, onChangeGroup, onAccountDeleted }: MainProps) => {
+const Main = ({ profile, profileRevision, onChangeGroup, onSwitchGroup, onAccountDeleted }: MainProps) => {
   const { me } = useMe();
   const [tab, setTabState] = useState<Tab>(initialTab);
   const [stack, setStack] = useState<Screen[]>([]);
@@ -280,6 +285,7 @@ const Main = ({ profile, profileRevision, onChangeGroup, onAccountDeleted }: Mai
           onOpenExams={() => push({ name: 'exams' })}
           onOpenPlanner={() => setTab('planner')}
           onOpenHomework={openHomework}
+          onSwitchGroup={onSwitchGroup}
         />
       )}
       {tab === 'schedule' && (

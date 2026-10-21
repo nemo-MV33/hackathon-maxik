@@ -67,6 +67,8 @@ export type MeResponse = {
   user: RemoteUser;
   profile: RemoteProfile;
   role: Role;
+  // Роли в чатах других групп: действуют после переключения профиля.
+  otherRoles: { group: { id: string; title: string }; chatTitle: string | null; role: 'headman' | 'editor' }[];
   headman: { name: string } | null;
   deputy: { userId: number; name: string } | null;
   chatLinked: boolean;

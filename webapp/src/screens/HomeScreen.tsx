@@ -19,6 +19,7 @@ import { TaskList } from '../components/TaskList';
 import { AnnouncementSheet } from '../components/AnnouncementSheet';
 import { AbsenceSheet } from '../components/AbsenceSheet';
 import { ChevronRight } from '../components/Icon';
+import { RoleElsewhere } from '../components/RoleElsewhere';
 import type { AbsenceKind } from '../lib/api';
 
 const LOOKAHEAD_DAYS = 21;
@@ -32,11 +33,12 @@ type Props = {
   onOpenProfile: () => void;
   onOpenExams: () => void;
   onOpenPlanner: () => void;
+  onSwitchGroup: (groupId: string) => Promise<void>;
 };
 
 // Главная: что у меня сейчас. Если сегодня ещё есть пары — весь день; если нет — ближайшая пара.
 // Ниже — задачи: ДЗ и объявления от ближайшего к дальнему.
-export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenHomework, onOpenProfile, onOpenExams, onOpenPlanner }: Props) => {
+export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenHomework, onOpenProfile, onOpenExams, onOpenPlanner, onSwitchGroup }: Props) => {
   const { t } = useI18n();
   const [scheduleRevision, setScheduleRevision] = useState(0);
   useEffect(() => {
@@ -83,6 +85,8 @@ export const HomeScreen = ({ profile, profileRevision, onOpenLesson, onOpenHomew
         onOpenProfile={onOpenProfile}
         left={<span className="topbar__date first-letter">{formatDay(fromDateKey(todayKey))}</span>}
       />
+
+      <RoleElsewhere currentGroup={profile.group.title} onSwitch={onSwitchGroup} />
 
       {exams.length > 0 && (
         <button type="button" className="exam-banner" onClick={onOpenExams}>
