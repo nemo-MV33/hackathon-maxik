@@ -46,19 +46,35 @@ const parseSubgroup = (value) => {
   throw new HttpError(400, 'invalid_subgroup', 'Подгруппа должна быть 1, 2 или null');
 };
 
-const roleOf = async (community, userId) => {
+export const profileGroupId = (prefs) => (prefs?.selection?.kind === 'group' ? prefs.selection.id : null);
+
+// Роль — только в группе из профиля: те же правила, что у записи ДЗ и переносов.
+// Роли в чатах других групп возвращаются отдельно, чтобы приложение предложило переключиться.
+const roleOf = async (community, userId, groupId) => {
   const chats = await community.chatsWithRole(userId);
-  const headman = chats.find((chat) => String(chat.headman?.userId) === String(userId));
-  if (headman) return { role: 'headman', chat: headman };
-  if (chats.length) return { role: 'editor', chat: chats[0] };
-  return { role: 'student', chat: null };
+  const own = groupId ? chats.filter((chat) => sameGroup(chat.group.id, groupId)) : chats;
+  const isHeadman = (chat) => String(chat.headman?.userId) === String(userId);
+  const headman = own.find(isHeadman);
+  const elsewhere = new Map();
+  for (const chat of chats) {
+    if (own.includes(chat)) continue;
+    const key = String(chat.group.id);
+    const role = isHeadman(chat) ? 'headman' : 'editor';
+    if (elsewhere.get(key)?.role === 'headman') continue;
+    elsewhere.set(key, { group: { id: chat.group.id, title: chat.group.title }, chatTitle: chat.title ?? null, role });
+  }
+  const otherRoles = [...elsewhere.values()];
+  if (headman) return { role: 'headman', chat: headman, otherRoles };
+  if (own.length) return { role: 'editor', chat: own[0], otherRoles };
+  return { role: 'student', chat: null, otherRoles };
 };
 
 export const getMe = async ({ user, preferences, community }) => {
   const saved = await preferences.get(user.id);
-  const { role, chat } = community ? await roleOf(community, user.id) : { role: 'student', chat: null };
-  const groupChat = saved.selection?.kind === 'group' && community
-    ? (await community.chatsForGroup(saved.selection.id)).find((item) => item.headman?.userId) ?? null
+  const groupId = profileGroupId(saved);
+  const { role, chat, otherRoles } = community ? await roleOf(community, user.id, groupId) : { role: 'student', chat: null, otherRoles: [] };
+  const groupChat = groupId && community
+    ? (await community.chatsForGroup(groupId)).find((item) => item.headman?.userId) ?? null
     : null;
   return {
     user: {
@@ -69,6 +85,7 @@ export const getMe = async ({ user, preferences, community }) => {
     },
     profile: publicProfile(saved),
     role,
+    otherRoles,
     headman: groupChat?.headman ? { name: groupChat.headman.name } : null,
     deputy: role === 'headman' && chat?.deputy ? { userId: chat.deputy.userId, name: chat.deputy.name } : null,
     chatLinked: Boolean(groupChat),

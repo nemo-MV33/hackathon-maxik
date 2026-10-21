@@ -1,10 +1,10 @@
-import { HttpError } from './me.js';
+import { HttpError, profileGroupId } from './me.js';
 
 const MAX_TEXT_LENGTH = 1_500;
 const MAX_TITLE_LENGTH = 80;
 
-const headmanChatOf = async (community, userId) => (await community.chatsWithRole(userId))
-  .find((chat) => String(chat.headman?.userId) === String(userId)) ?? null;
+const headmanChatOf = async (community, preferences, userId) =>
+  community.headmanChat(userId, profileGroupId(await preferences.get(userId)));
 
 const parseMoment = (value, field) => {
   if (value === null || value === undefined) return null;
@@ -31,7 +31,7 @@ const serialize = (item, prefs, userId) => {
 
 export const getAnnouncements = async ({ user, preferences, community }) => {
   const prefs = await preferences.get(user.id);
-  const headmanChat = await headmanChatOf(community, user.id);
+  const headmanChat = await headmanChatOf(community, preferences, user.id);
   const groupId = headmanChat?.group.id ?? (prefs.selection?.kind === 'group' ? prefs.selection.id : null);
   if (!groupId) return { canPublish: false, items: [] };
   const items = await community.announcementsForGroup(groupId);
@@ -40,7 +40,7 @@ export const getAnnouncements = async ({ user, preferences, community }) => {
 
 // Объявление публикует только староста: в чат группы и каждому в личку (через бота).
 export const postAnnouncement = async ({ user, preferences, community, body, publishAnnouncement }) => {
-  const chat = await headmanChatOf(community, user.id);
+  const chat = await headmanChatOf(community, preferences, user.id);
   if (!chat) throw new HttpError(403, 'headman_only', 'Объявления публикует староста');
   const text = typeof body?.text === 'string' ? body.text.trim() : '';
   const title = typeof body?.title === 'string' ? body.title.trim() : '';
@@ -66,10 +66,10 @@ export const postAnnouncement = async ({ user, preferences, community, body, pub
   return { item: serialize(item, prefs, user.id), postedToChat: Boolean(delivery.chat) };
 };
 
-export const deleteAnnouncement = async ({ user, community, id }) => {
+export const deleteAnnouncement = async ({ user, preferences, community, id }) => {
   const item = await community.getAnnouncement(id);
   if (!item) throw new HttpError(404, 'not_found', 'Объявление не найдено');
-  const chat = await headmanChatOf(community, user.id);
+  const chat = await headmanChatOf(community, preferences, user.id);
   if (!chat || String(chat.group.id) !== String(item.groupId)) throw new HttpError(403, 'headman_only', 'Удалять объявления может староста');
   await community.removeAnnouncement(id);
   return { deleted: true };

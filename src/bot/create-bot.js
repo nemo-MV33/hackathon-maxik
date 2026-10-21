@@ -188,8 +188,9 @@ export const createBot = ({
     button('Русский', 'lang:ru'), button('English', 'lang:en'),
   ]]);
 
+  // Роль в личке — в группе из профиля, как в приложении.
   const roleOf = async (ctx) => {
-    const chats = await community.chatsWithRole(userId(ctx));
+    const chats = await community.chatsWithRole(userId(ctx), ownGroup(ctx.prefs)?.id ?? null);
     const headman = chats.find((chat) => String(chat.headman?.userId) === String(userId(ctx)));
     return { chats, headman: headman ?? null, editor: chats.length > 0 };
   };
@@ -221,6 +222,8 @@ export const createBot = ({
     ];
     if (headman) rows.push([button(t.lateToday, 'late:0'), button(t.newAnnouncement, 'ann:new')]);
     if (editor) rows.push([button(t.addGroupHomework, 'gp:pick')]);
+    const elsewhere = editor ? null : await roleElsewhere(ctx);
+    if (elsewhere) rows.push([button(t.switchToGroup(elsewhere.group.title), `mine:${elsewhere.group.id}`)]);
     rows.push([button(t.search, 'find'), button(t.settings, 'settings')], [button(ctx.lang === 'en' ? 'University' : 'Вуз', 'university')], [button(t.back, 'menu')]);
     return show(ctx, headman ? t.moreTitleHeadman : t.moreTitle, rows);
   };
@@ -465,7 +468,25 @@ export const createBot = ({
   // Общее ДЗ записывают в чате группы, а староста и редакторы — ещё и из лички.
   const groupConfigFor = async (ctx) => (isGroupChat(ctx)
     ? community.getChat(ctx.chatId)
-    : (await community.chatsWithRole(userId(ctx)))[0] ?? null);
+    : (await community.chatsWithRole(userId(ctx), ownGroup(ctx.prefs)?.id ?? null))[0] ?? null);
+
+  // Роль есть, но в чате другой группы: предлагаем переключить профиль, а не молча отказываем.
+  const roleElsewhere = async (ctx) => {
+    if (isGroupChat(ctx)) return null;
+    const own = ownGroup(ctx.prefs)?.id ?? null;
+    const chats = (await community.chatsWithRole(userId(ctx))).filter((chat) => !sameGroup(chat.group.id, own));
+    return chats.find((chat) => String(chat.headman?.userId) === String(userId(ctx))) ?? chats[0] ?? null;
+  };
+
+  const switchGroupOffer = async (ctx) => {
+    const chat = await roleElsewhere(ctx);
+    if (!chat) return null;
+    const role = String(chat.headman?.userId) === String(userId(ctx)) ? 'headman' : 'editor';
+    return show(ctx, ctx.t.roleElsewhere(role, chat.group.title, ownGroup(ctx.prefs)?.title ?? null), [
+      [button(ctx.t.switchToGroup(chat.group.title), `mine:${chat.group.id}`, 'positive')],
+      [button(ctx.t.menu, 'menu')],
+    ]);
+  };
 
   const canEditHomework = (ctx, config) => {
     if (!config) return false;
@@ -810,15 +831,18 @@ export const createBot = ({
   const botLink = () => (bot.botInfo?.username ? `https://max.ru/${bot.botInfo.username}` : '');
 
   const welcomeRole = async (ctx, member, role, config) => {
-    const lang = (await preferences.get(member.user_id)).lang;
-    const t = texts(lang);
-    const rows = [[button(t.addGroupHomework, 'gp:pick')]];
-    if (role === 'headman') rows[0].push(button(t.lateToday, 'late:0'));
+    const memberPrefs = await preferences.get(member.user_id);
+    const t = texts(memberPrefs.lang);
+    // Роль действует в группе из профиля. Если там другая группа, первой кнопкой — переключение.
+    const otherGroup = !sameGroup(ownGroup(memberPrefs)?.id, config.group.id);
+    const rows = otherGroup ? [[button(t.switchToGroup(config.group.title), `mine:${config.group.id}`, 'positive')]] : [[button(t.addGroupHomework, 'gp:pick')]];
+    if (role === 'headman' && !otherGroup) rows[0].push(button(t.lateToday, 'late:0'));
     rows.push([button(t.menu, 'menu')]);
+    const welcome = role === 'headman' ? t.headmanWelcome(config.group.title) : t.editorWelcome(config.group.title);
     try {
       await bot.api.sendMessageToUser(
         member.user_id,
-        role === 'headman' ? t.headmanWelcome(config.group.title) : t.editorWelcome(config.group.title),
+        otherGroup ? `${welcome}\n\n${t.roleNeedsSwitch(config.group.title, ownGroup(memberPrefs)?.title ?? null)}` : welcome,
         { format: 'markdown', attachments: [Keyboard.inlineKeyboard(rows)] },
       );
     } catch {
@@ -830,7 +854,7 @@ export const createBot = ({
 
   // Сводка «кто опаздывает» для старосты
 
-  const headmanChats = async (ctx) => (await community.chatsWithRole(userId(ctx)))
+  const headmanChats = async (ctx) => (await community.chatsWithRole(userId(ctx), ownGroup(ctx.prefs)?.id ?? null))
     .filter((chat) => String(chat.headman?.userId) === String(userId(ctx)));
 
   const showLateness = async (ctx, offset) => {
@@ -1177,6 +1201,14 @@ export const createBot = ({
   bot.on('bot_started', start);
   bot.on('bot_added', async (ctx) => {
     if (ctx.update.is_channel) return;
+    // Бота вернули в настроенный чат: группа и роли остаются прежними.
+    const restored = await community.restoreChat(ctx.chatId);
+    if (restored?.group) {
+      const t = texts(restored.lang ?? ctx.lang);
+      return ctx.reply(t.chatRestored(restored.group.title, restored.headman?.name ?? null, (restored.editors ?? []).map((editor) => editor.name)), {
+        format: 'markdown', attachments: [Keyboard.inlineKeyboard(groupMenuRows(t))],
+      });
+    }
     await ctx.reply(ctx.t.groupWelcome, { format: 'markdown', attachments: [Keyboard.inlineKeyboard([[button(ctx.t.setup, 'setup', 'positive')]])] });
   });
   bot.on('bot_removed', (ctx) => community.removeChat(ctx.chatId));
@@ -1498,7 +1530,7 @@ ${historyText(item.history, ctx.lang, profileTimeZone(ctx.prefs))}`, [...version
   bot.action('gp:pick', async (ctx) => {
     const { t } = ctx;
     const config = await groupConfigFor(ctx);
-    if (!config?.group || !canEditHomework(ctx, config)) return toast(ctx, t.homeworkForbidden);
+    if (!config?.group || !canEditHomework(ctx, config)) return (await switchGroupOffer(ctx)) ?? toast(ctx, t.homeworkForbidden);
     return lessonPicker(ctx, config.group.id, config.subgroup ?? null, 'gh', t.homeworkLessonPrompt);
   });
   bot.action(/^gh:(\d{4}-\d{2}-\d{2}:\d+:\d+)$/, async (ctx) => {
@@ -1519,7 +1551,7 @@ ${historyText(item.history, ctx.lang, profileTimeZone(ctx.prefs))}`, [...version
   };
   bot.action('mv:pick', async (ctx) => {
     const config = await moveConfig(ctx);
-    if (!config) return toast(ctx, ctx.t.homeworkForbidden);
+    if (!config) return (await switchGroupOffer(ctx)) ?? toast(ctx, ctx.t.homeworkForbidden);
     return lessonPicker(ctx, config.group.id, null, 'mv', ctx.t.moveAction);
   });
   bot.action('mv:marks', async (ctx) => {
@@ -1638,7 +1670,7 @@ ${historyText(item.history, ctx.lang, profileTimeZone(ctx.prefs))}`, [...version
     if (!group) return toast(ctx, ctx.t.selectionExpired);
     const chat = await ctx.getChat().catch(() => null);
     const current = await community.getChat(ctx.chatId);
-    await community.setChat(ctx.chatId, {
+    const updated = await community.setChat(ctx.chatId, {
       title: chat?.title ?? current?.title ?? null,
       lang: current?.lang ?? ctx.lang,
       institute: group.institute,
@@ -1650,7 +1682,13 @@ ${historyText(item.history, ctx.lang, profileTimeZone(ctx.prefs))}`, [...version
       configuredAt: new Date().toISOString(),
     });
     setSession(ctx, null);
-    return show(ctx, ctx.t.chatLinked(group.title), groupMenuRows(ctx.t));
+    // Старосте — в личку, что права переехали в новую группу (и кнопка переключить профиль).
+    if (current?.headman && !sameGroup(current.group?.id, group.id)) {
+      await welcomeRole(ctx, { user_id: current.headman.userId, name: current.headman.name }, 'headman', updated);
+    }
+    // Староста и редакторы чата сохраняются: группу перепривязывают, а не создают чат заново.
+    const keeps = current?.headman ? ctx.t.chatRelinkedRoles(current.headman.name, (current.editors ?? []).map((editor) => editor.name)) : null;
+    return show(ctx, keeps ? `${ctx.t.chatLinked(group.title).split('\n\n')[0]}\n\n${keeps}` : ctx.t.chatLinked(group.title), groupMenuRows(ctx.t));
   });
   bot.action('team', showTeam);
   bot.action('manage', showManage);

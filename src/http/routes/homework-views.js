@@ -1,7 +1,7 @@
 import { homeworkViewKey } from '../../storage/community.js';
 import { parseDateKey } from '../../lib/date.js';
 import { sameGroup } from '../../universities/identity.js';
-import { HttpError } from './me.js';
+import { HttpError, profileGroupId } from './me.js';
 
 const viewInput = (body) => {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new HttpError(400, 'invalid_body', 'Ожидался JSON-объект');
@@ -34,8 +34,8 @@ export const postHomeworkView = async ({ user, preferences, community, body }) =
   return { recorded, reach: { seen: members.filter((id) => viewers.has(String(id))).length, total: members.length } };
 };
 
-export const getHomeworkViewSummary = async ({ user, community }) => {
-  const chat = (await community.chatsWithRole(user.id)).find((item) => String(item.headman?.userId) === String(user.id));
+export const getHomeworkViewSummary = async ({ user, preferences, community }) => {
+  const chat = await community.headmanChat(user.id, profileGroupId(await preferences.get(user.id)));
   if (!chat) throw new HttpError(403, 'headman_only', 'Доступно только старосте');
   return community.homeworkViewStats(chat.group.id);
 };

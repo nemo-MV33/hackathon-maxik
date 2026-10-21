@@ -158,7 +158,7 @@ const route = async (request, response, options) => {
       const body = await readJson(request);
       return sendJson(response, 200, await postAnnouncement({ user, preferences, community, body, publishAnnouncement }));
     }
-    if (id && parts.length === 3 && request.method === 'DELETE') return sendJson(response, 200, await deleteAnnouncement({ user, community, id }));
+    if (id && parts.length === 3 && request.method === 'DELETE') return sendJson(response, 200, await deleteAnnouncement({ user, preferences, community, id }));
     if (id && parts[3] === 'reminder' && request.method === 'PUT') {
       const body = await readJson(request);
       return sendJson(response, 200, await putAnnouncementReminder({ user, preferences, community, id, body }));
@@ -181,7 +181,7 @@ const route = async (request, response, options) => {
       return sendJson(response, 200, await postHomeworkView({ user, preferences, community, body: await readJson(request) }));
     }
     if (url.pathname === '/api/homework/views/summary' && request.method === 'GET') {
-      return sendJson(response, 200, await getHomeworkViewSummary({ user, community }));
+      return sendJson(response, 200, await getHomeworkViewSummary({ user, preferences, community }));
     }
     return sendJson(response, 405, { error: 'method_not_allowed' });
   }

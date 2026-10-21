@@ -835,3 +835,43 @@ test('MAX: кнопки и ссылки кодируют ключ вуза бе�
   await press(STUDENT, 'sub:irnitu~11:1');
   assert.equal((await preferences.get(STUDENT.user_id)).selection.id, 'irnitu~11');
 });
+
+test('стресс-тест старосты: перепривязка чата, удаление бота, второй админ', async (t) => {
+  const { run, say, press, payloads, community, sent, preferences } = await setup(t);
+  const inGroup = { chat: GROUP_CHAT };
+  await say(ADMIN, '/setup ИСТб-25-1', inGroup);
+  await press(ADMIN, 'lsub:11:all', inGroup);
+  await press(ADMIN, 'hs:3', inGroup);
+  await preferences.set(HEADMAN.user_id, { lang: 'ru', selection: { kind: 'group', id: 11, title: 'ИСТб-25-1' } });
+
+  // Чат перепривязали к другой группе: староста остаётся и получает в личку кнопку переключения.
+  const before = sent.length;
+  const relinked = (await press(ADMIN, 'lsub:12:all', inGroup)).find((item) => item.to !== 'user');
+  assert.match(relinked.text, /Староста остаётся прежним: Маша Староста/);
+  const dm = sent.slice(before).find((item) => item.to === 'user' && item.userId === HEADMAN.user_id);
+  assert.match(dm.text, /Права заработают, когда переключишься на ИСТб-25-2/);
+  assert.ok(payloads(dm).includes('mine:irnitu~12'));
+
+  // В своей группе прав нет, бот не молчит, а предлагает перейти.
+  const [offer] = await press(HEADMAN, 'gp:pick');
+  assert.match(offer.text, /Ты староста группы ИСТб-25-2/);
+  assert.ok(payloads(offer).includes('mine:irnitu~12'));
+  const [more] = await press(HEADMAN, 'more');
+  assert.ok(payloads(more).includes('mine:irnitu~12'));
+  assert.ok(!payloads(more).includes('late:0'));
+
+  await press(HEADMAN, 'mine:irnitu~12');
+  await press(HEADMAN, 'sub:12:all');
+  const [headmanMore] = await press(HEADMAN, 'more');
+  assert.ok(payloads(headmanMore).includes('late:0'));
+  assert.ok(payloads(headmanMore).includes('gp:pick|irnitu~12'));
+
+  // Бота удалили и вернули: группа и староста те же, настраивать заново не нужно.
+  await run({ update_type: 'bot_removed', chat_id: GROUP_CHAT.chat_id, user: ADMIN, is_channel: false });
+  assert.equal(await community.getChat(GROUP_CHAT.chat_id), null);
+  const [back] = await run({ update_type: 'bot_added', chat_id: GROUP_CHAT.chat_id, user: ADMIN, is_channel: false });
+  assert.match(back.text, /Снова на связи/);
+  assert.match(back.text, /Староста: Маша Староста/);
+  assert.equal((await community.getChat(GROUP_CHAT.chat_id)).headman.userId, HEADMAN.user_id);
+  assert.ok(payloads(await press(HEADMAN, 'more').then(([reply]) => reply)).includes('late:0'));
+});

@@ -11,6 +11,8 @@ import { randomUUID } from 'node:crypto';
 export const homeworkViewKey = (item) => `${item.lessonDate}:${item.lessonNumber}:${item.subgroup ?? 0}`;
 
 const visibleGroup = (id) => !demoContext.getStore() || !isDemo(id) || demoAllowed();
+// Чат, из которого бота удалили, хранится с отметкой removedAt и ролей не даёт.
+const activeChat = (chat) => !chat.removedAt && visibleGroup(chat.group?.id);
 
 export class CommunityStore {
   #data = { chats: {}, homework: [], personalHomework: [], notices: [], announcements: [], lessonChanges: [], scheduleOperations: [], homeworkViews: [] };
@@ -40,31 +42,46 @@ export class CommunityStore {
   async getChat(chatId) {
     await this.#load();
     const chat = this.#data.chats[String(chatId)];
-    return chat && visibleGroup(chat.group?.id) ? chat : null;
+    return chat && activeChat(chat) ? chat : null;
   }
 
   async setChat(chatId, value) {
     await this.#load();
     const current = this.#data.chats[String(chatId)] ?? {};
     this.#data.chats[String(chatId)] = { ...current, ...migrateGroupReferences(value), chatId: Number(chatId) };
+    // Бот снова пишет в чат, значит его вернули, даже если событие bot_added потерялось.
+    delete this.#data.chats[String(chatId)].removedAt;
     await this.#queueSave();
     return this.#data.chats[String(chatId)];
   }
 
+  // Бота удалили из чата: группу, старосту и редакторов откладываем до возвращения бота.
   async removeChat(chatId) {
     await this.#load();
-    delete this.#data.chats[String(chatId)];
+    const chat = this.#data.chats[String(chatId)];
+    if (!chat) return;
+    if (chat.group) chat.removedAt = new Date().toISOString();
+    else delete this.#data.chats[String(chatId)];
     await this.#queueSave();
+  }
+
+  async restoreChat(chatId) {
+    await this.#load();
+    const chat = this.#data.chats[String(chatId)];
+    if (!chat?.removedAt) return null;
+    delete chat.removedAt;
+    await this.#queueSave();
+    return visibleGroup(chat.group?.id) ? chat : null;
   }
 
   async chatsForGroup(groupId) {
     await this.#load();
-    return Object.values(this.#data.chats).filter((chat) => visibleGroup(chat.group?.id)).filter((chat) => sameGroup(chat.group?.id, groupId));
+    return Object.values(this.#data.chats).filter(activeChat).filter((chat) => sameGroup(chat.group?.id, groupId));
   }
 
   async allChats() {
     await this.#load();
-    return Object.values(this.#data.chats).filter((chat) => visibleGroup(chat.group?.id));
+    return Object.values(this.#data.chats).filter(activeChat);
   }
 
   async scheduleOperationApplied(id) {
@@ -360,7 +377,7 @@ export class CommunityStore {
   async pendingNoticesForHeadman(userId) {
     await this.#load();
     const chatIds = new Set(Object.values(this.#data.chats)
-      .filter((chat) => String(chat.headman?.userId) === String(userId))
+      .filter((chat) => !chat.removedAt && String(chat.headman?.userId) === String(userId))
       .map((chat) => String(chat.chatId)));
     return this.#data.notices.filter((item) => item.status === 'pending' && chatIds.has(String(item.chatId)));
   }
@@ -391,12 +408,18 @@ export class CommunityStore {
       .sort((left, right) => String(left.createdAt).localeCompare(String(right.createdAt)));
   }
 
-  async chatsWithRole(userId) {
+  // С groupId — только чаты этой группы: роль в чате другой группы в своей группе не действует.
+  // null — группа в профиле не выбрана, конфликта нет: подходят все чаты.
+  async chatsWithRole(userId, groupId) {
     await this.#load();
     const id = String(userId);
-    return Object.values(this.#data.chats).filter((chat) => visibleGroup(chat.group?.id)).filter((chat) => chat.group && (
+    return Object.values(this.#data.chats).filter(activeChat).filter((chat) => chat.group && (
       String(chat.headman?.userId) === id || (chat.editors ?? []).some((editor) => String(editor.userId) === id)
-    ));
+    )).filter((chat) => groupId == null || sameGroup(chat.group.id, groupId));
+  }
+
+  async headmanChat(userId, groupId) {
+    return (await this.chatsWithRole(userId, groupId)).find((chat) => String(chat.headman?.userId) === String(userId)) ?? null;
   }
 
   // Вся история сообщений группы — для «досье» старосты; с senderId — только свои.

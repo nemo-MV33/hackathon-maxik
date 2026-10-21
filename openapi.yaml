@@ -996,6 +996,20 @@ components:
             lastName: { type: [string, 'null'] }
             username: { type: [string, 'null'] }
         profile: { $ref: '#/components/schemas/Profile' }
+        role: { type: string, enum: [headman, editor, student], description: Роль в группе из профиля }
+        otherRoles:
+          type: array
+          description: Роли в чатах других групп; действуют после переключения профиля на эту группу
+          items:
+            type: object
+            required: [group, role]
+            properties:
+              group: { type: object, required: [id, title], properties: { id: { type: string }, title: { type: string } } }
+              chatTitle: { type: [string, 'null'] }
+              role: { type: string, enum: [headman, editor] }
+        headman: { type: [object, 'null'], properties: { name: { type: string } } }
+        deputy: { type: [object, 'null'], properties: { userId: { type: integer }, name: { type: string } } }
+        chatLinked: { type: boolean }
     HomeworkAttachment:
       type: object
       required: [id, name, size, mime]

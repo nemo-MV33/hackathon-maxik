@@ -1,6 +1,6 @@
 import { zonedDateKey, profileTimeZone } from '../../lib/timezone.js';
 import { parseDateKey } from '../../lib/date.js';
-import { HttpError } from './me.js';
+import { HttpError, profileGroupId } from './me.js';
 import { noticeMinutes } from '../../lib/settings.js';
 
 const KINDS = ['late', 'absent'];
@@ -82,14 +82,14 @@ const serializeNotice = (item, { withName }) => ({
   status: item.status,
 });
 
-const headmanChatOf = async (community, userId) => (await community.chatsWithRole(userId))
-  .find((chat) => String(chat.headman?.userId) === String(userId)) ?? null;
+const headmanChatOf = async (community, preferences, userId) =>
+  community.headmanChat(userId, profileGroupId(await preferences.get(userId)));
 
 // История: студенту — только свои сообщения, старосте — ещё и «досье» по каждому студенту.
 // Сообщения самого старосты (они уходят доверенному одногруппнику) в досье группы не попадают.
 export const getAbsenceHistory = async ({ user, preferences, community, url }) => {
   const prefs = await preferences.get(user.id);
-  const headmanChat = await headmanChatOf(community, user.id);
+  const headmanChat = await headmanChatOf(community, preferences, user.id);
   const groupId = headmanChat?.group.id ?? (prefs.selection?.kind === 'group' ? prefs.selection.id : null);
   if (!groupId) return { role: 'student', mine: [], students: [] };
   const mine = (await community.noticesForGroup(groupId, { senderId: user.id }))
@@ -133,8 +133,7 @@ export const getAbsences = async ({ user, preferences, community, url }) => {
   const prefs = await preferences.get(user.id);
   const date = url.searchParams.get('date') ?? zonedDateKey(new Date(), profileTimeZone(prefs));
   if (!DATE_PATTERN.test(date)) throw new HttpError(400, 'invalid_date', 'Дата должна быть в формате YYYY-MM-DD');
-  const headmanChat = (await community.chatsWithRole(user.id))
-    .find((chat) => String(chat.headman?.userId) === String(user.id));
+  const headmanChat = await community.headmanChat(user.id, profileGroupId(prefs));
   const groupId = headmanChat?.group.id ?? (prefs.selection?.kind === 'group' ? prefs.selection.id : null);
   if (!groupId) return { role: 'student', date, items: [] };
   const notices = await community.noticesForDay(groupId, date, headmanChat ? {} : { senderId: user.id });
@@ -150,7 +149,7 @@ export const getAbsences = async ({ user, preferences, community, url }) => {
 // Староста выбирает одногруппника, которому уходят его собственные «опоздаю / не приду».
 // Выбирать можно только тех, кто уже пользуется ботом в этой группе.
 export const getGroupMembers = async ({ user, preferences, community }) => {
-  const chat = await headmanChatOf(community, user.id);
+  const chat = await headmanChatOf(community, preferences, user.id);
   if (!chat) throw new HttpError(403, 'headman_only', 'Доступно только старосте');
   const group = (await preferences.entries())
     .filter(([, prefs]) => prefs.selection?.kind === 'group' && String(prefs.selection?.id) === String(chat.group.id));
@@ -170,7 +169,7 @@ export const getGroupMembers = async ({ user, preferences, community }) => {
 };
 
 export const putDeputy = async ({ user, preferences, community, body }) => {
-  const chat = await headmanChatOf(community, user.id);
+  const chat = await headmanChatOf(community, preferences, user.id);
   if (!chat) throw new HttpError(403, 'headman_only', 'Доступно только старосте');
   if (body?.userId === null) {
     await community.setChat(chat.chatId, { deputy: null });
