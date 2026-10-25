@@ -48,6 +48,7 @@
   --k-exam: #f6c6bd;
   --k-credit: #f8e39c;
   --k-other: #e6dfd1;
+  --k-homework: #f7d65c;
 
   /* Компоненты MAX UI получают ту же палитру и шрифт. */
   --family-base: var(--sans);
@@ -109,6 +110,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
 .kind-exam { --kind-bg: var(--k-exam); }
 .kind-credit { --kind-bg: var(--k-credit); }
 .kind-other { --kind-bg: var(--k-other); }
+.kind-homework { --kind-bg: var(--k-homework); }
 /* Дисциплины красятся по предмету: у одного предмета бывают лекции, практики и лабораторные. */
 .subject-0 { --kind-bg: var(--k-lecture); }
 .subject-1 { --kind-bg: var(--k-practice); }
@@ -792,6 +794,7 @@ input:focus-visible, textarea:focus-visible { outline: none; }
   --k-exam: #f7a99a;
   --k-credit: #f8d766;
   --k-other: #ddd3c0;
+  --k-homework: #f4c51e;
 }
 /* Полупрозрачность на тёмном фоне даёт серую муть: прошедшая пара остаётся цветной, но темнее. */
 :root[data-theme='dark'] .card--past { opacity: 1; filter: brightness(0.8) saturate(1.1); }

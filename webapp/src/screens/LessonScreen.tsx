@@ -51,10 +51,12 @@ const LessonFacts = ({ lesson }: { lesson: Lesson }) => {
 const LessonHeading = ({ lesson }: { lesson: Lesson }) => {
   const { t } = useI18n();
   const otherZone = userTimeZone() !== (lesson.timeZone || groupTimeZone(lesson.groupId));
+  // Карточку ДЗ без загруженной пары открываем по данным задания: типа пары там нет.
+  const homeworkOnly = lesson.standalone || !lesson.lessonType;
   return (
-  <header className={`lesson-head ${lesson.standalone ? 'kind-other' : lessonKindClass(lesson.lessonType)}${isControlLesson(lesson.lessonType) ? ' is-control' : ''}`}>
+  <header className={`lesson-head ${homeworkOnly ? 'kind-homework' : lessonKindClass(lesson.lessonType)}${isControlLesson(lesson.lessonType) ? ' is-control' : ''}`}>
     <p className="eyebrow">
-      <span className="kind-code">{lesson.standalone ? t.homeworkShort : lessonKindName(lesson.lessonType)}</span>
+      <span className="kind-code">{homeworkOnly ? t.homeworkShort : lessonKindName(lesson.lessonType)}</span>
       {lesson.transferred && <span className="flag">{t.transferred}</span>}
     </p>
     <h1 className="display">{lesson.subject}</h1>
