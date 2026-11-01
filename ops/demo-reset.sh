@@ -1,6 +1,6 @@
 #!/bin/sh
 set -eu
-cd /home/yc-user/norfly
+cd "${NORFLY_DIR:-$(dirname "$0")/..}"
 exec 9>/run/lock/norfly-backup.lock
 flock -n 9 || { echo 'Уже идёт резервное копирование или сброс'; exit 1; }
 [ "$(docker inspect -f '{{.State.Running}}' norfly-norfly-1)" = true ]

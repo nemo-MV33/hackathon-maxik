@@ -2,7 +2,7 @@
 # Host root job. Stops application AND exporter while producing one encrypted archive.
 set -eu
 umask 077
-cd /home/yc-user/norfly
+cd "${NORFLY_DIR:-$(dirname "$0")/..}"
 exec 9>/run/lock/norfly-backup.lock
 flock -n 9 || exit 0
 work=$(mktemp -d /var/tmp/norfly-backup.XXXXXX)

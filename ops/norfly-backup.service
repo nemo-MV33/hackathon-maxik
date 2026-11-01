@@ -5,5 +5,6 @@ Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/home/yc-user/norfly/ops/backup.sh
+# Замени путь на каталог приложения на сервере.
+ExecStart=/opt/norfly/ops/backup.sh
 TimeoutStartSec=1h
